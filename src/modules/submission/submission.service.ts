@@ -805,4 +805,52 @@ export class SubmissionService {
     );
     return `${baseUrl}/problems/${problem.id}/test-data`;
   }
+
+  /**
+   * 导出提交记录 CSV（按过滤条件，最多 5000 条）
+   */
+  async exportCsv(query: SubmissionQueryDto): Promise<Buffer> {
+    const STATUS_TEXT: Record<number, string> = {
+      0: 'AC', 1: 'WA', 2: 'TLE', 3: 'MLE', 4: 'CE',
+      5: 'SE', 6: 'RE', 7: 'PE', 8: 'CRLE',
+      9: 'PENDING', 10: 'JUDGING', 11: 'COMPILING', 12: 'OLE', 13: 'SC',
+    };
+    const LANG_TEXT: Record<number, string> = {
+      0: 'C', 1: 'C++', 6: 'Java', 8: 'Python2', 9: 'Python3', 10: 'JS', 11: 'TS',
+    };
+
+    const { userId, problemId, status, contestId, courseId } = query;
+    const qb = this.submissionRepo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.problem', 'problem')
+      .leftJoinAndSelect('s.user', 'user')
+      .take(5000)
+      .orderBy('s.id', 'DESC');
+    if (userId !== undefined) qb.andWhere('s.userId = :userId', { userId });
+    if (problemId !== undefined) qb.andWhere('s.problemId = :problemId', { problemId });
+    if (status !== undefined) qb.andWhere('s.status = :status', { status });
+    if (contestId !== undefined) qb.andWhere('s.contestId = :contestId', { contestId });
+    if (courseId !== undefined) qb.andWhere('s.courseId = :courseId', { courseId });
+
+    const items = await qb.getMany();
+
+    const bom = '\uFEFF';
+    const header = '提交ID,用户名,题号,语言,状态,时间(ms),内存(KB),提交时间\n';
+    const rows = items.map((s) => {
+      const problem = s.problem as any;
+      const user = s.user as any;
+      return [
+        s.id,
+        user?.username ?? s.userId,
+        problem ? `${problem.prefix ?? ''}${problem.logicId ?? ''}` : s.problemId,
+        LANG_TEXT[s.language] ?? s.language,
+        STATUS_TEXT[s.status] ?? s.status,
+        s.time ?? '',
+        s.memory != null ? Math.round(s.memory / 1024) : '',
+        s.createdAt ? new Date(s.createdAt).toISOString().replace('T', ' ').slice(0, 19) : '',
+      ].join(',');
+    });
+
+    return Buffer.from(bom + header + rows.join('\n'), 'utf-8');
+  }
 }

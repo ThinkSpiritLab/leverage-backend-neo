@@ -50,6 +50,21 @@ export class SubmissionController {
     return this.submissionService.findAll(query);
   }
 
+  /**
+   * GET /submissions/export — 按条件导出提交记录 CSV（最多5000条，需 admin）
+   */
+  @Get('export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '按条件导出提交记录 CSV（admin）' })
+  async exportCsv(@Query() query: SubmissionQueryDto, @Res() res: Response) {
+    const buf = await this.submissionService.exportCsv(query);
+    res.setHeader('Content-Disposition', 'attachment; filename=submissions.csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.send(buf);
+  }
+
   @Get('count')
   @ApiOperation({ summary: '提交总数统计' })
   @ApiResponse({ status: 200, description: '返回提交总数（数字）' })
