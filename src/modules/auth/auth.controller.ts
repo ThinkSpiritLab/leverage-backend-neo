@@ -97,7 +97,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: '返回当前用户的 JWT payload' })
   @ApiResponse({ status: 401, description: 'Token 无效或已过期' })
-  getProfile(@CurrentUser() user: JwtPayload): JwtPayload {
-    return user;
+  getProfile(@CurrentUser() user: JwtPayload): JwtPayload & { id: number } {
+    return { ...user, id: user.sub };
   }
 }

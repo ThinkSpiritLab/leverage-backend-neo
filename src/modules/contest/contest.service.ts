@@ -350,4 +350,34 @@ export class ContestService {
       );
     }
   }
+
+  /**
+   * 添加单道题目到竞赛（管理员操作）
+   */
+  async addProblem(contestId: number, problemId: number): Promise<ContestProblem> {
+    const contest = await this.contestRepo.findOne({ where: { id: contestId } });
+    if (!contest) throw new NotFoundException(`竞赛 #${contestId} 不存在`);
+
+    // 获取当前题目数确定 label
+    const existing = await this.contestProblemRepo.find({ where: { contestId } });
+    const labels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const label = labels[existing.length] ?? null;
+
+    // 检查是否已存在
+    const dup = existing.find((p) => p.problemId === problemId);
+    if (dup) return dup;
+
+    return this.contestProblemRepo.save(
+      this.contestProblemRepo.create({ contestId, problemId, label, weight: 1 }),
+    );
+  }
+
+  /**
+   * 从竞赛移除题目
+   */
+  async removeProblem(contestId: number, problemId: number): Promise<void> {
+    const cp = await this.contestProblemRepo.findOne({ where: { contestId, problemId } });
+    if (!cp) throw new NotFoundException(`竞赛题目不存在`);
+    await this.contestProblemRepo.remove(cp);
+  }
 }

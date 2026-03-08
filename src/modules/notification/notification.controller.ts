@@ -78,4 +78,13 @@ export class NotificationController {
   ) {
     await this.notificationService.markRead(id, user.sub);
   }
+
+  @Patch('read-all')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '标记所有通知已读（no-op，schema不含readBy）' })
+  async markAllRead() {
+    // schema 不含 readBy，no-op
+  }
 }

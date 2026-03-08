@@ -1,5 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import {
+  getToken,
   makeCounterProvider,
   makeGaugeProvider,
   makeHistogramProvider,
@@ -12,6 +13,7 @@ export const JUDGE_QUEUE_WAITING_GAUGE = 'judge_queue_waiting';
 export const JUDGE_QUEUE_ACTIVE_GAUGE = 'judge_queue_active';
 export const LOGIN_TOTAL_COUNTER = 'login_total';
 
+@Global()
 @Module({
   imports: [
     PrometheusModule.register({
@@ -47,6 +49,13 @@ export const LOGIN_TOTAL_COUNTER = 'login_total';
       labelNames: ['success', 'type'],
     }),
   ],
-  exports: [PrometheusModule],
+  exports: [
+    PrometheusModule,
+    getToken(SUBMISSION_TOTAL_COUNTER),
+    getToken(JUDGE_DURATION_HISTOGRAM),
+    getToken(JUDGE_QUEUE_WAITING_GAUGE),
+    getToken(JUDGE_QUEUE_ACTIVE_GAUGE),
+    getToken(LOGIN_TOTAL_COUNTER),
+  ],
 })
 export class MetricsModule {}

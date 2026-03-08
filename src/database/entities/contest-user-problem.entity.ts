@@ -2,7 +2,6 @@ import {
   Column,
   CreateDateColumn,
   Entity,
-  Index,
   JoinColumn,
   ManyToOne,
   PrimaryColumn,
@@ -10,12 +9,10 @@ import {
 } from 'typeorm';
 
 @Entity()
-@Index(['contestId', 'contestUserId'])
 export class ContestUserProblem {
   @PrimaryColumn('int', { name: 'contestUserContestId' })
   contestId: number;
 
-  @Index()
   @ManyToOne('ContestUser', { onDelete: 'CASCADE' })
   @JoinColumn([
     { name: 'contestUserContestId', referencedColumnName: 'contestId' },

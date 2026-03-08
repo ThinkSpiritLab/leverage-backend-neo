@@ -197,4 +197,26 @@ export class ContestController {
       contestId,
     });
   }
+
+  @Post(':id/problems')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'sa')
+  @ApiOperation({ summary: '向竞赛添加题目' })
+  addProblem(
+    @Param('id', ParseIntPipe) contestId: number,
+    @Body('problemId', ParseIntPipe) problemId: number,
+  ) {
+    return this.contestService.addProblem(contestId, problemId);
+  }
+
+  @Delete(':id/problems/:problemId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'sa')
+  @ApiOperation({ summary: '从竞赛移除题目' })
+  removeProblem(
+    @Param('id', ParseIntPipe) contestId: number,
+    @Param('problemId', ParseIntPipe) problemId: number,
+  ) {
+    return this.contestService.removeProblem(contestId, problemId);
+  }
 }

@@ -19,8 +19,8 @@ export class Message {
   id: number;
 
   @Index()
-  @Column()
-  senderId: number;
+  @Column({ nullable: true })
+  senderId: number | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'senderId' })
@@ -41,7 +41,7 @@ export class Message {
    * null = 根消息；非 null = 指向根消息 id 的回复
    */
   @Index()
-  @Column({ nullable: true })
+  @Column({ type: 'int', nullable: true })
   sessionId: number | null;
 
   /**
