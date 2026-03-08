@@ -227,6 +227,7 @@ export class CompeteController {
   @Post('matches/:id/inspect')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '查看对局代码详情（含 gamer 代码）' })
   inspectMatch(
     @Param('id', ParseIntPipe) id: number,
@@ -292,8 +293,8 @@ export class CompeteController {
   @Post('rooms/:id/submit')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '在房间中提交 Bot 选手' })
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '在房间中提交 Bot 选手' })
   submitGamer(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SubmitGamerDto,
