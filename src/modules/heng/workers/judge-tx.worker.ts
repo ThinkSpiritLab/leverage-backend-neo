@@ -27,7 +27,7 @@ export class JudgeTxWorker {
     private readonly configService: ConfigService,
   ) {}
 
-  @Process()
+  @Process('judge')
   async handle(job: Job<JudgeTxPayload>): Promise<void> {
     const { submissionId, task } = job.data
 

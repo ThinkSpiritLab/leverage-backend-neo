@@ -9,12 +9,13 @@
  *
  * Heng HTTP calls are intercepted by nock (HENG_BASE_URL=http://mock-heng.test).
  * JudgeTxWorker generates its own judgeId (randomBytes), so we poll Redis to get it.
+ *
+ * MAX_SUBMISSION_PER_MINUTE=1 is set in global-setup.ts (first submit succeeds, second → 429).
  */
 import request from 'supertest'
 import { INestApplication } from '@nestjs/common'
 import nock from 'nock'
 import { createTestApp } from './test-app'
-import { mockHengCreateJudge, cleanupNockMocks } from './mocks/heng-mock'
 import { RedisService } from '../../src/modules/redis/redis.service'
 import { JudgeResultKind, Status } from '../../src/modules/heng/heng.types'
 
@@ -31,8 +32,8 @@ function parseUserId(token: string): number {
 async function pollRedisSet(
   redisService: RedisService,
   key: string,
-  maxMs = 5000,
-  intervalMs = 200,
+  maxMs = 8000,
+  intervalMs = 300,
 ): Promise<string | undefined> {
   const start = Date.now()
   while (Date.now() - start < maxMs) {
@@ -49,7 +50,14 @@ describe('Submissions E2E', () => {
   let redisService: RedisService
 
   beforeAll(async () => {
-    // Allow localhost connections for supertest; nock intercepts mock-heng.test only
+    // 设置持久化 nock 拦截：所有对 mock-heng.test POST /c/v1/judges 的请求都返回 200
+    // 使用 persist() 避免单次消费问题（JudgeTxWorker 不管哪个 job 都能成功调用）
+    nock(MOCK_HENG_URL)
+      .post('/c/v1/judges')
+      .reply(200, { judgeId: 'mock-judge-response-id' })
+      .persist()
+
+    // 允许 localhost/127.0.0.1 通过（supertest 请求），block 其他（由 nock 处理）
     nock.enableNetConnect(/127\.0\.0\.1|localhost/)
 
     app = await createTestApp()
@@ -62,14 +70,9 @@ describe('Submissions E2E', () => {
   }, 60_000)
 
   afterAll(async () => {
+    nock.cleanAll()
     nock.enableNetConnect()
-    cleanupNockMocks()
     await app.close()
-  })
-
-  afterEach(() => {
-    // 清理未消费的 nock 拦截，避免跨测试污染
-    cleanupNockMocks()
   })
 
   describe('GET /submissions', () => {
@@ -131,15 +134,14 @@ describe('Submissions E2E', () => {
         .expect(201)
       const problemId = problemRes.body.id
 
-      // nock 拦截第一次提交的 heng 调用（JudgeTxWorker 异步处理）
-      mockHengCreateJudge(MOCK_HENG_URL)
-
       // 第一次提交：成功（count=1, 1>1 = false → 201）
-      await request(app.getHttpServer())
+      const sub1Res = await request(app.getHttpServer())
         .post('/submissions')
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ problemId, code: 'print(1)', language: 1 })
         .expect(201)
+
+      const sub1Id = sub1Res.body.id
 
       // 第二次提交：触发速率限制（count=2, 2>1 = true → 429）
       await request(app.getHttpServer())
@@ -148,9 +150,10 @@ describe('Submissions E2E', () => {
         .send({ problemId, code: 'print(1)', language: 1 })
         .expect(429)
 
-      // 等待 JudgeTxWorker 完成（避免 afterEach cleanupNockMocks 在 worker 运行前清理拦截器）
-      await new Promise((r) => setTimeout(r, 1000))
-    }, 15_000)
+      // 等待 JudgeTxWorker 处理 sub1（确保 heng nock 已被消费），再继续
+      // 轮询 Redis judge-ids，最多等 5 秒
+      await pollRedisSet(redisService, `judge-ids:${sub1Id}`, 5000)
+    }, 20_000)
 
     it('creates submission with PENDING status, then AC via mock heng callback', async () => {
       const userId = parseUserId(accessToken)
@@ -172,10 +175,8 @@ describe('Submissions E2E', () => {
       const problemId = problemRes.body.id
       expect(problemId).toBeDefined()
 
-      // Step 2: nock 拦截 heng createJudge 请求（JudgeTxWorker 异步调用）
-      mockHengCreateJudge(MOCK_HENG_URL)
-
-      // Step 3: 提交代码 → 201，状态为 PENDING
+      // Step 2: 提交代码 → 201，状态为 PENDING
+      // nock 持久化拦截已在 beforeAll 设置，JudgeTxWorker 可直接使用
       const submitRes = await request(app.getHttpServer())
         .post('/submissions')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -190,12 +191,12 @@ describe('Submissions E2E', () => {
       expect(submissionId).toBeDefined()
       expect(submitRes.body.status).toBe(Status.PENDING) // 9
 
-      // Step 4: 等待 JudgeTxWorker 处理（轮询 Redis 获取 judgeId）
-      // JudgeTxWorker 会 SADD judge-ids:<submissionId> <judgeId>
-      const judgeId = await pollRedisSet(redisService, `judge-ids:${submissionId}`, 5000, 200)
+      // Step 3: 等待 JudgeTxWorker 处理（轮询 Redis 获取 judgeId）
+      // JudgeTxWorker 会 SADD judge-ids:<submissionId> <judgeId>（在 heng 调用之前）
+      const judgeId = await pollRedisSet(redisService, `judge-ids:${submissionId}`, 8000, 300)
       expect(judgeId).toBeDefined()
 
-      // Step 5: 模拟 heng 回调 POST /heng/finish/:submissionId/:judgeId
+      // Step 4: 模拟 heng 回调 POST /heng/finish/:submissionId/:judgeId
       const finishPayload = {
         cases: [
           { kind: JudgeResultKind.Accepted, time: 15, memory: 2048 },
@@ -207,10 +208,10 @@ describe('Submissions E2E', () => {
         .send(finishPayload)
         .expect(200)
 
-      // Step 6: 等待 JudgeRxWorker 处理（写入 DB）
+      // Step 5: 等待 JudgeRxWorker 处理（写入 DB）
       await new Promise((r) => setTimeout(r, 2000))
 
-      // Step 7: GET /submissions/:id → 验证最终状态为 AC (0)
+      // Step 6: GET /submissions/:id → 验证最终状态为 AC (0)
       const finalRes = await request(app.getHttpServer())
         .get(`/submissions/${submissionId}`)
         .expect(200)
