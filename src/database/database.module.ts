@@ -77,8 +77,29 @@ const entities = [
           process.env.NODE_ENV === 'production' ? ['dist/migrations/*.js'] : [],
         migrationsRun: process.env.NODE_ENV === 'production',
         migrationsTableName: 'migrations',
-        logging: process.env.NODE_ENV === 'development',
+        logging:
+          process.env.NODE_ENV !== 'production'
+            ? ['error', 'warn', 'query']
+            : ['error'],
         charset: 'utf8mb4',
+        // 全局查询超时（慢查询记录警告，防止慢查询卡住连接池）
+        maxQueryExecutionTime: parseInt(
+          process.env.DB_QUERY_TIMEOUT || '10000',
+        ),
+        // 连接池配置
+        extra: {
+          // 最大连接数（生产 20-50，开发 5-10）
+          connectionLimit: parseInt(process.env.DB_POOL_SIZE || '20'),
+          // 获取连接超时（ms）
+          acquireTimeout: 30000,
+          // 连接超时（ms）
+          connectTimeout: 10000,
+          // 空闲连接超时（10分钟）
+          idleTimeoutMillis: 600000,
+          // 心跳查询保持连接
+          enableKeepAlive: true,
+          keepAliveInitialDelay: 10000,
+        },
       }),
     }),
   ],

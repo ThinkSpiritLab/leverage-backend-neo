@@ -165,6 +165,55 @@ server {
 
 ---
 
+## Database Connection Pool Tuning
+
+The backend uses TypeORM with a MySQL2 connection pool. Two environment variables control pool behavior:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_POOL_SIZE` | `20` | Maximum number of simultaneous DB connections |
+| `DB_QUERY_TIMEOUT` | `10000` | Slow query warning threshold (ms). TypeORM logs a warning when exceeded but does **not** kill the query; use DB-level `wait_timeout` for hard kills. |
+
+### Recommended values by environment
+
+| Environment | `DB_POOL_SIZE` | `DB_QUERY_TIMEOUT` |
+|-------------|---------------|-------------------|
+| Development | 5–10 | 10000 |
+| Staging | 10–20 | 10000 |
+| Production (OJ) | 20–50 | 10000 |
+
+### How to choose `DB_POOL_SIZE`
+
+- A pool that is **too small** causes connection queuing under load, increasing API latency.
+- A pool that is **too large** exhausts MariaDB's `max_connections` (default 151). Leave headroom for admin connections.
+- Rule of thumb: `DB_POOL_SIZE` × number of app replicas < `max_connections − 10`.
+
+### Slow query logging
+
+In non-production environments (`NODE_ENV !== 'production'`), TypeORM also logs every query. Watch the logs for `[TypeORM] query: SELECT …` lines that take longer than `DB_QUERY_TIMEOUT` — these are candidates for index optimization.
+
+To suppress verbose query logs on a staging server while keeping slow-query warnings:
+
+```dotenv
+NODE_ENV=production
+DB_QUERY_TIMEOUT=5000
+```
+
+### Additional MariaDB server tuning
+
+For high-concurrency OJ workloads, also tune the DB server itself:
+
+```ini
+# /etc/mysql/mariadb.conf.d/99-oj.cnf
+[mysqld]
+max_connections       = 200
+wait_timeout          = 30
+interactive_timeout   = 30
+innodb_buffer_pool_size = 1G   # adjust to available RAM
+```
+
+---
+
 ## Production Recommendations
 
 ### Run as a single process
