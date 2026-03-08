@@ -267,7 +267,7 @@ export class CourseService {
     return this.courseUserRepo
       .createQueryBuilder('cu')
       .leftJoinAndSelect('cu.user', 'user')
-      .select(['cu.userId', 'cu.submits', 'cu.accepts', 'user.id', 'user.username', 'user.certifiedName', 'user.email'])
+      .select(['cu.userId', 'cu.submits', 'cu.accepts', 'user.id', 'user.username', 'user.certifiedName', 'user.studentId'])
       .where('cu.courseId = :courseId', { courseId })
       .orderBy('cu.userId', 'ASC')
       .getMany();
