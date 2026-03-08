@@ -7,6 +7,7 @@ import {
 import { APP_GUARD } from '@nestjs/core';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { MetricsAuthMiddleware } from './common/middleware/metrics-auth.middleware';
+import { BullBoardAuthMiddleware } from './common/middleware/bull-board-auth.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -152,6 +153,13 @@ export class AppModule implements NestModule {
     consumer
       .apply(MetricsAuthMiddleware)
       .forRoutes({ path: 'metrics', method: RequestMethod.GET });
+
+    // Protect Bull Board UI — requires valid admin JWT (?token=xxx or Authorization: Bearer xxx)
+    // Note: path-to-regexp v8 doesn't support bare glob; use 'admin/queues'
+    // The middleware also checks the prefix internally for sub-paths
+    consumer
+      .apply(BullBoardAuthMiddleware)
+      .forRoutes('admin/queues');
 
     consumer
       .apply(CorrelationIdMiddleware)

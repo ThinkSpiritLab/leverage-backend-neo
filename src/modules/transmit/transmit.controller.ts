@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -61,5 +61,55 @@ export class TransmitController {
   @ApiOperation({ summary: '最近 1/5/10 分钟评测完成数统计' })
   getJudgeStats() {
     return this.transmitService.getJudgeStats();
+  }
+
+  /**
+   * GET /transmit/failed-jobs
+   * 列出 failed jobs（含 submissionId、错误信息）
+   */
+  @Get('failed-jobs')
+  @ApiOperation({ summary: '列出评测队列失败任务' })
+  getFailedJobs() {
+    return this.transmitService.getFailedJobs();
+  }
+
+  /**
+   * POST /transmit/retry-job/:jobId
+   * 重试单个失败任务
+   */
+  @Post('retry-job/:jobId')
+  @ApiOperation({ summary: '重试单个失败任务' })
+  retryJob(@Param('jobId') jobId: string) {
+    return this.transmitService.retryJob(jobId);
+  }
+
+  /**
+   * POST /transmit/retry-all-failed
+   * 重试全部失败任务
+   */
+  @Post('retry-all-failed')
+  @ApiOperation({ summary: '重试全部失败任务' })
+  retryAllFailed() {
+    return this.transmitService.retryAllFailed();
+  }
+
+  /**
+   * DELETE /transmit/failed-jobs/:jobId
+   * 清除单个失败任务
+   */
+  @Delete('failed-jobs/:jobId')
+  @ApiOperation({ summary: '清除单个失败任务' })
+  clearJob(@Param('jobId') jobId: string) {
+    return this.transmitService.clearJob(jobId);
+  }
+
+  /**
+   * DELETE /transmit/failed-jobs
+   * 清空全部失败任务
+   */
+  @Delete('failed-jobs')
+  @ApiOperation({ summary: '清空全部失败任务' })
+  clearAllFailed() {
+    return this.transmitService.clearAllFailed();
   }
 }

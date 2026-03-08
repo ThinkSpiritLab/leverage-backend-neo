@@ -156,6 +156,60 @@ export class TransmitService {
   }
 
   /**
+   * 列出失败的评测任务（附带 submissionId、用户名、错误信息）
+   */
+  async getFailedJobs() {
+    const jobs = await this.judgeTxQueue.getFailed();
+    return jobs.map((job) => ({
+      jobId: job.id,
+      submissionId: job.data?.submissionId,
+      failedReason: job.failedReason ?? 'unknown',
+      attemptsMade: job.attemptsMade,
+      timestamp: job.timestamp ? new Date(job.timestamp).toISOString() : null,
+      processedOn: job.processedOn ? new Date(job.processedOn).toISOString() : null,
+      data: job.data,
+    }));
+  }
+
+  /**
+   * 重试单个失败任务
+   */
+  async retryJob(jobId: string) {
+    const job = await this.judgeTxQueue.getJob(jobId);
+    if (!job) throw new Error(`Job ${jobId} not found`);
+    await job.retry();
+    return { retried: jobId };
+  }
+
+  /**
+   * 重试全部失败任务
+   */
+  async retryAllFailed() {
+    const jobs = await this.judgeTxQueue.getFailed();
+    await Promise.all(jobs.map((j) => j.retry()));
+    return { retried: jobs.length };
+  }
+
+  /**
+   * 清除单个失败任务
+   */
+  async clearJob(jobId: string) {
+    const job = await this.judgeTxQueue.getJob(jobId);
+    if (!job) throw new Error(`Job ${jobId} not found`);
+    await job.remove();
+    return { removed: jobId };
+  }
+
+  /**
+   * 清空全部失败任务
+   */
+  async clearAllFailed() {
+    const jobs = await this.judgeTxQueue.getFailed();
+    await Promise.all(jobs.map((j) => j.remove()));
+    return { removed: jobs.length };
+  }
+
+  /**
    * 查询最近 1/5/10 分钟评测完成数
    * 以 submission.updatedAt 为准，status 为终态（非 PENDING/JUDGING/COMPILING）
    */
