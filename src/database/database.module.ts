@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { TypeOrmModule } from '@nestjs/typeorm'
 
+import { College } from './entities/college.entity'
 import { Contest } from './entities/contest.entity'
 import { ContestProblem } from './entities/contest-problem.entity'
 import { ContestUser } from './entities/contest-user.entity'
@@ -17,6 +18,7 @@ import { MatchGamerLink } from './entities/match-gamer-link.entity'
 import { Media } from './entities/media.entity'
 import { Notification } from './entities/notification.entity'
 import { Problem } from './entities/problem.entity'
+import { Profession } from './entities/profession.entity'
 import { RejudgeLog } from './entities/rejudge-log.entity'
 import { Setting } from './entities/setting.entity'
 import { Submission } from './entities/submission.entity'
@@ -27,6 +29,8 @@ import { User } from './entities/user.entity'
 import { UserMeta } from './entities/user-meta.entity'
 
 const entities = [
+  College,
+  Profession,
   User,
   UserMeta,
   Problem,
