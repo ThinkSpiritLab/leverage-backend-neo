@@ -107,6 +107,17 @@ export class CourseController {
   }
 
   /**
+   * GET /courses/:id/students — 获取课程学生列表（admin+）
+   */
+  @Get(':id/students')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '获取课程学生列表' })
+  getStudents(@Param('id', ParseIntPipe) courseId: number) {
+    return this.courseService.getStudents(courseId);
+  }
+
+  /**
    * DELETE /courses/:id/students/:userId — 移除学生（admin+）
    */
   @Delete(':id/students/:userId')

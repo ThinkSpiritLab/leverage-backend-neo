@@ -260,6 +260,20 @@ export class CourseService {
   }
 
   /**
+   * 获取课程学生列表
+   */
+  async getStudents(courseId: number) {
+    await this.findOne(courseId);
+    return this.courseUserRepo
+      .createQueryBuilder('cu')
+      .leftJoinAndSelect('cu.user', 'user')
+      .select(['cu.userId', 'cu.submits', 'cu.accepts', 'user.id', 'user.username', 'user.certifiedName', 'user.email'])
+      .where('cu.courseId = :courseId', { courseId })
+      .orderBy('cu.userId', 'ASC')
+      .getMany();
+  }
+
+  /**
    * 课程排行榜
    */
   async getRanking(courseId: number): Promise<CourseRankItem[]> {
