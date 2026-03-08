@@ -62,4 +62,14 @@ export class UserQueryDto {
   @IsOptional()
   @IsString()
   grade?: string;
+
+  @ApiPropertyOptional({ description: '排序字段', enum: ['id', 'accepts', 'submits', 'username'] })
+  @IsOptional()
+  @IsString()
+  sort?: string;
+
+  @ApiPropertyOptional({ description: '排序方向', enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsString()
+  order?: string;
 }

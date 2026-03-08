@@ -55,14 +55,25 @@ export class UserService {
       college,
       profession,
       grade,
+      sort,
+      order,
     } = query;
     const skip = (page - 1) * perPage;
+
+    const allowedSortFields: Record<string, string> = {
+      id: 'u.id',
+      accepts: 'u.accepts',
+      submits: 'u.submits',
+      username: 'u.username',
+    };
+    const sortField = allowedSortFields[sort ?? ''] ?? 'u.id';
+    const sortOrder = order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
     const qb = this.userRepo
       .createQueryBuilder('u')
       .take(perPage)
       .skip(skip)
-      .orderBy('u.id', 'DESC');
+      .orderBy(sortField, sortOrder);
 
     if (search) {
       qb.andWhere(
