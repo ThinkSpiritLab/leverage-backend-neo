@@ -65,35 +65,39 @@
 按优先级顺序实现：
 
 ### 核心模块（必须）
-1. **auth** — JWT 认证，login/logout/refresh，PBKDF2-SHA256+salt 密码哈希
-2. **submission** — 提交代码，频率限制（Redis），资源倍增（Java/Python 等）
-3. **heng** — 与 heng-controller 通信，HMAC 签名，BullMQ judge-tx/judge-rx
-4. **receive** — 接收评测结果，更新 DB，更新排行榜 Sorted Set
-5. **problem** — 题目 CRUD，测试数据上传（校验必须是 zip），缓存
+1. ✅ **auth** — JWT 认证，login/logout/refresh，PBKDF2-SHA256+salt 密码哈希
+2. ✅ **submission** — 提交代码，频率限制（Redis），资源倍增（Java/Python 等）
+3. ✅ **heng** — 与 heng-controller 通信，HMAC 签名，BullMQ judge-tx/judge-rx
+4. ✅ **receive** — 接收评测结果，更新 DB，更新排行榜 Sorted Set
+5. ✅ **problem** — 题目 CRUD，测试数据上传（校验必须是 zip），缓存
 
 ### 业务模块（必须）
-6. **user** — 用户管理，权限体系（数字权重：sa=0 < admin=1 < supervisor=2 < user=3 < guest=5）
-7. **contest** — 竞赛管理，ContestUser（支持独立密码、设备绑定、IP 绑定）
-8. **course** — 课程管理，CourseUser，按条件导出提交
-9. **rank** — 排行榜，Redis Sorted Set，排名日志
+6. ✅ **user** — 用户管理，权限体系（数字权重：sa=0 < admin=1 < supervisor=2 < user=3 < guest=5）
+7. ✅ **contest** — 竞赛管理，ContestUser（支持独立密码、设备绑定、IP 绑定）
+8. ✅ **course** — 课程管理，CourseUser，按条件导出提交
+9. ✅ **rank** — 排行榜，Redis Sorted Set，排名日志
 
 ### 辅助模块
-10. **setting** — 系统配置，支持 string/number 类型，12s 缓存
-11. **tag** — 题目标签
-12. **log** — 操作日志
-13. **notification** — 通知
-14. **media** — 媒体文件上传
-15. **profession-college** — 专业/学院，批量导入用户时校验
-16. **statistics** — 统计
-17. **suspicion** — 查重（代码哈希 + 评分，修好 sus-xlsx 接口）
-18. **init** — 初始化（通过环境变量 `SKIP_INIT=true` 跳过，不要硬编码用户名）
+10. ✅ **setting** — 系统配置，支持 string/number 类型，12s 缓存（fix #36）
+11. ✅ **tag** — 题目标签
+12. ✅ **log** — 操作日志
+13. ✅ **notification** — 通知
+14. ✅ **media** — 媒体文件上传
+15. ✅ **profession-college** — 专业/学院，批量导入用户时校验
+16. ✅ **statistics** — 统计（题目通过率 / 用户活跃度 / 系统概览）
+17. ✅ **suspicion** — 查重（代码哈希 + 评分，sus-xlsx 导出接口）
+18. ✅ **init** — 初始化（通过环境变量 `SKIP_INIT=true` 跳过，INIT_SA_USERNAME/PASSWORD）
+
+### 辅助业务模块
+19. ✅ **compete** — Bot 对战系统（Game/Gamer CRUD + 发起对局 + 排行榜）
 
 ### 基础设施
-- **redis** — RedisService + CacheService（通用缓存封装）
-- **database** — TypeORM 配置，MariaDB
-- **queue** — BullMQ 配置（替代自研 Queue<T>）
-- **logger** — nestjs-pino 配置
-- **metrics** — Prometheus endpoint
+- ✅ **redis** — RedisService + CacheService（通用缓存封装）
+- ✅ **database** — TypeORM 配置，MariaDB
+- ✅ **queue** — BullMQ 配置（替代自研 Queue<T>）
+- ✅ **logger** — nestjs-pino 配置
+- ✅ **metrics** — Prometheus endpoint
+- ✅ **Docker** — 多阶段 Dockerfile + docker-compose（MariaDB + Redis + App）
 
 ## 坏味道清单（必须修复）
 
