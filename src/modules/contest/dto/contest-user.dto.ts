@@ -33,7 +33,8 @@ export class ContestUserDto {
 }
 
 export class RegisterContestUserDto {
-  @ApiProperty({ description: '用户 ID' })
+  @ApiPropertyOptional({ description: '用户 ID（不填则注册自己）' })
+  @IsOptional()
   @IsInt()
-  userId: number;
+  userId?: number;
 }
