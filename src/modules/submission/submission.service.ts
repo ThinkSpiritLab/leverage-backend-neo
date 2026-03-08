@@ -560,12 +560,11 @@ export class SubmissionService {
         's.userId = :userId AND s.status = :acStatus AND s.problemId IN (:...problemIds)',
         { userId, acStatus: Status.AC, problemIds },
       );
+    // 指定了 contest/course 则限制范围，否则查全局（不过滤，任何来源的 AC 都算）
     if (contestId !== null)
       acQb.andWhere('s.contestId = :contestId', { contestId });
-    else acQb.andWhere('s.contestId IS NULL');
     if (courseId !== null)
       acQb.andWhere('s.courseId = :courseId', { courseId });
-    else acQb.andWhere('s.courseId IS NULL');
 
     const triedQb = this.submissionRepo
       .createQueryBuilder('s')
@@ -579,10 +578,8 @@ export class SubmissionService {
       });
     if (contestId !== null)
       triedQb.andWhere('s.contestId = :contestId', { contestId });
-    else triedQb.andWhere('s.contestId IS NULL');
     if (courseId !== null)
       triedQb.andWhere('s.courseId = :courseId', { courseId });
-    else triedQb.andWhere('s.courseId IS NULL');
 
     const [acRows, triedRows] = await Promise.all([
       acQb.getRawMany<{ problemId: string }>(),
