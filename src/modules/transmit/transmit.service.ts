@@ -22,12 +22,26 @@ export class TransmitService {
   /**
    * 列出所有评测机（已弃用，返回静态数据）
    */
-  listJudgers() {
+  async listJudgers() {
+    const baseUrl = process.env.HENG_BASE_URL ?? '';
+    let online = false;
+    if (baseUrl) {
+      try {
+        const axiosModule = await import('axios');
+        await axiosModule.default.get(`${baseUrl}/`, {
+          timeout: 2000,
+          validateStatus: () => true, // treat any HTTP response as online
+        });
+        online = true;
+      } catch {
+        online = false;
+      }
+    }
     return [
       {
         name: 'Heng',
         version: '-',
-        ttl: 0,
+        ttl: online ? 30 : 0,
       },
     ];
   }
