@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Query,
   Res,
   UseGuards,
@@ -40,6 +42,29 @@ export class SuspicionController {
       page: parseInt(page, 10) || 1,
       perPage: Math.min(parseInt(perPage, 10) || 20, 100),
     });
+  }
+
+  /**
+   * GET /suspicion/hash/:hashsum
+   * 按哈希查关联提交
+   */
+  @Get('hash/:hashsum')
+  @ApiOperation({ summary: '按相似哈希查关联提交' })
+  findByHash(@Param('hashsum') hashsum: string) {
+    return this.suspicionService.findByHash(hashsum);
+  }
+
+  /**
+   * PATCH /suspicion/:submissionId/checked
+   * 标记已审查
+   */
+  @Patch(':submissionId/checked')
+  @ApiOperation({ summary: '标记已审查' })
+  markChecked(
+    @Param('submissionId', ParseIntPipe) submissionId: number,
+    @Body('checked') checked: boolean,
+  ) {
+    return this.suspicionService.markChecked(submissionId, checked);
   }
 
   /**

@@ -18,6 +18,26 @@ export class SuspicionService {
   ) {}
 
   /**
+   * 按 hashsum 查询相关联的可疑提交
+   */
+  async findByHash(hashsum: string): Promise<Suspicion[]> {
+    return this.suspicionRepo.find({
+      where: { hashsum },
+      relations: ['submission', 'submission.user', 'submission.problem', 'submission.misc'],
+    });
+  }
+
+  /**
+   * 标记已审查
+   */
+  async markChecked(submissionId: number, checked: boolean): Promise<void> {
+    const sus = await this.suspicionRepo.findOne({ where: { submissionId } });
+    if (!sus) throw new NotFoundException(`Suspicion not found for submission ${submissionId}`);
+    sus.checked = checked;
+    await this.suspicionRepo.save(sus);
+  }
+
+  /**
    * 获取可疑提交列表（分页）
    */
   async findAll(
