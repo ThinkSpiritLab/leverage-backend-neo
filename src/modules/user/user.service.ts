@@ -59,7 +59,7 @@ export class UserService {
 
     if (role) {
       // map role string to authority field value
-      const authority = role === 'sa' ? 'superadmin' : role
+      const authority = (role as string) === 'sa' ? 'superadmin' : (role as string)
       qb.andWhere('u.authority = :authority', { authority })
     }
 
@@ -214,8 +214,16 @@ export class UserService {
    * 权限比较：操作者能否管理目标用户
    * 权重：sa=0 < admin=1 < supervisor=2 < user=3 < contest-user=4 < guest=5
    * 操作者权重 < 目标权重才能管理
+   *
+   * 特殊规则：
+   * - supervisor 只能查看，不能修改任何用户（canManage 始终返回 false）
+   * - admin 能管理 supervisor 及以下（不能管理 sa/admin）
+   * - 只有 sa 能管理 admin
    */
   canManage(operatorRole: string, targetRole: string): boolean {
+    // supervisor 只有查看权限，不能管理任何人
+    if (operatorRole === 'supervisor') return false
+
     const opWeight = ROLE_WEIGHT[operatorRole] ?? Number.MAX_SAFE_INTEGER
     const tgtWeight = ROLE_WEIGHT[targetRole] ?? Number.MAX_SAFE_INTEGER
     return opWeight < tgtWeight

@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Length, MinLength } from 'class-validator'
 
-export type UserRole = 'user' | 'admin' | 'superadmin' | 'supervisor' | 'contest-user' | 'guest'
+export type UserRole = 'user' | 'admin' | 'superadmin' | 'sa' | 'supervisor' | 'contest-user' | 'guest'
 
 export class CreateUserDto {
   @ApiProperty({ description: '用户名', example: 'zhangsan' })
@@ -21,9 +21,9 @@ export class CreateUserDto {
   @IsEmail()
   email?: string
 
-  @ApiPropertyOptional({ description: '角色', enum: ['user', 'admin', 'superadmin', 'supervisor', 'contest-user', 'guest'], default: 'user' })
+  @ApiPropertyOptional({ description: '角色', enum: ['user', 'admin', 'superadmin', 'sa', 'supervisor', 'contest-user', 'guest'], default: 'user' })
   @IsOptional()
-  @IsEnum(['user', 'admin', 'superadmin', 'supervisor', 'contest-user', 'guest'])
+  @IsEnum(['user', 'admin', 'superadmin', 'sa', 'supervisor', 'contest-user', 'guest'])
   role?: UserRole
 
   @ApiPropertyOptional({ description: '学号', example: '2021001001' })

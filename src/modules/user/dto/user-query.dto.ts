@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator'
-import { UserRole } from './create-user.dto'
+import type { UserRole } from './create-user.dto'
 
 export class UserQueryDto {
   @ApiPropertyOptional({ description: '页码', default: 1 })
@@ -23,10 +23,10 @@ export class UserQueryDto {
   @IsString()
   search?: string
 
-  @ApiPropertyOptional({ description: '角色过滤', enum: ['user', 'admin', 'superadmin', 'supervisor', 'contest-user', 'guest'] })
+  @ApiPropertyOptional({ description: '角色过滤', enum: ['user', 'admin', 'superadmin', 'sa', 'supervisor', 'contest-user', 'guest'] })
   @IsOptional()
-  @IsEnum(['user', 'admin', 'superadmin', 'supervisor', 'contest-user', 'guest'])
-  role?: UserRole
+  @IsEnum(['user', 'admin', 'superadmin', 'sa', 'supervisor', 'contest-user', 'guest'])
+  role?: string
 
   @ApiPropertyOptional({ description: '学院过滤' })
   @IsOptional()
