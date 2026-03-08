@@ -1,75 +1,114 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Length, MaxLength, MinLength } from 'class-validator'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Length,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
-export type UserRole = 'user' | 'admin' | 'superadmin' | 'sa' | 'supervisor' | 'contest-user' | 'guest'
+export type UserRole =
+  | 'user'
+  | 'admin'
+  | 'superadmin'
+  | 'sa'
+  | 'supervisor'
+  | 'contest-user'
+  | 'guest';
 
 export class CreateUserDto {
   @ApiProperty({ description: '用户名', example: 'zhangsan' })
   @IsString()
   @IsNotEmpty()
   @Length(1, 20)
-  username: string
+  username: string;
 
   @ApiProperty({ description: '密码', example: 'password123' })
   @IsString()
   @IsNotEmpty()
   @MinLength(6)
-  password: string
+  password: string;
 
   @ApiPropertyOptional({ description: '邮箱', example: 'zhangsan@example.com' })
   @IsOptional()
   @IsEmail()
-  email?: string
+  email?: string;
 
-  @ApiPropertyOptional({ description: '角色', enum: ['user', 'admin', 'superadmin', 'sa', 'supervisor', 'contest-user', 'guest'], default: 'user' })
+  @ApiPropertyOptional({
+    description: '角色',
+    enum: [
+      'user',
+      'admin',
+      'superadmin',
+      'sa',
+      'supervisor',
+      'contest-user',
+      'guest',
+    ],
+    default: 'user',
+  })
   @IsOptional()
-  @IsEnum(['user', 'admin', 'superadmin', 'sa', 'supervisor', 'contest-user', 'guest'])
-  role?: UserRole
+  @IsEnum([
+    'user',
+    'admin',
+    'superadmin',
+    'sa',
+    'supervisor',
+    'contest-user',
+    'guest',
+  ])
+  role?: UserRole;
 
   @ApiPropertyOptional({ description: '学号', example: '2021001001' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
-  studentId?: string
+  studentId?: string;
 
   @ApiPropertyOptional({ description: '真实姓名' })
   @IsOptional()
   @IsString()
   @Length(1, 32)
-  certifiedName?: string
+  certifiedName?: string;
 
   @ApiPropertyOptional({ description: '昵称' })
   @IsOptional()
   @IsString()
   @Length(1, 32)
-  nickname?: string
+  nickname?: string;
 
-  @ApiPropertyOptional({ description: '性别', enum: ['male', 'female', 'unknown'] })
+  @ApiPropertyOptional({
+    description: '性别',
+    enum: ['male', 'female', 'unknown'],
+  })
   @IsOptional()
   @IsEnum(['male', 'female', 'unknown'])
-  sex?: string
+  sex?: string;
 
   @ApiPropertyOptional({ description: '年级' })
   @IsOptional()
   @IsString()
   @MaxLength(20)
-  grade?: string
+  grade?: string;
 
   @ApiPropertyOptional({ description: '学院' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  college?: string
+  college?: string;
 
   @ApiPropertyOptional({ description: '专业' })
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  profession?: string
+  profession?: string;
 
   @ApiPropertyOptional({ description: '班级' })
   @IsOptional()
   @IsString()
   @MaxLength(50)
-  class?: string
+  class?: string;
 }

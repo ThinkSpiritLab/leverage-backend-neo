@@ -1,10 +1,22 @@
-import { Body, Controller, HttpCode, Logger, Param, ParseIntPipe, Post } from '@nestjs/common'
-import { InjectQueue } from '@nestjs/bull'
-import type { Queue } from 'bull'
-import { ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JUDGE_RX_QUEUE } from '../queue/queue.constants'
-import type { JudgeResult, JudgeRxPayload, JudgeStateUpdate } from './heng.types'
-import { JudgeState } from './heng.types'
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Logger,
+  Param,
+  ParseIntPipe,
+  Post,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JUDGE_RX_QUEUE } from '../queue/queue.constants';
+import type {
+  JudgeResult,
+  JudgeRxPayload,
+  JudgeStateUpdate,
+} from './heng.types';
+import { JudgeState } from './heng.types';
 
 /**
  * HengController
@@ -17,7 +29,7 @@ import { JudgeState } from './heng.types'
 @ApiTags('heng')
 @Controller('heng')
 export class HengController {
-  private readonly logger = new Logger(HengController.name)
+  private readonly logger = new Logger(HengController.name);
 
   constructor(
     @InjectQueue(JUDGE_RX_QUEUE)
@@ -36,19 +48,21 @@ export class HengController {
     @Param('judgeId') judgeId: string,
     @Body() body: { state: JudgeState },
   ): Promise<void> {
-    this.logger.debug(`Update callback: submissionId=${submissionId}, state=${body.state}`)
+    this.logger.debug(
+      `Update callback: submissionId=${submissionId}, state=${body.state}`,
+    );
 
     const payload: JudgeRxPayload = {
       submissionId,
       judgeId,
       type: 'update',
       data: { state: body.state } satisfies JudgeStateUpdate,
-    }
+    };
 
     await this.judgeRxQueue.add(payload, {
       removeOnComplete: true,
       removeOnFail: false,
-    })
+    });
   }
 
   /**
@@ -63,19 +77,21 @@ export class HengController {
     @Param('judgeId') judgeId: string,
     @Body() body: Record<string, unknown>,
   ): Promise<void> {
-    const result = body as unknown as JudgeResult
-    this.logger.log(`Finish callback: submissionId=${submissionId}, cases=${result.cases?.length}`)
+    const result = body as unknown as JudgeResult;
+    this.logger.log(
+      `Finish callback: submissionId=${submissionId}, cases=${result.cases?.length}`,
+    );
 
     const payload: JudgeRxPayload = {
       submissionId,
       judgeId,
       type: 'finish',
       data: result,
-    }
+    };
 
     await this.judgeRxQueue.add(payload, {
       removeOnComplete: true,
       removeOnFail: false,
-    })
+    });
   }
 }

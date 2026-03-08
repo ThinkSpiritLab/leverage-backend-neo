@@ -5,27 +5,30 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common'
-import { InjectQueue } from '@nestjs/bull'
-import { InjectRepository } from '@nestjs/typeorm'
-import { ConfigService } from '@nestjs/config'
-import type { Queue } from 'bull'
-import { In, IsNull, Repository } from 'typeorm'
-import { createHash } from 'crypto'
-import archiver from 'archiver'
-import { Submission } from '../../database/entities/submission.entity'
-import { SubmissionMisc } from '../../database/entities/submission-misc.entity'
-import { Problem } from '../../database/entities/problem.entity'
-import { RejudgeLog } from '../../database/entities/rejudge-log.entity'
-import { Suspicion } from '../../database/entities/suspicion.entity'
-import { RedisService } from '../redis/redis.service'
-import { JUDGE_TX_QUEUE } from '../queue/queue.constants'
-import { Status } from '../heng/heng.types'
-import { LANGUAGE_BONUS, MAX_MEMORY_LIMIT } from '../../common/constants/submission.constants'
-import { CreateSubmissionDto } from './dto/create-submission.dto'
-import { SubmissionQueryDto } from './dto/submission-query.dto'
-import { SearchSubmissionDto } from './dto/search-submission.dto'
-import { RejudgeDto } from './dto/rejudge.dto'
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
+import type { Queue } from 'bull';
+import { In, IsNull, Repository } from 'typeorm';
+import { createHash } from 'crypto';
+import archiver from 'archiver';
+import { Submission } from '../../database/entities/submission.entity';
+import { SubmissionMisc } from '../../database/entities/submission-misc.entity';
+import { Problem } from '../../database/entities/problem.entity';
+import { RejudgeLog } from '../../database/entities/rejudge-log.entity';
+import { Suspicion } from '../../database/entities/suspicion.entity';
+import { RedisService } from '../redis/redis.service';
+import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
+import { Status } from '../heng/heng.types';
+import {
+  LANGUAGE_BONUS,
+  MAX_MEMORY_LIMIT,
+} from '../../common/constants/submission.constants';
+import { CreateSubmissionDto } from './dto/create-submission.dto';
+import { SubmissionQueryDto } from './dto/submission-query.dto';
+import { SearchSubmissionDto } from './dto/search-submission.dto';
+import { RejudgeDto } from './dto/rejudge.dto';
 
 export enum UserProblemStatus {
   TODO = 0,
@@ -41,16 +44,26 @@ const LANGUAGE_NAME_MAP: Record<number, string> = {
   9: 'python3',
   10: 'javascript',
   11: 'typescript',
-}
+};
 
 const LANGUAGE_EXT_MAP: Record<number, string> = {
-  0: 'c', 1: 'cpp', 2: 'cpp', 3: 'cpp', 4: 'pas', 5: 'c',
-  6: 'java', 7: 'kt', 8: 'py', 9: 'py', 10: 'js', 11: 'ts',
-}
+  0: 'c',
+  1: 'cpp',
+  2: 'cpp',
+  3: 'cpp',
+  4: 'pas',
+  5: 'c',
+  6: 'java',
+  7: 'kt',
+  8: 'py',
+  9: 'py',
+  10: 'js',
+  11: 'ts',
+};
 
 @Injectable()
 export class SubmissionService {
-  private readonly logger = new Logger(SubmissionService.name)
+  private readonly logger = new Logger(SubmissionService.name);
 
   constructor(
     @InjectRepository(Submission)
@@ -70,390 +83,711 @@ export class SubmissionService {
   ) {}
 
   async create(userId: number, dto: CreateSubmissionDto): Promise<Submission> {
-    await this.checkRateLimit(userId)
-    const problem = await this.problemRepo.findOne({ where: { id: dto.problemId }, cache: 6000 })
-    if (!problem) throw new NotFoundException(`题目 #${dto.problemId} 不存在`)
-    const { timeLimit, memoryLimit } = this.applyLanguageBonus(problem, dto.language)
+    await this.checkRateLimit(userId);
+    const problem = await this.problemRepo.findOne({
+      where: { id: dto.problemId },
+      cache: 6000,
+    });
+    if (!problem) throw new NotFoundException(`题目 #${dto.problemId} 不存在`);
+    const { timeLimit, memoryLimit } = this.applyLanguageBonus(
+      problem,
+      dto.language,
+    );
     const submission = await this.submissionRepo.save({
-      userId, problemId: dto.problemId, language: dto.language,
-      status: Status.PENDING, contestId: dto.contestId ?? null, courseId: dto.courseId ?? null,
-    })
-    await this.miscRepo.save({ submissionId: submission.id, code: dto.code })
+      userId,
+      problemId: dto.problemId,
+      language: dto.language,
+      status: Status.PENDING,
+      contestId: dto.contestId ?? null,
+      courseId: dto.courseId ?? null,
+    });
+    await this.miscRepo.save({ submissionId: submission.id, code: dto.code });
     await this.judgeTxQueue.add('judge', {
       submissionId: submission.id,
-      task: { language: dto.language, code: dto.code, timeLimit, memoryLimit, testDataUrl: this.buildTestDataUrl(problem) },
-    })
-    this.logger.log(`Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}`)
-    return submission
+      task: {
+        language: dto.language,
+        code: dto.code,
+        timeLimit,
+        memoryLimit,
+        testDataUrl: this.buildTestDataUrl(problem),
+      },
+    });
+    this.logger.log(
+      `Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}`,
+    );
+    return submission;
   }
 
-  async findAll(query: SubmissionQueryDto): Promise<{ items: Submission[]; total: number }> {
-    const { page = 1, perPage = 20, userId, problemId, status, contestId, courseId } = query
-    const qb = this.submissionRepo.createQueryBuilder('s')
+  async findAll(
+    query: SubmissionQueryDto,
+  ): Promise<{ items: Submission[]; total: number }> {
+    const {
+      page = 1,
+      perPage = 20,
+      userId,
+      problemId,
+      status,
+      contestId,
+      courseId,
+    } = query;
+    const qb = this.submissionRepo
+      .createQueryBuilder('s')
       .leftJoinAndSelect('s.problem', 'problem')
       .leftJoinAndSelect('s.user', 'user')
-      .take(perPage).skip((page - 1) * perPage).orderBy('s.id', 'DESC')
-    if (userId !== undefined) qb.andWhere('s.userId = :userId', { userId })
-    if (problemId !== undefined) qb.andWhere('s.problemId = :problemId', { problemId })
-    if (status !== undefined) qb.andWhere('s.status = :status', { status })
-    if (contestId !== undefined) qb.andWhere('s.contestId = :contestId', { contestId })
-    if (courseId !== undefined) qb.andWhere('s.courseId = :courseId', { courseId })
-    const [items, total] = await qb.getManyAndCount()
-    return { items, total }
+      .take(perPage)
+      .skip((page - 1) * perPage)
+      .orderBy('s.id', 'DESC');
+    if (userId !== undefined) qb.andWhere('s.userId = :userId', { userId });
+    if (problemId !== undefined)
+      qb.andWhere('s.problemId = :problemId', { problemId });
+    if (status !== undefined) qb.andWhere('s.status = :status', { status });
+    if (contestId !== undefined)
+      qb.andWhere('s.contestId = :contestId', { contestId });
+    if (courseId !== undefined)
+      qb.andWhere('s.courseId = :courseId', { courseId });
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
   }
 
   async findOne(id: number): Promise<Submission & { misc: SubmissionMisc }> {
-    const submission = await this.submissionRepo.findOne({ where: { id }, relations: ['misc', 'problem', 'user'] })
-    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`)
-    return submission as Submission & { misc: SubmissionMisc }
+    const submission = await this.submissionRepo.findOne({
+      where: { id },
+      relations: ['misc', 'problem', 'user'],
+    });
+    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+    return submission as Submission & { misc: SubmissionMisc };
   }
 
   async rejudge(id: number): Promise<void> {
-    const submission = await this.submissionRepo.findOne({ where: { id }, relations: ['problem'] })
-    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`)
-    const misc = await this.miscRepo.findOne({ where: { submissionId: id } })
-    if (!misc) throw new NotFoundException(`提交 #${id} 的代码不存在`)
+    const submission = await this.submissionRepo.findOne({
+      where: { id },
+      relations: ['problem'],
+    });
+    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+    const misc = await this.miscRepo.findOne({ where: { submissionId: id } });
+    if (!misc) throw new NotFoundException(`提交 #${id} 的代码不存在`);
     await this.rejudgeLogRepo.save({
-      submissionId: id, status: submission.status, time: submission.time,
-      memory: submission.memory, judger: submission.judger,
-      judgeResult: misc.judgeResult, compileErrorMsg: misc.compileErrorMsg,
+      submissionId: id,
+      status: submission.status,
+      time: submission.time,
+      memory: submission.memory,
+      judger: submission.judger,
+      judgeResult: misc.judgeResult,
+      compileErrorMsg: misc.compileErrorMsg,
       submittedAt: submission.updatedAt,
-    })
-    await this.submissionRepo.update(id, { status: Status.PENDING, judger: null })
-    const { timeLimit, memoryLimit } = this.applyLanguageBonus(submission.problem, submission.language)
+    });
+    await this.submissionRepo.update(id, {
+      status: Status.PENDING,
+      judger: null,
+    });
+    const { timeLimit, memoryLimit } = this.applyLanguageBonus(
+      submission.problem,
+      submission.language,
+    );
     await this.judgeTxQueue.add('judge', {
       submissionId: submission.id,
-      task: { language: submission.language, code: misc.code, timeLimit, memoryLimit, testDataUrl: this.buildTestDataUrl(submission.problem) },
-    })
-    this.logger.log(`Rejudge queued: submissionId=${id}`)
+      task: {
+        language: submission.language,
+        code: misc.code,
+        timeLimit,
+        memoryLimit,
+        testDataUrl: this.buildTestDataUrl(submission.problem),
+      },
+    });
+    this.logger.log(`Rejudge queued: submissionId=${id}`);
   }
 
   async getStatus(id: number): Promise<{ status: number }> {
-    const cacheKey = `submission-status:${id}`
-    const cached = await this.redisService.get(cacheKey)
-    if (cached !== null) return { status: parseInt(cached, 10) }
-    const submission = await this.submissionRepo.findOne({ where: { id }, select: ['id', 'status'] })
-    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`)
-    return { status: submission.status }
+    const cacheKey = `submission-status:${id}`;
+    const cached = await this.redisService.get(cacheKey);
+    if (cached !== null) return { status: parseInt(cached, 10) };
+    const submission = await this.submissionRepo.findOne({
+      where: { id },
+      select: ['id', 'status'],
+    });
+    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+    return { status: submission.status };
   }
 
   async count(): Promise<number> {
-    return this.submissionRepo.count({ cache: 5000 })
+    return this.submissionRepo.count({ cache: 5000 });
   }
 
-  async getProblemRatio(problemId: number, courseId: number | null | false, contestId: number | null | false) {
-    const q = this.submissionRepo.createQueryBuilder('s')
+  async getProblemRatio(
+    problemId: number,
+    courseId: number | null | false,
+    contestId: number | null | false,
+  ) {
+    const q = this.submissionRepo
+      .createQueryBuilder('s')
       .where('s.problemId = :problemId', { problemId })
-      .select('count(*)', 'cnt').addSelect('s.status', 'status').groupBy('s.status')
+      .select('count(*)', 'cnt')
+      .addSelect('s.status', 'status')
+      .groupBy('s.status');
     if (courseId !== false) {
-      if (courseId) q.andWhere('s.courseId = :courseId', { courseId })
-      else q.andWhere('s.courseId IS NULL')
+      if (courseId) q.andWhere('s.courseId = :courseId', { courseId });
+      else q.andWhere('s.courseId IS NULL');
     }
     if (contestId !== false) {
-      if (contestId) q.andWhere('s.contestId = :contestId', { contestId })
-      else q.andWhere('s.contestId IS NULL')
+      if (contestId) q.andWhere('s.contestId = :contestId', { contestId });
+      else q.andWhere('s.contestId IS NULL');
     }
-    return q.cache(30 * 1000).getRawMany()
+    return q.cache(30 * 1000).getRawMany();
   }
 
   async search(
-    showRestricted: boolean, courseId: number | null | false, contestId: number | null | false,
-    dto: SearchSubmissionDto, page: number, perPage = 12,
+    showRestricted: boolean,
+    courseId: number | null | false,
+    contestId: number | null | false,
+    dto: SearchSubmissionDto,
+    page: number,
+    perPage = 12,
   ): Promise<{ items: any[]; total: number }> {
-    const { name, title, language, status, userId } = dto
-    const q = this.submissionRepo.createQueryBuilder('s')
-      .leftJoin('s.user', 'user').leftJoin('s.problem', 'problem')
-      .select('s.id', 'id').addSelect('s.userId', 'userId')
-      .addSelect('user.username', 'username').addSelect('user.certifiedName', 'certifiedName')
-      .addSelect('user.nickname', 'nickname').addSelect('s.problemId', 'problemId')
-      .addSelect('s.contestId', 'contestId').addSelect('s.courseId', 'courseId')
-      .addSelect('problem.title', 'title').addSelect('problem.prefix', 'prefix')
-      .addSelect('problem.logicId', 'logicId').addSelect('s.status', 'status')
-      .addSelect('s.createdAt', 'createdAt').addSelect('s.time', 'time')
-      .addSelect('s.memory', 'memory').addSelect('s.language', 'language')
-      .orderBy('s.id', 'DESC').limit(perPage).offset((page - 1) * perPage)
-    if (userId) q.andWhere('s.userId = :userId', { userId })
-    else if (name) q.andWhere('(user.username LIKE :name OR user.certifiedName LIKE :name)', { name: `%${name}%` })
+    const { name, title, language, status, userId } = dto;
+    const q = this.submissionRepo
+      .createQueryBuilder('s')
+      .leftJoin('s.user', 'user')
+      .leftJoin('s.problem', 'problem')
+      .select('s.id', 'id')
+      .addSelect('s.userId', 'userId')
+      .addSelect('user.username', 'username')
+      .addSelect('user.certifiedName', 'certifiedName')
+      .addSelect('user.nickname', 'nickname')
+      .addSelect('s.problemId', 'problemId')
+      .addSelect('s.contestId', 'contestId')
+      .addSelect('s.courseId', 'courseId')
+      .addSelect('problem.title', 'title')
+      .addSelect('problem.prefix', 'prefix')
+      .addSelect('problem.logicId', 'logicId')
+      .addSelect('s.status', 'status')
+      .addSelect('s.createdAt', 'createdAt')
+      .addSelect('s.time', 'time')
+      .addSelect('s.memory', 'memory')
+      .addSelect('s.language', 'language')
+      .orderBy('s.id', 'DESC')
+      .limit(perPage)
+      .offset((page - 1) * perPage);
+    if (userId) q.andWhere('s.userId = :userId', { userId });
+    else if (name)
+      q.andWhere(
+        '(user.username LIKE :name OR user.certifiedName LIKE :name)',
+        { name: `%${name}%` },
+      );
     if (!showRestricted) {
-      q.andWhere('problem.restricted = false').andWhere('problem.closed = false')
+      q.andWhere('problem.restricted = false').andWhere(
+        'problem.closed = false',
+      );
     }
     if (title) {
-      const match = /^([A-Za-z]+)(\d+)?$/.exec(title)
-      const [, prefix, problemId] = match || []
+      const match = /^([A-Za-z]+)(\d+)?$/.exec(title);
+      const [, prefix, problemId] = match || [];
       if (problemId && prefix) {
-        q.andWhere('(problem.prefix = :prefix AND problem.logicId = :pid OR problem.title LIKE :title)',
-          { prefix: prefix.toLowerCase(), pid: problemId, title: `%${title}%` })
+        q.andWhere(
+          '(problem.prefix = :prefix AND problem.logicId = :pid OR problem.title LIKE :title)',
+          { prefix: prefix.toLowerCase(), pid: problemId, title: `%${title}%` },
+        );
       } else if (prefix && prefix.length === 1) {
-        q.andWhere('problem.prefix = :prefix', { prefix: prefix.toLowerCase() })
+        q.andWhere('problem.prefix = :prefix', {
+          prefix: prefix.toLowerCase(),
+        });
       } else if (prefix) {
-        q.andWhere('(problem.prefix = :prefix OR problem.title LIKE :title)',
-          { prefix: prefix.toLowerCase(), title: `%${title}%` })
+        q.andWhere('(problem.prefix = :prefix OR problem.title LIKE :title)', {
+          prefix: prefix.toLowerCase(),
+          title: `%${title}%`,
+        });
       } else {
-        q.andWhere('(problem.title LIKE :title OR problem.id = :pid OR problem.logicId = :pid)',
-          { title: `%${title}%`, pid: title })
+        q.andWhere(
+          '(problem.title LIKE :title OR problem.id = :pid OR problem.logicId = :pid)',
+          { title: `%${title}%`, pid: title },
+        );
       }
     }
-    if (language !== undefined) q.andWhere('s.language = :language', { language })
-    if (status !== undefined && status !== null) q.andWhere('s.status = :status', { status })
+    if (language !== undefined)
+      q.andWhere('s.language = :language', { language });
+    if (status !== undefined && status !== null)
+      q.andWhere('s.status = :status', { status });
     if (courseId !== false) {
-      if (courseId) q.andWhere('s.courseId = :courseId', { courseId })
-      else q.andWhere('s.courseId IS NULL')
+      if (courseId) q.andWhere('s.courseId = :courseId', { courseId });
+      else q.andWhere('s.courseId IS NULL');
     }
     if (contestId !== false) {
-      if (contestId) q.andWhere('s.contestId = :contestId', { contestId })
-      else q.andWhere('s.contestId IS NULL')
+      if (contestId) q.andWhere('s.contestId = :contestId', { contestId });
+      else q.andWhere('s.contestId IS NULL');
     }
-    if (page > 5) q.cache(10 * 60 * 1000)
-    else q.cache(6000)
-    const [items, total] = await Promise.all([q.getRawMany(), q.getCount()])
-    return { items, total }
+    if (page > 5) q.cache(10 * 60 * 1000);
+    else q.cache(6000);
+    const [items, total] = await Promise.all([q.getRawMany(), q.getCount()]);
+    return { items, total };
   }
 
-  async searchRejudgeLog(showRestricted: boolean, dto: SearchSubmissionDto, page: number, perPage = 12) {
-    const { name, title, language, status, userId } = dto
-    const q = this.rejudgeLogRepo.createQueryBuilder('rl')
-      .leftJoin('rl.submission', 's').leftJoin('s.user', 'user').leftJoin('s.problem', 'problem')
-      .select('s.id', 'id').addSelect('s.userId', 'userId')
-      .addSelect('user.username', 'username').addSelect('user.certifiedName', 'certifiedName')
-      .addSelect('s.problemId', 'problemId').addSelect('problem.title', 'title')
-      .addSelect('problem.prefix', 'prefix').addSelect('problem.logicId', 'logicId')
-      .addSelect('s.status', 'newStatus').addSelect('rl.status', 'originalStatus')
-      .addSelect('rl.createdAt', 'createdAt').addSelect('s.createdAt', 'submittedAt')
-      .addSelect('s.time', 'newTime').addSelect('s.memory', 'newMemory')
-      .addSelect('rl.time', 'originalTime').addSelect('rl.memory', 'originalMemory')
+  async searchRejudgeLog(
+    showRestricted: boolean,
+    dto: SearchSubmissionDto,
+    page: number,
+    perPage = 12,
+  ) {
+    const { name, title, language, status, userId } = dto;
+    const q = this.rejudgeLogRepo
+      .createQueryBuilder('rl')
+      .leftJoin('rl.submission', 's')
+      .leftJoin('s.user', 'user')
+      .leftJoin('s.problem', 'problem')
+      .select('s.id', 'id')
+      .addSelect('s.userId', 'userId')
+      .addSelect('user.username', 'username')
+      .addSelect('user.certifiedName', 'certifiedName')
+      .addSelect('s.problemId', 'problemId')
+      .addSelect('problem.title', 'title')
+      .addSelect('problem.prefix', 'prefix')
+      .addSelect('problem.logicId', 'logicId')
+      .addSelect('s.status', 'newStatus')
+      .addSelect('rl.status', 'originalStatus')
+      .addSelect('rl.createdAt', 'createdAt')
+      .addSelect('s.createdAt', 'submittedAt')
+      .addSelect('s.time', 'newTime')
+      .addSelect('s.memory', 'newMemory')
+      .addSelect('rl.time', 'originalTime')
+      .addSelect('rl.memory', 'originalMemory')
       .addSelect('s.language', 'language')
-      .orderBy('rl.id', 'DESC').limit(perPage).offset((page - 1) * perPage)
-    if (userId) q.andWhere('s.userId = :userId', { userId })
-    else if (name) q.andWhere('(user.username LIKE :name OR user.certifiedName LIKE :name)', { name: `%${name}%` })
-    if (!showRestricted) { q.andWhere('problem.restricted = false').andWhere('problem.closed = false') }
-    if (title) q.andWhere('(problem.title LIKE :title OR problem.id LIKE :title)', { title: `%${title}%` })
-    if (language !== undefined) q.andWhere('s.language = :language', { language })
-    if (status !== undefined && status !== null) q.andWhere('s.status = :status', { status })
-    q.cache(6000)
-    const [items, total] = await Promise.all([q.getRawMany(), q.getCount()])
-    return { items, total }
-  }
-
-  async batchRejudge(dto: RejudgeDto, countOnly = false): Promise<number | void> {
-    const { contestId, courseId, userId, problemId, idStart, idEnd, dateStart, dateEnd, status } = dto
-    const q = this.submissionRepo.createQueryBuilder('s')
-    if (contestId === -1) q.andWhere('s.contestId IS NULL')
-    else if (contestId !== undefined) q.andWhere('s.contestId = :contestId', { contestId })
-    if (courseId === -1) q.andWhere('s.courseId IS NULL')
-    else if (courseId !== undefined) q.andWhere('s.courseId = :courseId', { courseId })
-    if (userId !== undefined) q.andWhere('s.userId = :userId', { userId })
-    if (problemId) q.andWhere('s.problemId = :problemId', { problemId })
-    if (status !== undefined && status !== null) q.andWhere('s.status = :status', { status })
-    if (idStart !== undefined) q.andWhere('s.id >= :idStart', { idStart })
-    if (idEnd !== undefined) q.andWhere('s.id <= :idEnd', { idEnd })
-    if (dateStart !== undefined) q.andWhere('s.createdAt >= :dateStart', { dateStart })
-    if (dateEnd !== undefined) q.andWhere('s.createdAt <= :dateEnd', { dateEnd })
-    if (countOnly) return q.getCount()
-    const ids = await q.select('s.id', 'id').getRawMany().then(rows => rows.map((r: any) => r.id as number))
-    ;(async () => {
-      for (const id of ids) {
-        try { await this.rejudge(id); this.logger.log(`Rejudge launched: ${id}`) }
-        catch (err) { this.logger.error(`Rejudge failed for ${id}:`, err) }
-      }
-    })()
-  }
-
-  async getCodeZip(params: { contestId?: number; courseId?: number; userId?: number; problemId?: number; take?: number }) {
-    const { contestId, courseId, userId, problemId, take } = params
-    const q = this.submissionRepo.createQueryBuilder('s').leftJoinAndSelect('s.misc', 'misc')
-      .select(['s.id', 's.userId', 's.problemId', 's.language', 's.status', 'misc.code'])
-    if (contestId !== undefined) q.andWhere('s.contestId = :contestId', { contestId })
-    if (courseId !== undefined) q.andWhere('s.courseId = :courseId', { courseId })
-    if (userId !== undefined) q.andWhere('s.userId = :userId', { userId })
-    if (problemId !== undefined) q.andWhere('s.problemId = :problemId', { problemId })
-    q.take(take ? Math.min(take, 100000) : 10000)
-    const submissions = await q.getMany()
-    const arc = archiver('zip')
-    for (const s of submissions) {
-      const ext = LANGUAGE_EXT_MAP[s.language] ?? 'txt'
-      arc.append(s.misc?.code ?? '', { name: `${s.userId}-${s.problemId}-${s.id}-${s.status}.${ext}` })
+      .orderBy('rl.id', 'DESC')
+      .limit(perPage)
+      .offset((page - 1) * perPage);
+    if (userId) q.andWhere('s.userId = :userId', { userId });
+    else if (name)
+      q.andWhere(
+        '(user.username LIKE :name OR user.certifiedName LIKE :name)',
+        { name: `%${name}%` },
+      );
+    if (!showRestricted) {
+      q.andWhere('problem.restricted = false').andWhere(
+        'problem.closed = false',
+      );
     }
-    arc.finalize()
-    return arc
+    if (title)
+      q.andWhere('(problem.title LIKE :title OR problem.id LIKE :title)', {
+        title: `%${title}%`,
+      });
+    if (language !== undefined)
+      q.andWhere('s.language = :language', { language });
+    if (status !== undefined && status !== null)
+      q.andWhere('s.status = :status', { status });
+    q.cache(6000);
+    const [items, total] = await Promise.all([q.getRawMany(), q.getCount()]);
+    return { items, total };
+  }
+
+  async batchRejudge(
+    dto: RejudgeDto,
+    countOnly = false,
+  ): Promise<number | void> {
+    const {
+      contestId,
+      courseId,
+      userId,
+      problemId,
+      idStart,
+      idEnd,
+      dateStart,
+      dateEnd,
+      status,
+    } = dto;
+    const q = this.submissionRepo.createQueryBuilder('s');
+    if (contestId === -1) q.andWhere('s.contestId IS NULL');
+    else if (contestId !== undefined)
+      q.andWhere('s.contestId = :contestId', { contestId });
+    if (courseId === -1) q.andWhere('s.courseId IS NULL');
+    else if (courseId !== undefined)
+      q.andWhere('s.courseId = :courseId', { courseId });
+    if (userId !== undefined) q.andWhere('s.userId = :userId', { userId });
+    if (problemId) q.andWhere('s.problemId = :problemId', { problemId });
+    if (status !== undefined && status !== null)
+      q.andWhere('s.status = :status', { status });
+    if (idStart !== undefined) q.andWhere('s.id >= :idStart', { idStart });
+    if (idEnd !== undefined) q.andWhere('s.id <= :idEnd', { idEnd });
+    if (dateStart !== undefined)
+      q.andWhere('s.createdAt >= :dateStart', { dateStart });
+    if (dateEnd !== undefined)
+      q.andWhere('s.createdAt <= :dateEnd', { dateEnd });
+    if (countOnly) return q.getCount();
+    const ids = await q
+      .select('s.id', 'id')
+      .getRawMany()
+      .then((rows) => rows.map((r: any) => r.id as number));
+    (async () => {
+      for (const id of ids) {
+        try {
+          await this.rejudge(id);
+          this.logger.log(`Rejudge launched: ${id}`);
+        } catch (err) {
+          this.logger.error(`Rejudge failed for ${id}:`, err);
+        }
+      }
+    })();
+  }
+
+  async getCodeZip(params: {
+    contestId?: number;
+    courseId?: number;
+    userId?: number;
+    problemId?: number;
+    take?: number;
+  }) {
+    const { contestId, courseId, userId, problemId, take } = params;
+    const q = this.submissionRepo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.misc', 'misc')
+      .select([
+        's.id',
+        's.userId',
+        's.problemId',
+        's.language',
+        's.status',
+        'misc.code',
+      ]);
+    if (contestId !== undefined)
+      q.andWhere('s.contestId = :contestId', { contestId });
+    if (courseId !== undefined)
+      q.andWhere('s.courseId = :courseId', { courseId });
+    if (userId !== undefined) q.andWhere('s.userId = :userId', { userId });
+    if (problemId !== undefined)
+      q.andWhere('s.problemId = :problemId', { problemId });
+    q.take(take ? Math.min(take, 100000) : 10000);
+    const submissions = await q.getMany();
+    const arc = archiver('zip');
+    for (const s of submissions) {
+      const ext = LANGUAGE_EXT_MAP[s.language] ?? 'txt';
+      arc.append(s.misc?.code ?? '', {
+        name: `${s.userId}-${s.problemId}-${s.id}-${s.status}.${ext}`,
+      });
+    }
+    arc.finalize();
+    return arc;
   }
 
   async getCE(id: number, userId: number, isAdmin: boolean) {
-    const submission = await this.submissionRepo.findOne({ where: { id }, relations: ['user', 'problem', 'misc', 'contest', 'course'] })
-    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`)
-    if (!isAdmin && submission.userId !== userId) throw new ForbiddenException('无权限查看此提交')
-    const result: any = { ...submission }
-    if (result.misc) { delete result.misc.code; delete result.misc.judgeResult }
-    delete result.time; delete result.memory
-    return result
+    const submission = await this.submissionRepo.findOne({
+      where: { id },
+      relations: ['user', 'problem', 'misc', 'contest', 'course'],
+    });
+    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+    if (!isAdmin && submission.userId !== userId)
+      throw new ForbiddenException('无权限查看此提交');
+    const result: any = { ...submission };
+    if (result.misc) {
+      delete result.misc.code;
+      delete result.misc.judgeResult;
+    }
+    delete result.time;
+    delete result.memory;
+    return result;
   }
 
   async inspect(id: number, userId: number, isAdmin: boolean) {
-    const submission = await this.submissionRepo.findOne({ where: { id }, relations: ['misc'] })
-    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`)
-    if (!isAdmin && submission.userId !== userId) throw new ForbiddenException('无权限查看此提交代码')
-    return { id: submission.id, code: submission.misc?.code }
+    const submission = await this.submissionRepo.findOne({
+      where: { id },
+      relations: ['misc'],
+    });
+    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+    if (!isAdmin && submission.userId !== userId)
+      throw new ForbiddenException('无权限查看此提交代码');
+    return { id: submission.id, code: submission.misc?.code };
   }
 
   async remove(id: number) {
-    const result = await this.submissionRepo.delete(id)
-    if (!result.affected) throw new NotFoundException(`提交 #${id} 不存在`)
-    return { deleted: true }
+    const result = await this.submissionRepo.delete(id);
+    if (!result.affected) throw new NotFoundException(`提交 #${id} 不存在`);
+    return { deleted: true };
   }
 
-  async getUserProblemStatus(userId: number, problemId: number, courseId: number | null, contestId: number | null): Promise<UserProblemStatus> {
-    const qb = this.submissionRepo.createQueryBuilder('s').select('s.id', 'id')
-      .where('s.userId = :userId AND s.problemId = :problemId', { userId, problemId })
-    if (contestId !== null) qb.andWhere('s.contestId = :contestId', { contestId })
-    else qb.andWhere('s.contestId IS NULL')
-    if (courseId !== null) qb.andWhere('s.courseId = :courseId', { courseId })
-    else qb.andWhere('s.courseId IS NULL')
-    const acQb = qb.clone().andWhere('s.status = :acStatus', { acStatus: Status.AC })
-    if (await acQb.getCount()) return UserProblemStatus.ACCEPTED
+  async getUserProblemStatus(
+    userId: number,
+    problemId: number,
+    courseId: number | null,
+    contestId: number | null,
+  ): Promise<UserProblemStatus> {
+    const qb = this.submissionRepo
+      .createQueryBuilder('s')
+      .select('s.id', 'id')
+      .where('s.userId = :userId AND s.problemId = :problemId', {
+        userId,
+        problemId,
+      });
+    if (contestId !== null)
+      qb.andWhere('s.contestId = :contestId', { contestId });
+    else qb.andWhere('s.contestId IS NULL');
+    if (courseId !== null) qb.andWhere('s.courseId = :courseId', { courseId });
+    else qb.andWhere('s.courseId IS NULL');
+    const acQb = qb
+      .clone()
+      .andWhere('s.status = :acStatus', { acStatus: Status.AC });
+    if (await acQb.getCount()) return UserProblemStatus.ACCEPTED;
     const triedQb = qb.clone().andWhere('s.status NOT IN (:...exclude)', {
       exclude: [Status.AC, Status.PENDING, Status.JUDGING, Status.COMPILING],
-    })
-    return (await triedQb.getCount()) ? UserProblemStatus.ATTEMPTED : UserProblemStatus.TODO
+    });
+    return (await triedQb.getCount())
+      ? UserProblemStatus.ATTEMPTED
+      : UserProblemStatus.TODO;
   }
 
-  async getUserProblemStatusBatch(userId: number, problemIds: number[], courseId: number | null, contestId: number | null): Promise<Record<number, UserProblemStatus>> {
-    const result: Record<number, UserProblemStatus> = {}
-    if (problemIds.length === 0) return result
+  async getUserProblemStatusBatch(
+    userId: number,
+    problemIds: number[],
+    courseId: number | null,
+    contestId: number | null,
+  ): Promise<Record<number, UserProblemStatus>> {
+    const result: Record<number, UserProblemStatus> = {};
+    if (problemIds.length === 0) return result;
 
-    const acQb = this.submissionRepo.createQueryBuilder('s')
+    const acQb = this.submissionRepo
+      .createQueryBuilder('s')
       .select('DISTINCT s.problemId', 'problemId')
-      .where('s.userId = :userId AND s.status = :acStatus AND s.problemId IN (:...problemIds)', { userId, acStatus: Status.AC, problemIds })
-    if (contestId !== null) acQb.andWhere('s.contestId = :contestId', { contestId })
-    else acQb.andWhere('s.contestId IS NULL')
-    if (courseId !== null) acQb.andWhere('s.courseId = :courseId', { courseId })
-    else acQb.andWhere('s.courseId IS NULL')
+      .where(
+        's.userId = :userId AND s.status = :acStatus AND s.problemId IN (:...problemIds)',
+        { userId, acStatus: Status.AC, problemIds },
+      );
+    if (contestId !== null)
+      acQb.andWhere('s.contestId = :contestId', { contestId });
+    else acQb.andWhere('s.contestId IS NULL');
+    if (courseId !== null)
+      acQb.andWhere('s.courseId = :courseId', { courseId });
+    else acQb.andWhere('s.courseId IS NULL');
 
-    const triedQb = this.submissionRepo.createQueryBuilder('s')
+    const triedQb = this.submissionRepo
+      .createQueryBuilder('s')
       .select('DISTINCT s.problemId', 'problemId')
-      .where('s.userId = :userId AND s.problemId IN (:...problemIds)', { userId, problemIds })
-      .andWhere('s.status NOT IN (:...exclude)', { exclude: [Status.AC, Status.PENDING, Status.JUDGING, Status.COMPILING] })
-    if (contestId !== null) triedQb.andWhere('s.contestId = :contestId', { contestId })
-    else triedQb.andWhere('s.contestId IS NULL')
-    if (courseId !== null) triedQb.andWhere('s.courseId = :courseId', { courseId })
-    else triedQb.andWhere('s.courseId IS NULL')
+      .where('s.userId = :userId AND s.problemId IN (:...problemIds)', {
+        userId,
+        problemIds,
+      })
+      .andWhere('s.status NOT IN (:...exclude)', {
+        exclude: [Status.AC, Status.PENDING, Status.JUDGING, Status.COMPILING],
+      });
+    if (contestId !== null)
+      triedQb.andWhere('s.contestId = :contestId', { contestId });
+    else triedQb.andWhere('s.contestId IS NULL');
+    if (courseId !== null)
+      triedQb.andWhere('s.courseId = :courseId', { courseId });
+    else triedQb.andWhere('s.courseId IS NULL');
 
-    const [acRows, triedRows] = await Promise.all([acQb.getRawMany(), triedQb.getRawMany()])
-    const acSet = new Set(acRows.map((r: any) => Number(r.problemId)))
-    const triedSet = new Set(triedRows.map((r: any) => Number(r.problemId)))
+    const [acRows, triedRows] = await Promise.all([
+      acQb.getRawMany(),
+      triedQb.getRawMany(),
+    ]);
+    const acSet = new Set(acRows.map((r: any) => Number(r.problemId)));
+    const triedSet = new Set(triedRows.map((r: any) => Number(r.problemId)));
     for (const pid of problemIds) {
-      if (acSet.has(pid)) result[pid] = UserProblemStatus.ACCEPTED
-      else if (triedSet.has(pid)) result[pid] = UserProblemStatus.ATTEMPTED
-      else result[pid] = UserProblemStatus.TODO
+      if (acSet.has(pid)) result[pid] = UserProblemStatus.ACCEPTED;
+      else if (triedSet.has(pid)) result[pid] = UserProblemStatus.ATTEMPTED;
+      else result[pid] = UserProblemStatus.TODO;
     }
-    return result
+    return result;
   }
 
   async getSusList(hashsum: string) {
-    return this.suspicionRepo.createQueryBuilder('ss')
-      .leftJoin('ss.submission', 's').leftJoin('s.problem', 'p').leftJoin('s.user', 'u')
+    return this.suspicionRepo
+      .createQueryBuilder('ss')
+      .leftJoin('ss.submission', 's')
+      .leftJoin('s.problem', 'p')
+      .leftJoin('s.user', 'u')
       .where('ss.hashsum = :hashsum', { hashsum })
-      .orderBy('s.userId', 'ASC').addOrderBy('s.id', 'ASC')
-      .select(['u.id', 'u.username', 'u.certifiedName', 'p.logicId', 'p.prefix', 'p.title', 's.id', 's.createdAt', 'ss.hashsum', 'ss.submissionId'])
-      .getRawMany()
+      .orderBy('s.userId', 'ASC')
+      .addOrderBy('s.id', 'ASC')
+      .select([
+        'u.id',
+        'u.username',
+        'u.certifiedName',
+        'p.logicId',
+        'p.prefix',
+        'p.title',
+        's.id',
+        's.createdAt',
+        'ss.hashsum',
+        'ss.submissionId',
+      ])
+      .getRawMany();
   }
 
   async getSusUnion(...userIds: number[]) {
-    if (userIds.length === 0) return []
-    const hashes: string[] = await this.suspicionRepo.createQueryBuilder('ss')
-      .leftJoin('ss.submission', 's').where('s.userId IN (:...userIds)', { userIds })
-      .select('ss.hashsum', 'hashsum').groupBy('ss.hashsum')
+    if (userIds.length === 0) return [];
+    const hashes: string[] = await this.suspicionRepo
+      .createQueryBuilder('ss')
+      .leftJoin('ss.submission', 's')
+      .where('s.userId IN (:...userIds)', { userIds })
+      .select('ss.hashsum', 'hashsum')
+      .groupBy('ss.hashsum')
       .having('COUNT(DISTINCT s.userId) >= :length', { length: userIds.length })
-      .getRawMany().then(rows => rows.map((r: any) => r.hashsum as string))
-    if (hashes.length === 0) return []
-    return this.suspicionRepo.createQueryBuilder('ss')
-      .leftJoin('ss.submission', 's').leftJoin('s.problem', 'p').leftJoin('s.user', 'u')
+      .getRawMany()
+      .then((rows) => rows.map((r: any) => r.hashsum as string));
+    if (hashes.length === 0) return [];
+    return this.suspicionRepo
+      .createQueryBuilder('ss')
+      .leftJoin('ss.submission', 's')
+      .leftJoin('s.problem', 'p')
+      .leftJoin('s.user', 'u')
       .where('ss.hashsum IN (:...hashes)', { hashes })
       .andWhere('s.userId IN (:...userIds)', { userIds })
-      .orderBy('s.problemId', 'ASC').addOrderBy('s.id', 'ASC')
-      .select(['u.username', 'u.certifiedName', 'p.logicId', 'p.prefix', 'p.title', 's.id', 's.createdAt', 'ss.hashsum', 'ss.submissionId'])
-      .getRawMany()
+      .orderBy('s.problemId', 'ASC')
+      .addOrderBy('s.id', 'ASC')
+      .select([
+        'u.username',
+        'u.certifiedName',
+        'p.logicId',
+        'p.prefix',
+        'p.title',
+        's.id',
+        's.createdAt',
+        'ss.hashsum',
+        'ss.submissionId',
+      ])
+      .getRawMany();
   }
 
   async getRecentSus() {
-    return this.suspicionRepo.createQueryBuilder('ss')
-      .leftJoin('ss.submission', 's').leftJoin('s.problem', 'p').leftJoin('s.user', 'u')
-      .where('ss.checked = false').limit(12)
-      .select(['u.username', 'u.certifiedName', 'p.logicId', 'p.prefix', 'p.title', 's.id', 's.createdAt', 'ss.hashsum', 'ss.checked', 'ss.submissionId'])
-      .addSelect('ss.mas0 + ss.md1 + ss.def + ss.con + ss.cpp + ss.oo + ss.cr + ss.html + ss.chn + ss.qq', 'sum')
-      .orderBy('sum', 'DESC').getRawMany()
+    return this.suspicionRepo
+      .createQueryBuilder('ss')
+      .leftJoin('ss.submission', 's')
+      .leftJoin('s.problem', 'p')
+      .leftJoin('s.user', 'u')
+      .where('ss.checked = false')
+      .limit(12)
+      .select([
+        'u.username',
+        'u.certifiedName',
+        'p.logicId',
+        'p.prefix',
+        'p.title',
+        's.id',
+        's.createdAt',
+        'ss.hashsum',
+        'ss.checked',
+        'ss.submissionId',
+      ])
+      .addSelect(
+        'ss.mas0 + ss.md1 + ss.def + ss.con + ss.cpp + ss.oo + ss.cr + ss.html + ss.chn + ss.qq',
+        'sum',
+      )
+      .orderBy('sum', 'DESC')
+      .getRawMany();
   }
 
-  async getSusXlsx(contestId?: number, courseId?: number, problemId?: number, userId?: number, limit?: number): Promise<Buffer> {
-    const q = this.suspicionRepo.createQueryBuilder('ss')
+  async getSusXlsx(
+    contestId?: number,
+    courseId?: number,
+    problemId?: number,
+    userId?: number,
+    limit?: number,
+  ): Promise<Buffer> {
+    const q = this.suspicionRepo
+      .createQueryBuilder('ss')
       .leftJoin('ss.submission', 's')
-      .select('ss.submissionId', 'submissionId').addSelect('s.problemId', 'problemId')
-      .addSelect('s.userId', 'userId').addSelect('ss.hashsum', 'hashsum')
-      .addSelect('ss.mas0', 'mas0').addSelect('ss.md1', 'md1').addSelect('ss.def', 'def')
-      .addSelect('ss.con', 'con').addSelect('ss.cpp', 'cpp').addSelect('ss.oo', 'oo')
-      .addSelect('ss.cr', 'cr').addSelect('ss.html', 'html').addSelect('ss.chn', 'chn')
-      .addSelect('ss.qq', 'qq').addSelect('ss.checked', 'checked')
-      .take(Math.min(limit ?? 10000, 100000))
-    if (contestId !== undefined) q.andWhere('s.contestId = :contestId', { contestId })
-    if (courseId !== undefined) q.andWhere('s.courseId = :courseId', { courseId })
-    if (problemId !== undefined) q.andWhere('s.problemId = :problemId', { problemId })
-    if (userId !== undefined) q.andWhere('s.userId = :userId', { userId })
-    const rows = await q.getRawMany()
-    const headers = rows.length > 0 ? Object.keys(rows[0]) : ['submissionId', 'problemId', 'userId', 'hashsum']
-    const lines = [headers.join(','), ...rows.map(row => headers.map(h => JSON.stringify(row[h] ?? '')).join(','))]
-    return Buffer.from(lines.join('\n'), 'utf-8')
+      .select('ss.submissionId', 'submissionId')
+      .addSelect('s.problemId', 'problemId')
+      .addSelect('s.userId', 'userId')
+      .addSelect('ss.hashsum', 'hashsum')
+      .addSelect('ss.mas0', 'mas0')
+      .addSelect('ss.md1', 'md1')
+      .addSelect('ss.def', 'def')
+      .addSelect('ss.con', 'con')
+      .addSelect('ss.cpp', 'cpp')
+      .addSelect('ss.oo', 'oo')
+      .addSelect('ss.cr', 'cr')
+      .addSelect('ss.html', 'html')
+      .addSelect('ss.chn', 'chn')
+      .addSelect('ss.qq', 'qq')
+      .addSelect('ss.checked', 'checked')
+      .take(Math.min(limit ?? 10000, 100000));
+    if (contestId !== undefined)
+      q.andWhere('s.contestId = :contestId', { contestId });
+    if (courseId !== undefined)
+      q.andWhere('s.courseId = :courseId', { courseId });
+    if (problemId !== undefined)
+      q.andWhere('s.problemId = :problemId', { problemId });
+    if (userId !== undefined) q.andWhere('s.userId = :userId', { userId });
+    const rows = await q.getRawMany();
+    const headers =
+      rows.length > 0
+        ? Object.keys(rows[0])
+        : ['submissionId', 'problemId', 'userId', 'hashsum'];
+    const lines = [
+      headers.join(','),
+      ...rows.map((row) =>
+        headers.map((h) => JSON.stringify(row[h] ?? '')).join(','),
+      ),
+    ];
+    return Buffer.from(lines.join('\n'), 'utf-8');
   }
 
   async checkSus(submissionId: number): Promise<Suspicion | null> {
-    const sus = await this.suspicionRepo.findOne({ where: { submissionId } })
-    if (!sus) return null
-    sus.checked = !sus.checked
-    return this.suspicionRepo.save(sus)
+    const sus = await this.suspicionRepo.findOne({ where: { submissionId } });
+    if (!sus) return null;
+    sus.checked = !sus.checked;
+    return this.suspicionRepo.save(sus);
   }
 
   susTest(code: string): Record<string, unknown> {
-    return SubmissionService.checkSuspicion(code)
+    return SubmissionService.checkSuspicion(code);
   }
 
   static checkSuspicion(source: string): Record<string, unknown> {
-    source = source.replace(/\/\/.*/g, '').replace(/\s+/g, '').replace(/\/\*(.*?)\*\//g, '').replace(/"(.*?)"/g, '')
-    const hashsum = createHash('sha1').update(source).digest('hex')
-    const occ = (pattern: RegExp) => (source.match(pattern) || []).length
-    const mas0 = occ(/[*+\-]0\b/g)
-    const md1 = occ(/[\/*]1[^.\d]/g) * 3
-    const defCnt = occ(/#define/g)
-    const def = Math.min(Math.round(1.4 ** defCnt - 1), 2000)
-    const con = occ(/[+\-*\/^%&|]\d+[+\-*\/^%&|]\d+/g)
-    const cpp = Math.round(occ(/virtual|nullptr|constexpr|typename|template|friend|decltype|override|explicit|mutable|volatile/g) * 1.5)
-    const oo = Math.round(occ(/class|public|private|protected/g) * 0.75)
-    const cr = occ(/https|http|csdn/gi) * 100
-    const html = occ(/<\s*\w+[^>]*>(.*?)<\s*\/\s*\w+>/g) * 100
-    const chn = occ(/[\u4e00-\u9fa5]/g) * 3
-    const qq = occ(/\d{2}:\d{2}:\d{2}/g) * 300
-    return { hashsum, mas0, md1, def, con, cpp, oo, cr, html, chn, qq }
+    source = source
+      .replace(/\/\/.*/g, '')
+      .replace(/\s+/g, '')
+      .replace(/\/\*(.*?)\*\//g, '')
+      .replace(/"(.*?)"/g, '');
+    const hashsum = createHash('sha1').update(source).digest('hex');
+    const occ = (pattern: RegExp) => (source.match(pattern) || []).length;
+    const mas0 = occ(/[*+\-]0\b/g);
+    const md1 = occ(/[\/*]1[^.\d]/g) * 3;
+    const defCnt = occ(/#define/g);
+    const def = Math.min(Math.round(1.4 ** defCnt - 1), 2000);
+    const con = occ(/[+\-*\/^%&|]\d+[+\-*\/^%&|]\d+/g);
+    const cpp = Math.round(
+      occ(
+        /virtual|nullptr|constexpr|typename|template|friend|decltype|override|explicit|mutable|volatile/g,
+      ) * 1.5,
+    );
+    const oo = Math.round(occ(/class|public|private|protected/g) * 0.75);
+    const cr = occ(/https|http|csdn/gi) * 100;
+    const html = occ(/<\s*\w+[^>]*>(.*?)<\s*\/\s*\w+>/g) * 100;
+    const chn = occ(/[\u4e00-\u9fa5]/g) * 3;
+    const qq = occ(/\d{2}:\d{2}:\d{2}/g) * 300;
+    return { hashsum, mas0, md1, def, con, cpp, oo, cr, html, chn, qq };
   }
 
   private async checkRateLimit(userId: number): Promise<void> {
-    const key = `submit-throttle:${userId}`
-    const count = await this.redisService.incr(key)
-    if (count === 1) await this.redisService.expire(key, 60)
-    const max = this.configService.get<number>('submission.maxPerMinute', 10)
-    if (count > max) throw new HttpException('提交过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
+    const key = `submit-throttle:${userId}`;
+    const count = await this.redisService.incr(key);
+    if (count === 1) await this.redisService.expire(key, 60);
+    const max = this.configService.get<number>('submission.maxPerMinute', 10);
+    if (count > max)
+      throw new HttpException(
+        '提交过于频繁，请稍后再试',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
   }
 
-  applyLanguageBonus(problem: Problem, language: number): { timeLimit: number; memoryLimit: number } {
-    const languageName = LANGUAGE_NAME_MAP[language]
-    const bonus = languageName ? LANGUAGE_BONUS[languageName] : undefined
-    let { timeLimit, memoryLimit } = problem
+  applyLanguageBonus(
+    problem: Problem,
+    language: number,
+  ): { timeLimit: number; memoryLimit: number } {
+    const languageName = LANGUAGE_NAME_MAP[language];
+    const bonus = languageName ? LANGUAGE_BONUS[languageName] : undefined;
+    let { timeLimit, memoryLimit } = problem;
     if (bonus) {
-      timeLimit = timeLimit * bonus.timeMultiplier
-      memoryLimit = memoryLimit * bonus.memoryMultiplier
-      if (bonus.minMemory !== undefined) memoryLimit = Math.max(memoryLimit, bonus.minMemory / (1024 * 1024))
-      memoryLimit = Math.min(memoryLimit, MAX_MEMORY_LIMIT / (1024 * 1024))
+      timeLimit = timeLimit * bonus.timeMultiplier;
+      memoryLimit = memoryLimit * bonus.memoryMultiplier;
+      if (bonus.minMemory !== undefined)
+        memoryLimit = Math.max(memoryLimit, bonus.minMemory / (1024 * 1024));
+      memoryLimit = Math.min(memoryLimit, MAX_MEMORY_LIMIT / (1024 * 1024));
     }
-    return { timeLimit, memoryLimit }
+    return { timeLimit, memoryLimit };
   }
 
   private buildTestDataUrl(problem: Problem): string {
-    const baseUrl = this.configService.get<string>('baseUrl', 'http://localhost:3000')
-    return `${baseUrl}/problems/${problem.id}/test-data`
+    const baseUrl = this.configService.get<string>(
+      'baseUrl',
+      'http://localhost:3000',
+    );
+    return `${baseUrl}/problems/${problem.id}/test-data`;
   }
 }

@@ -1,25 +1,31 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 export class Notification {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Column('varchar', { length: 40 })
-  title: string
+  title: string;
 
   @Column('text')
-  content: string
+  content: string;
 
   @Column('boolean', { default: false })
-  deleted: boolean
+  deleted: boolean;
 
   @Column('boolean', { default: false })
-  highlight: boolean
+  highlight: boolean;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

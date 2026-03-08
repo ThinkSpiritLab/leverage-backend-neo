@@ -1,13 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
-import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
-import { Suspicion } from '../../database/entities/suspicion.entity'
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Suspicion } from '../../database/entities/suspicion.entity';
 
 export interface SuspicionQuery {
-  courseId?: number
-  contestId?: number
-  page: number
-  perPage: number
+  courseId?: number;
+  contestId?: number;
+  page: number;
+  perPage: number;
 }
 
 @Injectable()
@@ -20,8 +20,10 @@ export class SuspicionService {
   /**
    * 获取可疑提交列表（分页）
    */
-  async findAll(query: SuspicionQuery): Promise<{ items: Suspicion[]; total: number }> {
-    const { courseId, contestId, page, perPage } = query
+  async findAll(
+    query: SuspicionQuery,
+  ): Promise<{ items: Suspicion[]; total: number }> {
+    const { courseId, contestId, page, perPage } = query;
 
     const qb = this.suspicionRepo
       .createQueryBuilder('sus')
@@ -30,18 +32,18 @@ export class SuspicionService {
       .leftJoinAndSelect('submission.problem', 'problem')
       .orderBy('sus.submissionId', 'DESC')
       .skip((page - 1) * perPage)
-      .take(perPage)
+      .take(perPage);
 
     if (courseId !== undefined) {
-      qb.andWhere('submission.courseId = :courseId', { courseId })
+      qb.andWhere('submission.courseId = :courseId', { courseId });
     }
 
     if (contestId !== undefined) {
-      qb.andWhere('submission.contestId = :contestId', { contestId })
+      qb.andWhere('submission.contestId = :contestId', { contestId });
     }
 
-    const [items, total] = await qb.getManyAndCount()
-    return { items, total }
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
   }
 
   /**
@@ -55,19 +57,19 @@ export class SuspicionService {
       .leftJoinAndSelect('submission.user', 'user')
       .leftJoinAndSelect('submission.problem', 'problem')
       .where('submission.contestId = :contestId', { contestId })
-      .getMany()
+      .getMany();
 
     if (!items.length) {
-      throw new NotFoundException(`竞赛 #${contestId} 没有可疑提交数据`)
+      throw new NotFoundException(`竞赛 #${contestId} 没有可疑提交数据`);
     }
 
     // 构建简单 CSV 格式返回（不依赖 xlsx 库）
     const rows: string[] = [
       'submissionId,userId,username,problemId,hashsum,mas0,md1,def,con,cpp,oo,cr,html,chn,qq,checked',
-    ]
+    ];
 
     for (const sus of items) {
-      const sub = sus.submission
+      const sub = sus.submission;
       rows.push(
         [
           sus.submissionId,
@@ -87,9 +89,9 @@ export class SuspicionService {
           sus.qq,
           sus.checked ? 1 : 0,
         ].join(','),
-      )
+      );
     }
 
-    return Buffer.from(rows.join('\n'), 'utf-8')
+    return Buffer.from(rows.join('\n'), 'utf-8');
   }
 }

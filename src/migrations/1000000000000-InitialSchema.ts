@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from 'typeorm'
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class InitialSchema1000000000000 implements MigrationInterface {
-  name = 'InitialSchema1000000000000'
+  name = 'InitialSchema1000000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // ── 独立表（无外键依赖）────────────────────────────────────────────
@@ -14,7 +14,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         UNIQUE INDEX \`UQ_fd1bbd2444c41a8c655dfde8935\` (\`college\`),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`profession\` (
@@ -26,7 +26,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         UNIQUE INDEX \`UQ_0bf9d2205d32534fbd303ed8f2f\` (\`college\`, \`profession\`),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`notification\` (
@@ -39,7 +39,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         \`updatedAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`media\` (
@@ -49,7 +49,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         \`updatedAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`setting\` (
@@ -61,7 +61,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         \`updatedAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (\`key\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`game\` (
@@ -78,7 +78,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         \`updatedAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`course\` (
@@ -96,7 +96,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         \`updatedAt\` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── user（无外键）─────────────────────────────────────────────────
     await queryRunner.query(`
@@ -126,7 +126,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         INDEX \`IDX_b0c19523e43902705a95c53c3f\` (\`certifiedName\`),
         PRIMARY KEY (\`id\`)
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── tag（自引用 FK）──────────────────────────────────────────────
     await queryRunner.query(`
@@ -137,7 +137,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`id\`),
         CONSTRAINT \`FK_5f4effb7cd258ffa9ef554cfbbb\` FOREIGN KEY (\`parentId\`) REFERENCES \`tag\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`tag_closure\` (
@@ -149,7 +149,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_32bf6c25aa9e397fe11403b314c\` FOREIGN KEY (\`id_ancestor\`) REFERENCES \`tag\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_e59d05669a7d8259abc4b319d8a\` FOREIGN KEY (\`id_descendant\`) REFERENCES \`tag\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── contest（FK → user）───────────────────────────────────────────
     await queryRunner.query(`
@@ -178,7 +178,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`id\`),
         CONSTRAINT \`FK_04e6734f093a99b845b4c40d11c\` FOREIGN KEY (\`consultantId\`) REFERENCES \`user\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── problem（FK → user；暂不加 spjId FK，避免循环依赖）─────────────
     await queryRunner.query(`
@@ -210,7 +210,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`id\`),
         CONSTRAINT \`FK_e7acd5053072483fc050478ca08\` FOREIGN KEY (\`createrId\`) REFERENCES \`user\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── problem_tags_tag（ManyToMany join table）──────────────────────
     await queryRunner.query(`
@@ -223,7 +223,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_5bfb320d5d9a8a81993c2ebd61b\` FOREIGN KEY (\`problemId\`) REFERENCES \`problem\` (\`id\`) ON DELETE CASCADE ON UPDATE CASCADE,
         CONSTRAINT \`FK_e8d88847fa420928dd123e93b51\` FOREIGN KEY (\`tagId\`) REFERENCES \`tag\` (\`id\`) ON DELETE CASCADE ON UPDATE CASCADE
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── submission（FK → user, problem, course, contest）────────────
     await queryRunner.query(`
@@ -252,7 +252,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_497c52c7cc9496b41fce5afae6d\` FOREIGN KEY (\`courseId\`) REFERENCES \`course\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_544c5a49372480c486c00545eae\` FOREIGN KEY (\`contestId\`) REFERENCES \`contest\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── 解决循环依赖：problem.spjId → submission ─────────────────────
     await queryRunner.query(`
@@ -260,7 +260,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
       ADD CONSTRAINT \`FK_867b5ee34d00db69cb871003552\`
       FOREIGN KEY (\`spjId\`) REFERENCES \`submission\` (\`id\`)
       ON DELETE NO ACTION ON UPDATE NO ACTION
-    `)
+    `);
 
     // ── submission 衍生表 ─────────────────────────────────────────────
     await queryRunner.query(`
@@ -272,7 +272,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`submissionId\`),
         CONSTRAINT \`FK_bc8da872d15f35cb45a4d71270f\` FOREIGN KEY (\`submissionId\`) REFERENCES \`submission\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`suspicion\` (
@@ -292,7 +292,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`submissionId\`),
         CONSTRAINT \`FK_db9fe96e433dbc3f320fd95e8de\` FOREIGN KEY (\`submissionId\`) REFERENCES \`submission\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`rejudge_log\` (
@@ -310,7 +310,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`id\`),
         CONSTRAINT \`FK_9f5081c9a98ddee17c8ffc090a9\` FOREIGN KEY (\`submissionId\`) REFERENCES \`submission\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── contest 关联表 ────────────────────────────────────────────────
     await queryRunner.query(`
@@ -331,7 +331,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_05cc850f3cc947776dd510c6dc6\` FOREIGN KEY (\`contestId\`) REFERENCES \`contest\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_f23536d940dfa5b053845758756\` FOREIGN KEY (\`userId\`) REFERENCES \`user\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`contest_problem\` (
@@ -349,7 +349,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_62eec1907733dae6d4ef096afdb\` FOREIGN KEY (\`contestId\`) REFERENCES \`contest\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_4ee151e7518247b13d7069ae6f9\` FOREIGN KEY (\`problemId\`) REFERENCES \`problem\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`contest_user_problem\` (
@@ -363,7 +363,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`contestUserContestId\`, \`contestUserUserId\`, \`contestProblemId\`),
         CONSTRAINT \`FK_42a341656da21b0f29de01dfd14\` FOREIGN KEY (\`contestUserContestId\`, \`contestUserUserId\`) REFERENCES \`contest_user\` (\`contestId\`, \`userId\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── course 关联表 ─────────────────────────────────────────────────
     await queryRunner.query(`
@@ -383,7 +383,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_70824fef35e6038e459e58e0358\` FOREIGN KEY (\`courseId\`) REFERENCES \`course\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_062e03d78da22a7bd9becbfaaac\` FOREIGN KEY (\`userId\`) REFERENCES \`user\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`course_problem\` (
@@ -400,7 +400,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_21a35e291ee4423a94bfda428f6\` FOREIGN KEY (\`courseId\`) REFERENCES \`course\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_b033915daaf4d914edd876d8713\` FOREIGN KEY (\`problemId\`) REFERENCES \`problem\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── game 关联表 ───────────────────────────────────────────────────
     await queryRunner.query(`
@@ -421,7 +421,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_d0fca4a606dacf3eba209467b58\` FOREIGN KEY (\`userId\`) REFERENCES \`user\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION,
         CONSTRAINT \`FK_9358ea9a7e40725dc8d44d596b5\` FOREIGN KEY (\`gameId\`) REFERENCES \`game\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`match\` (
@@ -436,7 +436,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`id\`),
         CONSTRAINT \`FK_877a1f76b4f63193688cc316086\` FOREIGN KEY (\`gameId\`) REFERENCES \`game\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`match_gamer_link\` (
@@ -453,7 +453,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         CONSTRAINT \`FK_035a5cb95c6bb0ea51f0bd98204\` FOREIGN KEY (\`matchId\`) REFERENCES \`match\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION,
         CONSTRAINT \`FK_9ac7fa3af94353c5776611113b5\` FOREIGN KEY (\`gamerId\`) REFERENCES \`gamer\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     // ── user 关联表 ───────────────────────────────────────────────────
     await queryRunner.query(`
@@ -467,7 +467,7 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`userId\`, \`key\`),
         CONSTRAINT \`FK_f6c72c83c1787aee12530dbcd05\` FOREIGN KEY (\`userId\`) REFERENCES \`user\` (\`id\`) ON DELETE CASCADE ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS \`log\` (
@@ -481,40 +481,42 @@ export class InitialSchema1000000000000 implements MigrationInterface {
         PRIMARY KEY (\`id\`),
         CONSTRAINT \`FK_204cd8a4d810a885336a48db9a6\` FOREIGN KEY (\`callerId\`) REFERENCES \`user\` (\`id\`) ON DELETE NO ACTION ON UPDATE NO ACTION
       ) ENGINE=InnoDB
-    `)
+    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // 先解除循环依赖 FK
-    await queryRunner.query(`ALTER TABLE \`problem\` DROP FOREIGN KEY \`FK_867b5ee34d00db69cb871003552\``)
+    await queryRunner.query(
+      `ALTER TABLE \`problem\` DROP FOREIGN KEY \`FK_867b5ee34d00db69cb871003552\``,
+    );
 
     // 按依赖关系逆序删表
-    await queryRunner.query(`DROP TABLE IF EXISTS \`log\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`user_meta\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`match_gamer_link\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`match\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`gamer\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`course_problem\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`course_user\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`contest_user_problem\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`contest_problem\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`contest_user\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`rejudge_log\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`suspicion\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`submission_misc\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`submission\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`problem_tags_tag\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`problem\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`contest\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`tag_closure\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`tag\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`user\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`course\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`game\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`setting\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`media\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`notification\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`profession\``)
-    await queryRunner.query(`DROP TABLE IF EXISTS \`college\``)
+    await queryRunner.query(`DROP TABLE IF EXISTS \`log\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`user_meta\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`match_gamer_link\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`match\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`gamer\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`course_problem\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`course_user\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`contest_user_problem\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`contest_problem\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`contest_user\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`rejudge_log\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`suspicion\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`submission_misc\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`submission\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`problem_tags_tag\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`problem\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`contest\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`tag_closure\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`tag\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`user\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`course\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`game\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`setting\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`media\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`notification\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`profession\``);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`college\``);
   }
 }

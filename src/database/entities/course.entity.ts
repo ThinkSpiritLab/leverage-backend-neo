@@ -1,40 +1,46 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 export class Course {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Column('varchar')
-  name: string
+  name: string;
 
   @Column('varchar', { default: '' })
-  teacher: string
+  teacher: string;
 
   @Column('varchar', { default: '', length: 10240 })
-  notification: string
+  notification: string;
 
   @Column('datetime')
-  startTime: Date
+  startTime: Date;
 
   @Column('datetime')
-  endTime: Date
+  endTime: Date;
 
   @Column({ default: 0 })
-  type: number
+  type: number;
 
   @Column('boolean', { default: false })
-  archived: boolean
+  archived: boolean;
 
   @Column('varchar', { nullable: true })
-  enabledLanguageJSON: string | null
+  enabledLanguageJSON: string | null;
 
   @Column({ default: false })
-  scoreByPoint: boolean
+  scoreByPoint: boolean;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

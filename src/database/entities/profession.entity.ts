@@ -1,20 +1,27 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Unique,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 @Unique(['college', 'profession'])
 export class Profession {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Column('varchar')
-  profession: string
+  profession: string;
 
   @Column('varchar')
-  college: string
+  college: string;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

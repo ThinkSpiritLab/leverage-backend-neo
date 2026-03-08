@@ -1,9 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
-import { InjectRepository } from '@nestjs/typeorm'
-import { In, IsNull, Repository } from 'typeorm'
-import { Message } from '../../database/entities/message.entity'
-import { User } from '../../database/entities/user.entity'
-import { QueryMessageDto } from './dto/query-message.dto'
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, IsNull, Repository } from 'typeorm';
+import { Message } from '../../database/entities/message.entity';
+import { User } from '../../database/entities/user.entity';
+import { QueryMessageDto } from './dto/query-message.dto';
 
 @Injectable()
 export class MessageService {
@@ -22,29 +26,32 @@ export class MessageService {
     userId: number,
     query: QueryMessageDto,
   ): Promise<{ items: Message[]; total: number }> {
-    const page = query.page ?? 1
-    const perPage = Math.min(query.perPage ?? 10, 100)
+    const page = query.page ?? 1;
+    const perPage = Math.min(query.perPage ?? 10, 100);
 
     const qb = this.messageRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.sender', 'sender')
       .leftJoinAndSelect('m.receiver', 'receiver')
-      .where('(m.receiverId = :userId OR (m.senderId = :userId AND m.sessionId IS NULL))', { userId })
+      .where(
+        '(m.receiverId = :userId OR (m.senderId = :userId AND m.sessionId IS NULL))',
+        { userId },
+      )
       .andWhere('m.deleted = false')
-      .andWhere('m.sessionId IS NULL')
+      .andWhere('m.sessionId IS NULL');
 
     if (query.filter === 'read') {
-      qb.andWhere('m.read = true')
+      qb.andWhere('m.read = true');
     } else if (query.filter === 'unread') {
-      qb.andWhere('m.read = false')
+      qb.andWhere('m.read = false');
     }
 
     qb.orderBy('m.messageUpdatedAt', 'DESC')
       .skip((page - 1) * perPage)
-      .take(perPage)
+      .take(perPage);
 
-    const [items, total] = await qb.getManyAndCount()
-    return { items, total }
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
   }
 
   /**
@@ -53,8 +60,8 @@ export class MessageService {
   async getUnreadCount(userId: number): Promise<{ count: number }> {
     const count = await this.messageRepo.count({
       where: { receiverId: userId, deleted: false, read: false },
-    })
-    return { count }
+    });
+    return { count };
   }
 
   /**
@@ -63,8 +70,8 @@ export class MessageService {
   async listAllForAdmin(
     query: QueryMessageDto,
   ): Promise<{ items: Message[]; total: number }> {
-    const page = query.page ?? 1
-    const perPage = Math.min(query.perPage ?? 10, 100)
+    const page = query.page ?? 1;
+    const perPage = Math.min(query.perPage ?? 10, 100);
 
     const [items, total] = await this.messageRepo.findAndCount({
       where: { deleted: false, sessionId: IsNull() },
@@ -72,8 +79,8 @@ export class MessageService {
       order: { messageUpdatedAt: 'DESC' },
       skip: (page - 1) * perPage,
       take: perPage,
-    })
-    return { items, total }
+    });
+    return { items, total };
   }
 
   /**
@@ -83,10 +90,10 @@ export class MessageService {
     const session = await this.messageRepo.findOne({
       where: { id: sessionId },
       relations: ['sender', 'receiver'],
-    })
-    if (!session) throw new NotFoundException(`消息 #${sessionId} 不存在`)
+    });
+    if (!session) throw new NotFoundException(`消息 #${sessionId} 不存在`);
     if (session.sessionId !== null) {
-      throw new BadRequestException('传入的 id 不是根消息')
+      throw new BadRequestException('传入的 id 不是根消息');
     }
 
     const replies = await this.messageRepo.find({
@@ -94,8 +101,8 @@ export class MessageService {
       relations: ['sender', 'receiver'],
       order: { id: 'DESC' },
       take: 30,
-    })
-    return [...replies, session]
+    });
+    return [...replies, session];
   }
 
   /**
@@ -105,24 +112,26 @@ export class MessageService {
     messageId: number,
     status: 'read' | 'unread' | 'closed' | 'deleted',
   ): Promise<void> {
-    const message = await this.messageRepo.findOne({ where: { id: messageId } })
-    if (!message) throw new NotFoundException(`消息 #${messageId} 不存在`)
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId },
+    });
+    if (!message) throw new NotFoundException(`消息 #${messageId} 不存在`);
 
     switch (status) {
       case 'read':
-        message.read = true
-        break
+        message.read = true;
+        break;
       case 'unread':
-        message.read = false
-        break
+        message.read = false;
+        break;
       case 'closed':
-        message.closed = true
-        break
+        message.closed = true;
+        break;
       case 'deleted':
-        message.deleted = true
-        break
+        message.deleted = true;
+        break;
     }
-    await this.messageRepo.save(message)
+    await this.messageRepo.save(message);
   }
 
   /**
@@ -132,41 +141,53 @@ export class MessageService {
     const admins = await this.userRepo.find({
       where: { authority: In(['admin', 'sa', 'superadmin']) },
       select: ['id'],
-    })
+    });
 
     if (admins.length === 0) {
       // Fallback: 发给 id=1 的用户
-      return [await this.send(senderId, 1, content, null)]
+      return [await this.send(senderId, 1, content, null)];
     }
 
     return Promise.all(
       admins.map((admin) => this.send(senderId, admin.id, content, null)),
-    )
+    );
   }
 
   /**
    * 回复消息
    */
-  async reply(sessionId: number, senderId: number, content: string): Promise<Message> {
-    const session = await this.messageRepo.findOne({ where: { id: sessionId } })
-    if (!session) throw new NotFoundException(`消息 #${sessionId} 不存在`)
+  async reply(
+    sessionId: number,
+    senderId: number,
+    content: string,
+  ): Promise<Message> {
+    const session = await this.messageRepo.findOne({
+      where: { id: sessionId },
+    });
+    if (!session) throw new NotFoundException(`消息 #${sessionId} 不存在`);
     if (session.sessionId !== null) {
-      throw new BadRequestException('传入的 id 不是根消息')
+      throw new BadRequestException('传入的 id 不是根消息');
     }
 
     // 确定回复接收方
     const receiverId =
-      senderId === session.senderId ? session.receiverId : session.senderId
+      senderId === session.senderId ? session.receiverId : session.senderId;
 
-    return this.send(senderId, receiverId, content, sessionId)
+    return this.send(senderId, receiverId, content, sessionId);
   }
 
   /**
    * 标记会话为已读
    */
   async setRead(userId: number, sessionId: number): Promise<void> {
-    await this.messageRepo.update({ sessionId, receiverId: userId }, { read: true })
-    await this.messageRepo.update({ id: sessionId, receiverId: userId }, { read: true })
+    await this.messageRepo.update(
+      { sessionId, receiverId: userId },
+      { read: true },
+    );
+    await this.messageRepo.update(
+      { id: sessionId, receiverId: userId },
+      { read: true },
+    );
   }
 
   /**
@@ -179,12 +200,14 @@ export class MessageService {
     sessionId: number | null,
   ): Promise<Message> {
     if (receiverId === null && sessionId === null) {
-      throw new BadRequestException('receiverId 不能为空')
+      throw new BadRequestException('receiverId 不能为空');
     }
 
     // 更新根消息的 messageUpdatedAt
     if (sessionId !== null) {
-      await this.messageRepo.update(sessionId, { messageUpdatedAt: new Date() })
+      await this.messageRepo.update(sessionId, {
+        messageUpdatedAt: new Date(),
+      });
     }
 
     const message = this.messageRepo.create({
@@ -196,7 +219,7 @@ export class MessageService {
       closed: false,
       deleted: false,
       messageUpdatedAt: new Date(),
-    })
-    return this.messageRepo.save(message)
+    });
+    return this.messageRepo.save(message);
   }
 }

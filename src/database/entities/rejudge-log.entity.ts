@@ -1,39 +1,47 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 
 @Entity()
 export class RejudgeLog {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Index()
   @Column()
-  submissionId: number
+  submissionId: number;
 
   @ManyToOne('Submission', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'submissionId' })
-  submission: any
+  submission: any;
 
   @Column('int', { nullable: true })
-  status: number
+  status: number;
 
   @Column('varchar', { length: 24, nullable: true })
-  judger: string | null
+  judger: string | null;
 
   @Column('int', { nullable: true })
-  time: number
+  time: number;
 
   @Column('int', { nullable: true })
-  memory: number
+  memory: number;
 
   @Column('text', { nullable: true })
-  judgeResult?: string
+  judgeResult?: string;
 
   @Column('text', { nullable: true })
-  compileErrorMsg?: string
+  compileErrorMsg?: string;
 
   @Column('datetime')
-  submittedAt: Date
+  submittedAt: Date;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 }

@@ -1,47 +1,47 @@
-import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm'
+import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 
 @Entity()
 export class Suspicion {
   @PrimaryColumn()
-  submissionId: number
+  submissionId: number;
 
   @OneToOne('Submission', (s: any) => s.sus, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'submissionId' })
-  submission: any
+  submission: any;
 
   @Column({ default: 0 })
-  mas0: number
+  mas0: number;
 
   @Column({ default: 0 })
-  md1: number
+  md1: number;
 
   @Column({ default: 0 })
-  def: number
+  def: number;
 
   @Column({ default: 0 })
-  con: number
+  con: number;
 
   @Column({ default: 0 })
-  cpp: number
+  cpp: number;
 
   @Column({ default: 0 })
-  oo: number
+  oo: number;
 
   @Column({ default: 0 })
-  cr: number
+  cr: number;
 
   @Column({ default: 0 })
-  html: number
+  html: number;
 
   @Column({ default: 0 })
-  chn: number
+  chn: number;
 
   @Column({ default: 0 })
-  qq: number
+  qq: number;
 
   @Column({ default: false })
-  checked: boolean
+  checked: boolean;
 
   @Column('varchar', { length: 100, nullable: true })
-  hashsum: string
+  hashsum: string;
 }

@@ -7,36 +7,39 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 @Index(['matchId', 'index'], { unique: true })
 export class MatchGamerLink {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Index()
   @Column()
-  matchId: number
+  matchId: number;
 
-  @ManyToOne('Match', (match: any) => match.links, { nullable: false, onDelete: 'CASCADE' })
+  @ManyToOne('Match', (match: any) => match.links, {
+    nullable: false,
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'matchId' })
-  match: any
+  match: any;
 
   @Column('tinyint')
-  index: number
+  index: number;
 
   @Index()
   @Column()
-  gamerId: number
+  gamerId: number;
 
   @ManyToOne('Gamer', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'gamerId' })
-  gamer: any
+  gamer: any;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

@@ -1,17 +1,24 @@
-import { Column, Entity, PrimaryGeneratedColumn, Tree, TreeChildren, TreeParent } from 'typeorm'
+import {
+  Column,
+  Entity,
+  PrimaryGeneratedColumn,
+  Tree,
+  TreeChildren,
+  TreeParent,
+} from 'typeorm';
 
 @Entity()
 @Tree('closure-table')
 export class Tag {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @TreeParent()
-  parent: Tag
+  parent: Tag;
 
   @TreeChildren()
-  children: Tag[]
+  children: Tag[];
 
   @Column('varchar')
-  name: string
+  name: string;
 }

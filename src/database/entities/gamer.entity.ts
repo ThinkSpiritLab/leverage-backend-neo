@@ -7,45 +7,45 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 @Index(['userId', 'gameId'])
 export class Gamer {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Index()
   @Column()
-  userId: number
+  userId: number;
 
   @ManyToOne('User', { nullable: false })
   @JoinColumn({ name: 'userId' })
-  user: any
+  user: any;
 
   @Index()
   @Column()
-  gameId: number
+  gameId: number;
 
   @ManyToOne('Game', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'gameId' })
-  game: any
+  game: any;
 
   @Column('varchar')
-  title: string
+  title: string;
 
   @Column('varchar')
-  language: string
+  language: string;
 
   @Column('boolean')
-  opensource: boolean
+  opensource: boolean;
 
   @Column('text', { select: false })
-  code: string
+  code: string;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

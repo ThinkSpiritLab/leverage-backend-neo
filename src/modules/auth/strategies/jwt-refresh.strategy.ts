@@ -1,12 +1,15 @@
-import { Injectable } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { PassportStrategy } from '@nestjs/passport'
-import { Request } from 'express'
-import { ExtractJwt, Strategy } from 'passport-jwt'
-import { JwtPayload } from './jwt-access.strategy'
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PassportStrategy } from '@nestjs/passport';
+import { Request } from 'express';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { JwtPayload } from './jwt-access.strategy';
 
 @Injectable()
-export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
+export class JwtRefreshStrategy extends PassportStrategy(
+  Strategy,
+  'jwt-refresh',
+) {
   constructor(private configService: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -16,12 +19,14 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
         (req: Request) => req?.cookies?.refreshToken ?? null,
       ]),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('jwt.refreshSecret') ?? 'default-refresh-secret',
+      secretOrKey:
+        configService.get<string>('jwt.refreshSecret') ??
+        'default-refresh-secret',
       passReqToCallback: false,
-    })
+    });
   }
 
   validate(payload: JwtPayload): JwtPayload {
-    return { sub: payload.sub, username: payload.username, role: payload.role }
+    return { sub: payload.sub, username: payload.username, role: payload.role };
   }
 }

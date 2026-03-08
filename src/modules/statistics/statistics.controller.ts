@@ -1,9 +1,15 @@
-import { Controller, Get, Param, ParseIntPipe, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { StatisticsService } from './statistics.service'
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { StatisticsService } from './statistics.service';
 
 @ApiTags('statistics')
 @Controller('statistics')
@@ -20,7 +26,7 @@ export class StatisticsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取系统概览（admin+）' })
   getSystemOverview() {
-    return this.statisticsService.getSystemOverview()
+    return this.statisticsService.getSystemOverview();
   }
 
   /**
@@ -30,7 +36,7 @@ export class StatisticsController {
   @Get('problem/:id/ratio')
   @ApiOperation({ summary: '获取题目通过率' })
   getSubmitRatio(@Param('id', ParseIntPipe) id: number) {
-    return this.statisticsService.getSubmitRatio(id)
+    return this.statisticsService.getSubmitRatio(id);
   }
 
   /**
@@ -40,6 +46,6 @@ export class StatisticsController {
   @Get('user/:id/activity')
   @ApiOperation({ summary: '获取用户活跃度' })
   getUserActivity(@Param('id', ParseIntPipe) id: number) {
-    return this.statisticsService.getUserActivity(id)
+    return this.statisticsService.getUserActivity(id);
   }
 }

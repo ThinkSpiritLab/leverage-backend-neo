@@ -1,10 +1,10 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { SettingService } from './setting.service'
-import { SetSettingDto } from './dto/set-setting.dto'
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { SettingService } from './setting.service';
+import { SetSettingDto } from './dto/set-setting.dto';
 
 @ApiTags('settings')
 @Controller('settings')
@@ -18,7 +18,7 @@ export class SettingController {
   @Get('public')
   @ApiOperation({ summary: '获取公开配置' })
   getPublic() {
-    return this.settingService.getPublic()
+    return this.settingService.getPublic();
   }
 
   /**
@@ -31,7 +31,7 @@ export class SettingController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取所有配置（admin+）' })
   getAll() {
-    return this.settingService.getAll()
+    return this.settingService.getAll();
   }
 
   /**
@@ -44,6 +44,6 @@ export class SettingController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '设置配置（admin+）' })
   set(@Body() dto: SetSettingDto) {
-    return this.settingService.set(dto.key, dto.value)
+    return this.settingService.set(dto.key, dto.value);
   }
 }

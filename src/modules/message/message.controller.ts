@@ -11,21 +11,17 @@ import {
   Query,
   UseGuards,
   ValidationPipe,
-} from '@nestjs/common'
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiTags,
-} from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { MessageService } from './message.service'
-import { QueryMessageDto } from './dto/query-message.dto'
-import { SendMessageDto } from './dto/send-message.dto'
-import { UpdateMessageStatusDto } from './dto/update-message-status.dto'
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { MessageService } from './message.service';
+import { QueryMessageDto } from './dto/query-message.dto';
+import { SendMessageDto } from './dto/send-message.dto';
+import { UpdateMessageStatusDto } from './dto/update-message-status.dto';
 
 @ApiTags('messages')
 @Controller('messages')
@@ -44,7 +40,7 @@ export class MessageController {
     @Query(new ValidationPipe({ transform: true })) query: QueryMessageDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.messageService.listInboxForUser(user.sub, query)
+    return this.messageService.listInboxForUser(user.sub, query);
   }
 
   /**
@@ -54,7 +50,7 @@ export class MessageController {
   @Get('count')
   @ApiOperation({ summary: '获取未读消息数' })
   getUnreadCount(@CurrentUser() user: JwtPayload) {
-    return this.messageService.getUnreadCount(user.sub)
+    return this.messageService.getUnreadCount(user.sub);
   }
 
   /**
@@ -68,7 +64,7 @@ export class MessageController {
   listAll(
     @Query(new ValidationPipe({ transform: true })) query: QueryMessageDto,
   ) {
-    return this.messageService.listAllForAdmin(query)
+    return this.messageService.listAllForAdmin(query);
   }
 
   /**
@@ -81,7 +77,7 @@ export class MessageController {
     @Body(new ValidationPipe()) dto: SendMessageDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.messageService.contactAdmin(user.sub, dto.content)
+    return this.messageService.contactAdmin(user.sub, dto.content);
   }
 
   /**
@@ -91,7 +87,7 @@ export class MessageController {
   @Get(':id')
   @ApiOperation({ summary: '获取消息详情（含回复）' })
   getOne(@Param('id', ParseIntPipe) id: number) {
-    return this.messageService.getOne(id)
+    return this.messageService.getOne(id);
   }
 
   /**
@@ -105,7 +101,7 @@ export class MessageController {
     @Param('id', ParseIntPipe) id: number,
     @Body(new ValidationPipe()) dto: UpdateMessageStatusDto,
   ) {
-    await this.messageService.updateStatus(id, dto.status)
+    await this.messageService.updateStatus(id, dto.status);
   }
 
   /**
@@ -119,7 +115,7 @@ export class MessageController {
     @Body(new ValidationPipe()) dto: SendMessageDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.messageService.reply(id, user.sub, dto.content)
+    return this.messageService.reply(id, user.sub, dto.content);
   }
 
   /**
@@ -133,6 +129,6 @@ export class MessageController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: JwtPayload,
   ) {
-    await this.messageService.setRead(user.sub, id)
+    await this.messageService.setRead(user.sub, id);
   }
 }

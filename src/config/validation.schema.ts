@@ -1,9 +1,11 @@
-import * as Joi from 'joi'
+import * as Joi from 'joi';
 
 export const validationSchema = Joi.object({
   // App
   PORT: Joi.number().default(3000),
-  NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+  NODE_ENV: Joi.string()
+    .valid('development', 'production', 'test')
+    .default('development'),
   SKIP_INIT: Joi.boolean().default(false),
   BASE_URL: Joi.string().default('http://localhost:3000'),
 
@@ -40,4 +42,4 @@ export const validationSchema = Joi.object({
 
   // Submission throttle
   MAX_SUBMISSION_PER_MINUTE: Joi.number().default(10),
-})
+});

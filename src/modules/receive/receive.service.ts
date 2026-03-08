@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common'
-import { DataSource, EntityManager, Not } from 'typeorm'
-import { RedisService } from '../redis/redis.service'
-import { RankService } from '../rank/rank.service'
+import { Injectable, Logger } from '@nestjs/common';
+import { DataSource, EntityManager, Not } from 'typeorm';
+import { RedisService } from '../redis/redis.service';
+import { RankService } from '../rank/rank.service';
 import {
   JudgeCaseResult,
   JudgeResult,
@@ -10,19 +10,19 @@ import {
   JudgeStateToStatus,
   JudgeStateUpdate,
   Status,
-} from '../heng/heng.types'
-import { Submission } from '../../database/entities/submission.entity'
-import { SubmissionMisc } from '../../database/entities/submission-misc.entity'
-import { Suspicion } from '../../database/entities/suspicion.entity'
-import { User } from '../../database/entities/user.entity'
-import { Problem } from '../../database/entities/problem.entity'
-import { ContestUser } from '../../database/entities/contest-user.entity'
-import { ContestUserProblem } from '../../database/entities/contest-user-problem.entity'
-import { CourseUser } from '../../database/entities/course-user.entity'
-import { CourseProblem } from '../../database/entities/course-problem.entity'
+} from '../heng/heng.types';
+import { Submission } from '../../database/entities/submission.entity';
+import { SubmissionMisc } from '../../database/entities/submission-misc.entity';
+import { Suspicion } from '../../database/entities/suspicion.entity';
+import { User } from '../../database/entities/user.entity';
+import { Problem } from '../../database/entities/problem.entity';
+import { ContestUser } from '../../database/entities/contest-user.entity';
+import { ContestUserProblem } from '../../database/entities/contest-user-problem.entity';
+import { CourseUser } from '../../database/entities/course-user.entity';
+import { CourseProblem } from '../../database/entities/course-problem.entity';
 
 /** Redis key TTL（秒）：供前端轮询提交状态 */
-const SUBMISSION_STATUS_TTL_SECS = 300
+const SUBMISSION_STATUS_TTL_SECS = 300;
 
 /**
  * ReceiveService
@@ -33,7 +33,7 @@ const SUBMISSION_STATUS_TTL_SECS = 300
  */
 @Injectable()
 export class ReceiveService {
-  private readonly logger = new Logger(ReceiveService.name)
+  private readonly logger = new Logger(ReceiveService.name);
 
   constructor(
     private readonly dataSource: DataSource,
@@ -45,13 +45,16 @@ export class ReceiveService {
    * 接收中间状态更新
    * 将状态写入 Redis（TTL=300s），供前端轮询获取实时状态
    */
-  async receiveUpdate(submissionId: number, stateUpdate: JudgeStateUpdate): Promise<void> {
-    const status = JudgeStateToStatus[stateUpdate.state]
+  async receiveUpdate(
+    submissionId: number,
+    stateUpdate: JudgeStateUpdate,
+  ): Promise<void> {
+    const status = JudgeStateToStatus[stateUpdate.state];
     await this.redisService.set(
       `submissionStatus:${submissionId}`,
       status,
       SUBMISSION_STATUS_TTL_SECS,
-    )
+    );
   }
 
   /**
@@ -68,22 +71,31 @@ export class ReceiveService {
    * 8. 竞赛提交：更新 ContestUser/ContestUserProblem + Redis 排行榜
    * 9. 课程提交：更新 CourseUser/CourseProblem
    */
-  async receiveResult(submissionId: number, result: JudgeResult): Promise<void> {
+  async receiveResult(
+    submissionId: number,
+    result: JudgeResult,
+  ): Promise<void> {
     try {
       await this.dataSource.transaction(async (manager) => {
         // 1. 计算最终状态
-        const finalStatus = this.calcFinalStatus(result)
+        const finalStatus = this.calcFinalStatus(result);
 
         // 2. 更新 Submission 核心字段
-        const totalTime = result.cases.reduce((sum, c) => sum + (c.time ?? 0), 0)
-        const maxMemory = result.cases.reduce((max, c) => Math.max(max, c.memory ?? 0), 0)
+        const totalTime = result.cases.reduce(
+          (sum, c) => sum + (c.time ?? 0),
+          0,
+        );
+        const maxMemory = result.cases.reduce(
+          (max, c) => Math.max(max, c.memory ?? 0),
+          0,
+        );
 
         await manager.update(Submission, submissionId, {
           status: finalStatus,
           time: totalTime,
           memory: maxMemory,
           judger: result.judger ?? null,
-        })
+        });
 
         // 3. 更新 SubmissionMisc（judgeResult + compileError）
         await manager.update(
@@ -93,21 +105,31 @@ export class ReceiveService {
             judgeResult: JSON.stringify(result.cases),
             compileErrorMsg: result.extra?.user?.compileMessage ?? '',
           },
-        )
+        );
 
         // 4. 查 Submission 获取 userId, problemId, contestId, courseId
         const submission = await manager.findOneOrFail(Submission, {
           where: { id: submissionId },
-        })
+        });
 
         // 5. 更新 Problem 统计（submits 无条件+1，AC 时 accepts+1）
-        await manager.increment(Problem, { id: submission.problemId }, 'submits', 1)
+        await manager.increment(
+          Problem,
+          { id: submission.problemId },
+          'submits',
+          1,
+        );
         if (finalStatus === Status.AC) {
-          await manager.increment(Problem, { id: submission.problemId }, 'accepts', 1)
+          await manager.increment(
+            Problem,
+            { id: submission.problemId },
+            'accepts',
+            1,
+          );
         }
 
         // 6. 更新 User 统计（submits 无条件+1，首次 AC 才计入 accepts）
-        await manager.increment(User, { id: submission.userId }, 'submits', 1)
+        await manager.increment(User, { id: submission.userId }, 'submits', 1);
         if (finalStatus === Status.AC) {
           const prevAc = await manager.findOne(Submission, {
             where: {
@@ -116,14 +138,19 @@ export class ReceiveService {
               status: Status.AC,
               id: Not(submissionId),
             },
-          })
+          });
           if (!prevAc) {
-            await manager.increment(User, { id: submission.userId }, 'accepts', 1)
+            await manager.increment(
+              User,
+              { id: submission.userId },
+              'accepts',
+              1,
+            );
           }
         }
 
         // 7. 保存 Suspicion（代码查重指标）
-        await this.saveSuspicion(manager, submissionId)
+        await this.saveSuspicion(manager, submissionId);
 
         // 8. 更新 UserProblemStatus Redis Hash 缓存
         await this.updateUserProblemStatus(
@@ -132,27 +159,30 @@ export class ReceiveService {
           finalStatus,
           submission.courseId,
           submission.contestId,
-        )
+        );
 
         // 9. 更新 Redis 最终状态（供前端轮询）
         await this.redisService.set(
           `submissionStatus:${submissionId}`,
           finalStatus,
           SUBMISSION_STATUS_TTL_SECS,
-        )
+        );
 
         // 10. 竞赛提交
         if (submission.contestId != null) {
-          await this.handleContestResult(manager, submission, finalStatus)
+          await this.handleContestResult(manager, submission, finalStatus);
         }
 
         // 11. 课程提交
         if (submission.courseId != null) {
-          await this.handleCourseResult(manager, submission, finalStatus)
+          await this.handleCourseResult(manager, submission, finalStatus);
         }
-      })
+      });
     } catch (err) {
-      this.logger.error(`receiveResult failed for submissionId=${submissionId}`, err)
+      this.logger.error(
+        `receiveResult failed for submissionId=${submissionId}`,
+        err,
+      );
       // 事务失败时将状态标记为 SE，保证前端不会永久 pending
       await this.dataSource
         .createQueryBuilder()
@@ -160,8 +190,8 @@ export class ReceiveService {
         .set({ status: Status.SE })
         .where('id = :id', { id: submissionId })
         .execute()
-        .catch(() => {})
-      throw err
+        .catch(() => {});
+      throw err;
     }
   }
 
@@ -173,12 +203,12 @@ export class ReceiveService {
    */
   calcFinalStatus(result: JudgeResult): Status {
     if (!result.cases || result.cases.length === 0) {
-      return Status.SE
+      return Status.SE;
     }
     return result.cases.reduce((worst: Status, c: JudgeCaseResult) => {
-      const caseStatus = JudgeResultKindToStatus[c.kind] ?? Status.SE
-      return caseStatus > worst ? caseStatus : worst
-    }, Status.AC)
+      const caseStatus = JudgeResultKindToStatus[c.kind] ?? Status.SE;
+      return caseStatus > worst ? caseStatus : worst;
+    }, Status.AC);
   }
 
   /**
@@ -194,16 +224,16 @@ export class ReceiveService {
     courseId: number | null,
     contestId: number | null,
   ): Promise<void> {
-    const scope = courseId ?? contestId ?? 'global'
-    const key = `ups:${userId}:${scope}`
+    const scope = courseId ?? contestId ?? 'global';
+    const key = `ups:${userId}:${scope}`;
 
-    const current = await this.redisService.hget(key, String(problemId))
-    const currentVal = current ? parseInt(current) : 0
+    const current = await this.redisService.hget(key, String(problemId));
+    const currentVal = current ? parseInt(current) : 0;
 
     // 1=AC（最好）, 2=attempted；已经 AC 就不降级
-    const newVal = finalStatus === Status.AC ? 1 : 2
+    const newVal = finalStatus === Status.AC ? 1 : 2;
     if (newVal > currentVal) {
-      await this.redisService.hset(key, String(problemId), newVal)
+      await this.redisService.hset(key, String(problemId), newVal);
     }
   }
 
@@ -218,16 +248,16 @@ export class ReceiveService {
     submission: Submission,
     finalStatus: Status,
   ): Promise<void> {
-    const { userId, problemId } = submission
-    const contestId = submission.contestId as number // 调用方已确保 contestId != null
+    const { userId, problemId } = submission;
+    const contestId = submission.contestId as number; // 调用方已确保 contestId != null
 
     // 跳过 CE/SE（与原始代码一致）
-    if (finalStatus === Status.CE || finalStatus === Status.SE) return
+    if (finalStatus === Status.CE || finalStatus === Status.SE) return;
 
     // 更新 ContestUser 统计
-    await manager.increment(ContestUser, { contestId, userId }, 'submits', 1)
+    await manager.increment(ContestUser, { contestId, userId }, 'submits', 1);
     if (finalStatus === Status.AC) {
-      await manager.increment(ContestUser, { contestId, userId }, 'accepts', 1)
+      await manager.increment(ContestUser, { contestId, userId }, 'accepts', 1);
 
       // 记录 ContestUserProblem（AC 标记，允许重复 AC 不报错）
       await manager
@@ -240,11 +270,11 @@ export class ReceiveService {
           contestProblemId: problemId,
         })
         .orIgnore()
-        .execute()
+        .execute();
     }
 
     // 更新 Redis 排行榜
-    await this.refreshContestRank(manager, contestId, userId)
+    await this.refreshContestRank(manager, contestId, userId);
   }
 
   /**
@@ -258,15 +288,20 @@ export class ReceiveService {
   ): Promise<void> {
     const contestUser = await manager.findOne(ContestUser, {
       where: { contestId, userId },
-    })
-    if (!contestUser) return
+    });
+    if (!contestUser) return;
 
-    const acCount = contestUser.accepts ?? 0
+    const acCount = contestUser.accepts ?? 0;
     // 罚时：WA 次数 * 1200s（标准 ICPC 罚时规则，可按需调整）
-    const waCount = (contestUser.submits ?? 0) - acCount
-    const penaltySeconds = waCount * 1200
+    const waCount = (contestUser.submits ?? 0) - acCount;
+    const penaltySeconds = waCount * 1200;
 
-    await this.rankService.updateContestRank(contestId, userId, acCount, penaltySeconds)
+    await this.rankService.updateContestRank(
+      contestId,
+      userId,
+      acCount,
+      penaltySeconds,
+    );
   }
 
   /**
@@ -277,14 +312,19 @@ export class ReceiveService {
     submission: Submission,
     finalStatus: Status,
   ): Promise<void> {
-    const { userId, problemId } = submission
-    const courseId = submission.courseId as number // 调用方已确保 courseId != null
+    const { userId, problemId } = submission;
+    const courseId = submission.courseId as number; // 调用方已确保 courseId != null
 
     // 跳过 CE/SE
-    if (finalStatus === Status.CE || finalStatus === Status.SE) return
+    if (finalStatus === Status.CE || finalStatus === Status.SE) return;
 
-    await manager.increment(CourseUser, { courseId, userId }, 'submits', 1)
-    await manager.increment(CourseProblem, { courseId, problemId }, 'submits', 1)
+    await manager.increment(CourseUser, { courseId, userId }, 'submits', 1);
+    await manager.increment(
+      CourseProblem,
+      { courseId, problemId },
+      'submits',
+      1,
+    );
 
     if (finalStatus === Status.AC) {
       // 首次 AC 才计入 CourseUser.accepts
@@ -296,19 +336,31 @@ export class ReceiveService {
           status: Status.AC,
           id: Not(submission.id),
         },
-      })
+      });
       if (!prevAc) {
-        await manager.increment(CourseUser, { courseId, userId }, 'accepts', 1)
-        await manager.increment(CourseProblem, { courseId, problemId }, 'accepts', 1)
+        await manager.increment(CourseUser, { courseId, userId }, 'accepts', 1);
+        await manager.increment(
+          CourseProblem,
+          { courseId, problemId },
+          'accepts',
+          1,
+        );
       }
     }
 
     // 更新课程排行榜
-    const courseUser = await manager.findOne(CourseUser, { where: { courseId, userId } })
+    const courseUser = await manager.findOne(CourseUser, {
+      where: { courseId, userId },
+    });
     if (courseUser) {
-      const acCount = courseUser.accepts ?? 0
-      const penaltySeconds = ((courseUser.submits ?? 0) - acCount) * 1200
-      await this.rankService.updateCourseRank(courseId!, userId, acCount, penaltySeconds)
+      const acCount = courseUser.accepts ?? 0;
+      const penaltySeconds = ((courseUser.submits ?? 0) - acCount) * 1200;
+      await this.rankService.updateCourseRank(
+        courseId,
+        userId,
+        acCount,
+        penaltySeconds,
+      );
     }
   }
 
@@ -321,24 +373,28 @@ export class ReceiveService {
     submissionId: number,
   ): Promise<void> {
     try {
-      const misc = await manager.findOne(SubmissionMisc, { where: { submissionId } })
-      if (!misc?.code) return
+      const misc = await manager.findOne(SubmissionMisc, {
+        where: { submissionId },
+      });
+      if (!misc?.code) return;
 
-      const suspicion = new Suspicion()
-      suspicion.submissionId = submissionId
+      const suspicion = new Suspicion();
+      suspicion.submissionId = submissionId;
 
       // 使用 SubmissionMisc.code 计算各查重指标
-      const code = misc.code
+      const code = misc.code;
       suspicion.hashsum = require('crypto')
         .createHash('sha256')
         .update(code)
         .digest('hex')
-        .slice(0, 100)
+        .slice(0, 100);
 
-      await manager.save(Suspicion, suspicion)
+      await manager.save(Suspicion, suspicion);
     } catch (err) {
       // 查重计算失败不影响主流程
-      this.logger.warn(`Suspicion save failed for submissionId=${submissionId}: ${err}`)
+      this.logger.warn(
+        `Suspicion save failed for submissionId=${submissionId}: ${err}`,
+      );
     }
   }
 }

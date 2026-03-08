@@ -1,43 +1,52 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 export class CourseUser {
   @PrimaryColumn()
-  courseId: number
+  courseId: number;
 
   @ManyToOne('Course', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
-  course: any
+  course: any;
 
   @PrimaryColumn()
-  userId: number
+  userId: number;
 
   @Index()
   @ManyToOne('User', { nullable: false })
   @JoinColumn({ name: 'userId' })
-  user: any
+  user: any;
 
   @Column('varchar', { nullable: true })
-  courseClass: string | null
+  courseClass: string | null;
 
   @Column('int', { default: 0 })
-  submits: number
+  submits: number;
 
   @Column('int', { default: 0 })
-  accepts: number
+  accepts: number;
 
   @Column('datetime', { nullable: true })
-  bannedUntil: Date | null
+  bannedUntil: Date | null;
 
   @Column('varchar', { nullable: true })
-  bannedReason: string | null
+  bannedReason: string | null;
 
   @Column('varchar', { nullable: true })
-  ip: string | null
+  ip: string | null;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

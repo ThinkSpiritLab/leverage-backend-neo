@@ -10,15 +10,15 @@ import {
   Post,
   Query,
   UseGuards,
-} from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { NotificationService } from './notification.service'
-import { CreateNotificationDto } from './dto/create-notification.dto'
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { NotificationService } from './notification.service';
+import { CreateNotificationDto } from './dto/create-notification.dto';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -34,7 +34,7 @@ export class NotificationController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取未读通知数' })
   getUnreadCount(@CurrentUser() user: JwtPayload) {
-    return this.notificationService.getUnreadCount(user.sub)
+    return this.notificationService.getUnreadCount(user.sub);
   }
 
   /**
@@ -43,14 +43,11 @@ export class NotificationController {
    */
   @Get()
   @ApiOperation({ summary: '获取通知列表' })
-  findAll(
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ) {
+  findAll(@Query('page') page?: string, @Query('perPage') perPage?: string) {
     return this.notificationService.findAll({
       page: page ? parseInt(page, 10) : 1,
       perPage: perPage ? parseInt(perPage, 10) : 10,
-    })
+    });
   }
 
   /**
@@ -63,7 +60,7 @@ export class NotificationController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建通知（admin+）' })
   create(@Body() dto: CreateNotificationDto) {
-    return this.notificationService.create(dto)
+    return this.notificationService.create(dto);
   }
 
   /**
@@ -79,6 +76,6 @@ export class NotificationController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: JwtPayload,
   ) {
-    await this.notificationService.markRead(id, user.sub)
+    await this.notificationService.markRead(id, user.sub);
   }
 }

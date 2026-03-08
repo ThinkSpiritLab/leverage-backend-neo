@@ -1,7 +1,7 @@
-import { Module } from '@nestjs/common'
-import { ReceiveService } from './receive.service'
-import { RedisModule } from '../redis/redis.module'
-import { RankModule } from '../rank/rank.module'
+import { Module } from '@nestjs/common';
+import { ReceiveService } from './receive.service';
+import { RedisModule } from '../redis/redis.module';
+import { RankModule } from '../rank/rank.module';
 
 /**
  * ReceiveModule
@@ -10,10 +10,7 @@ import { RankModule } from '../rank/rank.module'
  * - ReceiveService：接收并处理 heng-controller 回调的评测结果
  */
 @Module({
-  imports: [
-    RedisModule,
-    RankModule,
-  ],
+  imports: [RedisModule, RankModule],
   providers: [ReceiveService],
   exports: [ReceiveService],
 })

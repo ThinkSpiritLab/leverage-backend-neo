@@ -10,15 +10,20 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
-} from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { MediaService } from './media.service'
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { MediaService } from './media.service';
 
 @ApiTags('media')
 @Controller('media')
@@ -39,7 +44,7 @@ export class MediaController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.mediaService.upload(file, user.sub)
+    return this.mediaService.upload(file, user.sub);
   }
 
   /**
@@ -51,14 +56,11 @@ export class MediaController {
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取文件列表（admin+）' })
-  findAll(
-    @Query('page') page?: string,
-    @Query('perPage') perPage?: string,
-  ) {
+  findAll(@Query('page') page?: string, @Query('perPage') perPage?: string) {
     return this.mediaService.findAll({
       page: page ? parseInt(page, 10) : 1,
       perPage: perPage ? parseInt(perPage, 10) : 20,
-    })
+    });
   }
 
   /**
@@ -68,7 +70,7 @@ export class MediaController {
   @Get(':id')
   @ApiOperation({ summary: '获取文件 URL' })
   getUrl(@Param('id') id: string) {
-    return this.mediaService.getUrl(id)
+    return this.mediaService.getUrl(id);
   }
 
   /**
@@ -82,6 +84,6 @@ export class MediaController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '删除文件（admin+）' })
   async remove(@Param('id') id: string) {
-    await this.mediaService.remove(id)
+    await this.mediaService.remove(id);
   }
 }

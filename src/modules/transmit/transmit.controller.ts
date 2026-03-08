@@ -1,9 +1,9 @@
-import { Controller, Get, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { TransmitService } from './transmit.service'
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { TransmitService } from './transmit.service';
 
 @ApiTags('transmit')
 @Controller('transmit')
@@ -20,7 +20,7 @@ export class TransmitController {
   @Get('judgers')
   @ApiOperation({ summary: '列出评测机（deprecated，返回静态数据）' })
   listJudgers() {
-    return this.transmitService.listJudgers()
+    return this.transmitService.listJudgers();
   }
 
   /**
@@ -30,7 +30,7 @@ export class TransmitController {
   @Get('refresh-test-files')
   @ApiOperation({ summary: '刷新测试数据文件（OSS 未配置时跳过）' })
   refreshTestFiles() {
-    return this.transmitService.refreshTestFiles()
+    return this.transmitService.refreshTestFiles();
   }
 
   /**
@@ -40,7 +40,7 @@ export class TransmitController {
   @Get('rebuild-rank-log')
   @ApiOperation({ summary: '重建竞赛/课程排行榜 Redis Sorted Set' })
   rebuildRankLog() {
-    return this.transmitService.rebuildRankLog()
+    return this.transmitService.rebuildRankLog();
   }
 
   /**
@@ -50,6 +50,6 @@ export class TransmitController {
   @Get('queue-status')
   @ApiOperation({ summary: '查询 BullMQ 评测队列状态' })
   getQueueStatus() {
-    return this.transmitService.getQueueStatus()
+    return this.transmitService.getQueueStatus();
   }
 }

@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import axios, { AxiosInstance } from 'axios'
-import https from 'https'
-import crypto from 'crypto'
-import { CreateJudgeRequest } from './heng.types'
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosInstance } from 'axios';
+import https from 'https';
+import crypto from 'crypto';
+import { CreateJudgeRequest } from './heng.types';
 
 /**
  * HengClientService
@@ -15,12 +15,15 @@ import { CreateJudgeRequest } from './heng.types'
  */
 @Injectable()
 export class HengClientService {
-  private readonly logger = new Logger(HengClientService.name)
-  private readonly httpClient: AxiosInstance
+  private readonly logger = new Logger(HengClientService.name);
+  private readonly httpClient: AxiosInstance;
 
   constructor(private readonly configService: ConfigService) {
-    const baseURL = this.configService.get<string>('heng.baseUrl', '')
-    const allowInsecureTls = this.configService.get<boolean>('heng.allowInsecureTls', false)
+    const baseURL = this.configService.get<string>('heng.baseUrl', '');
+    const allowInsecureTls = this.configService.get<boolean>(
+      'heng.allowInsecureTls',
+      false,
+    );
 
     this.httpClient = axios.create({
       baseURL,
@@ -29,7 +32,7 @@ export class HengClientService {
         // HENG_ALLOW_INSECURE_TLS=true 时跳过证书验证（生产环境保持默认 false）
         rejectUnauthorized: !allowInsecureTls,
       }),
-    })
+    });
   }
 
   /**
@@ -37,15 +40,15 @@ export class HengClientService {
    * POST /c/v1/judges
    */
   async createJudge(request: CreateJudgeRequest): Promise<{ judgeId: string }> {
-    const url = '/c/v1/judges'
-    const signedHeaders = this.buildSignedHeaders('POST', url, request)
+    const url = '/c/v1/judges';
+    const signedHeaders = this.buildSignedHeaders('POST', url, request);
 
     const res = await this.httpClient.post<{ judgeId: string }>(url, request, {
       headers: signedHeaders,
-    })
+    });
 
-    this.logger.log(`createJudge success, judgeId=${res.data?.judgeId}`)
-    return res.data
+    this.logger.log(`createJudge success, judgeId=${res.data?.judgeId}`);
+    return res.data;
   }
 
   /**
@@ -63,12 +66,12 @@ export class HengClientService {
     path: string,
     body: unknown,
   ): Record<string, string> {
-    const ak = this.configService.get<string>('heng.ak', '')
-    const sk = this.configService.get<string>('heng.sk', '')
+    const ak = this.configService.get<string>('heng.ak', '');
+    const sk = this.configService.get<string>('heng.sk', '');
 
-    const contentType = 'application/json;charset=utf-8'
-    const nonce = Math.random().toString()
-    const timestamp = Math.floor(Date.now() / 1000).toString()
+    const contentType = 'application/json;charset=utf-8';
+    const nonce = Math.random().toString();
+    const timestamp = Math.floor(Date.now() / 1000).toString();
 
     // Step 1: 拼 signed headers string（encodeURIComponent + sort）
     const headerDict: Record<string, string> = {
@@ -76,20 +79,23 @@ export class HengClientService {
       'x-heng-accesskey': ak,
       'x-heng-nonce': nonce,
       'x-heng-timestamp': timestamp,
-    }
-    const signedHeadersStr = this.toLowerCaseSortJoin(headerDict)
+    };
+    const signedHeadersStr = this.toLowerCaseSortJoin(headerDict);
 
     // Step 2: SHA256 body hash
-    const bodyJson = body !== undefined ? JSON.stringify(body) : '{}'
-    const bodyHash = crypto.createHash('sha256').update(bodyJson).digest('hex')
+    const bodyJson = body !== undefined ? JSON.stringify(body) : '{}';
+    const bodyHash = crypto.createHash('sha256').update(bodyJson).digest('hex');
 
     // Step 3: request string
-    const METHOD = method.toUpperCase()
-    const queryStrings = '' // POST 无 query
-    const requestString = `${METHOD}\n${path}\n${queryStrings}\n${signedHeadersStr}\n${bodyHash}\n`
+    const METHOD = method.toUpperCase();
+    const queryStrings = ''; // POST 无 query
+    const requestString = `${METHOD}\n${path}\n${queryStrings}\n${signedHeadersStr}\n${bodyHash}\n`;
 
     // Step 4: HMAC-SHA256 签名
-    const signature = crypto.createHmac('sha256', sk).update(requestString).digest('hex')
+    const signature = crypto
+      .createHmac('sha256', sk)
+      .update(requestString)
+      .digest('hex');
 
     return {
       'content-type': contentType,
@@ -97,7 +103,7 @@ export class HengClientService {
       'x-heng-nonce': nonce,
       'x-heng-timestamp': timestamp,
       'x-heng-signature': signature,
-    }
+    };
   }
 
   /**
@@ -108,13 +114,13 @@ export class HengClientService {
     const kvArray: [string, string][] = Object.entries(dict).map(([k, v]) => [
       encodeURIComponent(k.toLowerCase()),
       encodeURIComponent(v.toLowerCase()),
-    ])
+    ]);
 
     kvArray.sort((a, b) => {
-      if (a[0] === b[0]) return a[1] < b[1] ? -1 : 1
-      return a[0] < b[0] ? -1 : 1
-    })
+      if (a[0] === b[0]) return a[1] < b[1] ? -1 : 1;
+      return a[0] < b[0] ? -1 : 1;
+    });
 
-    return kvArray.map(([k, v]) => `${k}=${v}`).join('&')
+    return kvArray.map(([k, v]) => `${k}=${v}`).join('&');
   }
 }

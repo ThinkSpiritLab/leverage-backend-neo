@@ -15,8 +15,8 @@ import {
   UploadedFile,
   UseGuards,
   UseInterceptors,
-} from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -25,19 +25,19 @@ import {
   ApiParam,
   ApiQuery,
   ApiTags,
-} from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { ProblemService } from './problem.service'
-import { CreateProblemDto } from './dto/create-problem.dto'
-import { UpdateProblemDto } from './dto/update-problem.dto'
-import { ProblemQueryDto } from './dto/problem-query.dto'
-import { ZipHashDto } from './dto/zip-hash.dto'
-import { AddTagDto } from './dto/add-tag.dto'
-import { SimpExtraDto } from './dto/simp-extra.dto'
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { ProblemService } from './problem.service';
+import { CreateProblemDto } from './dto/create-problem.dto';
+import { UpdateProblemDto } from './dto/update-problem.dto';
+import { ProblemQueryDto } from './dto/problem-query.dto';
+import { ZipHashDto } from './dto/zip-hash.dto';
+import { AddTagDto } from './dto/add-tag.dto';
+import { SimpExtraDto } from './dto/simp-extra.dto';
 
 @ApiTags('problems')
 @Controller('problems')
@@ -59,8 +59,8 @@ export class ProblemController {
   @ApiOperation({ summary: '获取下一个可用 logicId（需要 admin）' })
   @ApiQuery({ name: 'prefix', description: '题目前缀', example: 'p' })
   async getNextId(@Query('prefix') prefix: string) {
-    if (!prefix) throw new BadRequestException('prefix 参数不能为空')
-    return this.problemService.getNextId(prefix)
+    if (!prefix) throw new BadRequestException('prefix 参数不能为空');
+    return this.problemService.getNextId(prefix);
   }
 
   /**
@@ -76,14 +76,20 @@ export class ProblemController {
     @Query('logicId') logicIdStr: string,
     @CurrentUser() user?: JwtPayload,
   ) {
-    if (!prefix || !logicIdStr) throw new BadRequestException('prefix 和 logicId 参数不能为空')
-    const logicId = parseInt(logicIdStr, 10)
-    if (isNaN(logicId)) throw new BadRequestException('logicId 必须为整数')
-    const isAdmin = user != null && (user.role === 'admin' || user.role === 'sa')
+    if (!prefix || !logicIdStr)
+      throw new BadRequestException('prefix 和 logicId 参数不能为空');
+    const logicId = parseInt(logicIdStr, 10);
+    if (isNaN(logicId)) throw new BadRequestException('logicId 必须为整数');
+    const isAdmin =
+      user != null && (user.role === 'admin' || user.role === 'sa');
     try {
-      return await this.problemService.getOneByLogicId(prefix, logicId, isAdmin)
+      return await this.problemService.getOneByLogicId(
+        prefix,
+        logicId,
+        isAdmin,
+      );
     } catch {
-      throw new NotFoundException()
+      throw new NotFoundException();
     }
   }
 
@@ -94,7 +100,12 @@ export class ProblemController {
   @Get('digest-partial')
   @ApiOperation({ summary: '获取题目摘要列表（分页 + 标签过滤）' })
   @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
-  @ApiQuery({ name: 'tags', required: false, description: '标签 ID（逗号分隔）', example: '1,2' })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    description: '标签 ID（逗号分隔）',
+    example: '1,2',
+  })
   @ApiQuery({ name: 'title', required: false, description: '标题搜索' })
   @ApiQuery({ name: 'todo', required: false, description: '只看未 AC 的题目' })
   async digestPartial(
@@ -104,12 +115,21 @@ export class ProblemController {
     @Query('todo') todo?: string,
     @CurrentUser() user?: JwtPayload,
   ) {
-    const page = parseInt(pageStr ?? '1', 10) || 1
-    const tagIds = tags ? tags.split(',').map(Number).filter(Boolean) : []
-    const isAdmin = user != null && (user.role === 'admin' || user.role === 'sa')
-    const todoOnly = !!todo
-    const userId = user?.sub
-    return this.problemService.digestPartial(page, 12, tagIds, title, isAdmin, todoOnly, userId)
+    const page = parseInt(pageStr ?? '1', 10) || 1;
+    const tagIds = tags ? tags.split(',').map(Number).filter(Boolean) : [];
+    const isAdmin =
+      user != null && (user.role === 'admin' || user.role === 'sa');
+    const todoOnly = !!todo;
+    const userId = user?.sub;
+    return this.problemService.digestPartial(
+      page,
+      12,
+      tagIds,
+      title,
+      isAdmin,
+      todoOnly,
+      userId,
+    );
   }
 
   /**
@@ -122,16 +142,20 @@ export class ProblemController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '管理员视角题目列表（含隐藏题目）' })
   @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
-  @ApiQuery({ name: 'tags', required: false, description: '标签 ID（逗号分隔）' })
+  @ApiQuery({
+    name: 'tags',
+    required: false,
+    description: '标签 ID（逗号分隔）',
+  })
   @ApiQuery({ name: 'title', required: false, description: '标题搜索' })
   async managePartial(
     @Query('page') pageStr?: string,
     @Query('tags') tags?: string,
     @Query('title') title?: string,
   ) {
-    const page = parseInt(pageStr ?? '1', 10) || 1
-    const tagIds = tags ? tags.split(',').map(Number).filter(Boolean) : []
-    return this.problemService.managePartial(page, 12, tagIds, title)
+    const page = parseInt(pageStr ?? '1', 10) || 1;
+    const tagIds = tags ? tags.split(',').map(Number).filter(Boolean) : [];
+    return this.problemService.managePartial(page, 12, tagIds, title);
   }
 
   /**
@@ -145,8 +169,8 @@ export class ProblemController {
   @ApiOperation({ summary: '管理员可用题目摘要（未关闭的题目）' })
   @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
   async manageAvailableDigest(@Query('page') pageStr?: string) {
-    const page = parseInt(pageStr ?? '1', 10) || 1
-    return this.problemService.manageAvailableDigest(page)
+    const page = parseInt(pageStr ?? '1', 10) || 1;
+    return this.problemService.manageAvailableDigest(page);
   }
 
   /**
@@ -177,22 +201,22 @@ export class ProblemController {
     @UploadedFile() file: Express.Multer.File,
     @Body('params') paramsStr: string,
   ) {
-    if (!file) throw new BadRequestException('请上传 FPS XML 文件')
+    if (!file) throw new BadRequestException('请上传 FPS XML 文件');
     let params: {
-      checkOnly: boolean
-      indices: number[]
-      prefix: string
-      source: string
-      restricted: boolean
-      closed: boolean
-      noMarkdown: boolean
-    }
+      checkOnly: boolean;
+      indices: number[];
+      prefix: string;
+      source: string;
+      restricted: boolean;
+      closed: boolean;
+      noMarkdown: boolean;
+    };
     try {
-      params = JSON.parse(paramsStr)
+      params = JSON.parse(paramsStr);
     } catch {
-      throw new BadRequestException('params 必须是合法 JSON')
+      throw new BadRequestException('params 必须是合法 JSON');
     }
-    return this.problemService.importFps(file.buffer, params)
+    return this.problemService.importFps(file.buffer, params);
   }
 
   /**
@@ -204,11 +228,12 @@ export class ProblemController {
   @Roles('admin')
   @ApiBearerAuth()
   @ApiOperation({ summary: '快速创建题目骨架（需要 admin 权限）' })
-  async simpExtra(
-    @Body() dto: SimpExtraDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return this.problemService.simpCreateExtra(dto.title, dto.prefix ?? 'p', user.sub)
+  async simpExtra(@Body() dto: SimpExtraDto, @CurrentUser() user: JwtPayload) {
+    return this.problemService.simpCreateExtra(
+      dto.title,
+      dto.prefix ?? 'p',
+      user.sub,
+    );
   }
 
   /**
@@ -221,7 +246,7 @@ export class ProblemController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '批量生成测试数据 zip hash（需要 admin 权限）' })
   async batchZipHash(@Body() dto: ZipHashDto) {
-    return this.problemService.manuallyZipHashTestCase(dto)
+    return this.problemService.manuallyZipHashTestCase(dto);
   }
 
   /**
@@ -235,7 +260,7 @@ export class ProblemController {
   @ApiOperation({ summary: '获取课程的题目 ID 列表（需要 admin）' })
   @ApiParam({ name: 'courseId', description: '课程 ID' })
   async courseProblemList(@Param('courseId', ParseIntPipe) courseId: number) {
-    return this.problemService.courseProblemList(courseId)
+    return this.problemService.courseProblemList(courseId);
   }
 
   /**
@@ -248,8 +273,10 @@ export class ProblemController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '获取竞赛的题目 ID 列表（需要 admin）' })
   @ApiParam({ name: 'contestId', description: '竞赛 ID' })
-  async contestProblemList(@Param('contestId', ParseIntPipe) contestId: number) {
-    return this.problemService.contestProblemList(contestId)
+  async contestProblemList(
+    @Param('contestId', ParseIntPipe) contestId: number,
+  ) {
+    return this.problemService.contestProblemList(contestId);
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -266,8 +293,9 @@ export class ProblemController {
     @Query() query: ProblemQueryDto,
     @CurrentUser() user?: JwtPayload,
   ) {
-    const isAdmin = user != null && (user.role === 'admin' || user.role === 'sa')
-    return this.problemService.findAll(query, isAdmin)
+    const isAdmin =
+      user != null && (user.role === 'admin' || user.role === 'sa');
+    return this.problemService.findAll(query, isAdmin);
   }
 
   /**
@@ -280,7 +308,7 @@ export class ProblemController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建题目（需要 admin 权限）' })
   async create(@Body() dto: CreateProblemDto) {
-    return this.problemService.create(dto)
+    return this.problemService.create(dto);
   }
 
   /**
@@ -294,8 +322,9 @@ export class ProblemController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user?: JwtPayload,
   ) {
-    const isAdmin = user != null && (user.role === 'admin' || user.role === 'sa')
-    return this.problemService.findOne(id, isAdmin)
+    const isAdmin =
+      user != null && (user.role === 'admin' || user.role === 'sa');
+    return this.problemService.findOne(id, isAdmin);
   }
 
   /**
@@ -312,7 +341,7 @@ export class ProblemController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateProblemDto,
   ) {
-    return this.problemService.update(id, dto)
+    return this.problemService.update(id, dto);
   }
 
   /**
@@ -327,7 +356,7 @@ export class ProblemController {
   @ApiOperation({ summary: '删除题目（需要 admin 权限）' })
   @ApiParam({ name: 'id', description: '题目 ID' })
   async remove(@Param('id', ParseIntPipe) id: number) {
-    await this.problemService.remove(id)
+    await this.problemService.remove(id);
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -342,7 +371,7 @@ export class ProblemController {
   @ApiOperation({ summary: '题目提交数/通过数统计' })
   @ApiParam({ name: 'id', description: '题目 ID' })
   async getRatio(@Param('id', ParseIntPipe) id: number) {
-    return this.problemService.getProblemRatio(id)
+    return this.problemService.getProblemRatio(id);
   }
 
   /**
@@ -356,7 +385,7 @@ export class ProblemController {
   @ApiOperation({ summary: '题目被引用情况（需要 admin）' })
   @ApiParam({ name: 'id', description: '题目 ID' })
   async refs(@Param('id', ParseIntPipe) id: number) {
-    return this.problemService.refs(id)
+    return this.problemService.refs(id);
   }
 
   /**
@@ -367,7 +396,7 @@ export class ProblemController {
   @ApiOperation({ summary: '获取题目标签列表' })
   @ApiParam({ name: 'id', description: '题目 ID' })
   async getTags(@Param('id', ParseIntPipe) id: number) {
-    return this.problemService.getTags(id)
+    return this.problemService.getTags(id);
   }
 
   /**
@@ -380,11 +409,8 @@ export class ProblemController {
   @ApiBearerAuth()
   @ApiOperation({ summary: '给题目添加标签（需要 admin）' })
   @ApiParam({ name: 'id', description: '题目 ID' })
-  async addTag(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: AddTagDto,
-  ) {
-    return this.problemService.addTag(id, dto.tagId)
+  async addTag(@Param('id', ParseIntPipe) id: number, @Body() dto: AddTagDto) {
+    return this.problemService.addTag(id, dto.tagId);
   }
 
   /**
@@ -402,7 +428,7 @@ export class ProblemController {
     @Param('id', ParseIntPipe) id: number,
     @Param('tagId', ParseIntPipe) tagId: number,
   ) {
-    return this.problemService.removeTag(id, tagId)
+    return this.problemService.removeTag(id, tagId);
   }
 
   /**
@@ -416,7 +442,7 @@ export class ProblemController {
   @ApiOperation({ summary: '获取测试用例文件列表（需要 admin）' })
   @ApiParam({ name: 'id', description: '题目 ID' })
   async getTestCases(@Param('id', ParseIntPipe) id: number) {
-    return this.problemService.getTestCasesFiles(id)
+    return this.problemService.getTestCasesFiles(id);
   }
 
   /**
@@ -429,13 +455,15 @@ export class ProblemController {
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: '上传测试数据（需要 admin 权限，必须为 .zip 文件）' })
+  @ApiOperation({
+    summary: '上传测试数据（需要 admin 权限，必须为 .zip 文件）',
+  })
   @ApiParam({ name: 'id', description: '题目 ID' })
   async uploadTestData(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    await this.problemService.uploadTestData(id, file)
-    return { message: '测试数据上传成功' }
+    await this.problemService.uploadTestData(id, file);
+    return { message: '测试数据上传成功' };
   }
 }

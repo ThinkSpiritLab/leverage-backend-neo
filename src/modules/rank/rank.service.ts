@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common'
-import { RedisService } from '../redis/redis.service'
+import { Injectable, Logger } from '@nestjs/common';
+import { RedisService } from '../redis/redis.service';
 
 /**
  * RankService (Placeholder)
@@ -9,7 +9,7 @@ import { RedisService } from '../redis/redis.service'
  */
 @Injectable()
 export class RankService {
-  private readonly logger = new Logger(RankService.name)
+  private readonly logger = new Logger(RankService.name);
 
   constructor(private readonly redisService: RedisService) {}
 
@@ -28,12 +28,12 @@ export class RankService {
     acCount: number,
     penaltySeconds: number,
   ): Promise<void> {
-    const score = this.calcScore(acCount, penaltySeconds)
-    const key = `contest-rank:${contestId}`
-    await this.redisService.zadd(key, score, String(userId))
+    const score = this.calcScore(acCount, penaltySeconds);
+    const key = `contest-rank:${contestId}`;
+    await this.redisService.zadd(key, score, String(userId));
     this.logger.debug(
       `Updated contest rank: contestId=${contestId}, userId=${userId}, score=${score}`,
-    )
+    );
   }
 
   /**
@@ -45,15 +45,15 @@ export class RankService {
     acCount: number,
     penaltySeconds: number,
   ): Promise<void> {
-    const score = this.calcScore(acCount, penaltySeconds)
-    const key = `course-rank:${courseId}`
-    await this.redisService.zadd(key, score, String(userId))
+    const score = this.calcScore(acCount, penaltySeconds);
+    const key = `course-rank:${courseId}`;
+    await this.redisService.zadd(key, score, String(userId));
   }
 
   /**
    * Score 编码：AC 数 * 1e9 - 罚时秒数（越大越好，ZREVRANK 即为排名）
    */
   private calcScore(acCount: number, penaltySeconds: number): number {
-    return acCount * 1_000_000_000 - penaltySeconds
+    return acCount * 1_000_000_000 - penaltySeconds;
   }
 }

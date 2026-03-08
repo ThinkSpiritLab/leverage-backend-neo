@@ -9,76 +9,76 @@ import {
   OneToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 @Index(['userId', 'problemId'])
 export class Submission {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Index()
   @Column()
-  userId: number
+  userId: number;
 
   @ManyToOne('User', { nullable: false })
   @JoinColumn({ name: 'userId' })
-  user: any
+  user: any;
 
   @Index()
   @Column()
-  problemId: number
+  problemId: number;
 
   @ManyToOne('Problem', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'problemId' })
-  problem: any
+  problem: any;
 
   @Column()
   @Index()
-  language: number
+  language: number;
 
   @Column('int', { nullable: true })
-  time: number
+  time: number;
 
   @Column('int', { nullable: true })
-  memory: number
+  memory: number;
 
   @OneToOne('SubmissionMisc', (s: any) => s.submission, { cascade: true })
-  misc: any
+  misc: any;
 
   @OneToOne('Suspicion', (s: any) => s.submission, { cascade: true })
-  sus?: any
+  sus?: any;
 
   @Column('int', { nullable: true })
   @Index()
-  status: number
+  status: number;
 
   @Column('varchar', { length: 24, nullable: true })
-  judger: string | null
+  judger: string | null;
 
   @Index()
   @Column({ nullable: true })
-  courseId: number | null
+  courseId: number | null;
 
   @ManyToOne('Course', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
-  course: any
+  course: any;
 
   @Index()
   @Column({ nullable: true })
-  contestId: number | null
+  contestId: number | null;
 
   @ManyToOne('Contest', { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'contestId' })
-  contest: any
+  contest: any;
 
   @OneToMany('RejudgeLog', (r: any) => r.submission)
-  rejudgeLogs: any[]
+  rejudgeLogs: any[];
 
   @Index()
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

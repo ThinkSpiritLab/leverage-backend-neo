@@ -1,22 +1,28 @@
-import { Column, CreateDateColumn, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 export class Setting {
   @PrimaryColumn()
-  key: string
+  key: string;
 
   @Column('varchar', { name: 'value', default: '', length: 1024 })
-  valueString: string
+  valueString: string;
 
   @Column('varchar', { default: '' })
-  note: string
+  note: string;
 
   @Column('text')
-  type: string
+  type: string;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

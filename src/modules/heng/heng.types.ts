@@ -6,15 +6,12 @@
 // ─── 基础类型 ────────────────────────────────────────────────────────────────
 
 export type HengFile = {
-  hashsum?: string // sha256
-} & (
-  | { type: 'url'; url: string }
-  | { type: 'direct'; content: string }
-)
+  hashsum?: string; // sha256
+} & ({ type: 'url'; url: string } | { type: 'direct'; content: string });
 
 export type HengDynamicFile =
   | { type: 'builtin'; name: string }
-  | { type: 'remote'; file: HengFile; name: string }
+  | { type: 'remote'; file: HengFile; name: string };
 
 export enum HengTestPolicy {
   Fuse = 'fuse',
@@ -22,8 +19,8 @@ export enum HengTestPolicy {
 }
 
 export interface HengTestCase {
-  input: string
-  output: string
+  input: string;
+  output: string;
 }
 
 export enum HengJudgeType {
@@ -34,48 +31,52 @@ export enum HengJudgeType {
 
 export interface HengLimit {
   runtime: {
-    memory: number  // byte
-    cpuTime: number // ms
-    output: number  // byte
-  }
+    memory: number; // byte
+    cpuTime: number; // ms
+    output: number; // byte
+  };
   compiler: {
-    memory: number  // byte
-    cpuTime: number // ms
-    output: number  // byte
-    message: number // byte
-  }
+    memory: number; // byte
+    cpuTime: number; // ms
+    output: number; // byte
+    message: number; // byte
+  };
 }
 
 export interface HengExecutable {
-  source: HengFile
+  source: HengFile;
   environment: {
-    language: string
-    system: 'Windows' | 'Linux' | 'Darwin'
-    arch: 'x64' | 'arm' | 'risc-v' | 'powerpc' | 'mips'
-    options: Record<string, string | number | boolean>
-  }
-  limit: HengLimit
+    language: string;
+    system: 'Windows' | 'Linux' | 'Darwin';
+    arch: 'x64' | 'arm' | 'risc-v' | 'powerpc' | 'mips';
+    options: Record<string, string | number | boolean>;
+  };
+  limit: HengLimit;
 }
 
 export type HengJudge =
   | { type: HengJudgeType.Normal; user: HengExecutable }
   | { type: HengJudgeType.Special; user: HengExecutable; spj: HengExecutable }
-  | { type: HengJudgeType.Interactive; user: HengExecutable; interactor: HengExecutable }
+  | {
+      type: HengJudgeType.Interactive;
+      user: HengExecutable;
+      interactor: HengExecutable;
+    };
 
 // ─── 请求体（发给 heng-controller POST /c/v1/judges） ────────────────────────
 
 export interface CreateJudgeRequest {
-  data?: HengFile
-  dynamicFiles?: HengDynamicFile[]
-  judge: HengJudge
+  data?: HengFile;
+  dynamicFiles?: HengDynamicFile[];
+  judge: HengJudge;
   test?: {
-    cases: HengTestCase[]
-    policy: HengTestPolicy
-  }
+    cases: HengTestCase[];
+    policy: HengTestPolicy;
+  };
   callbackUrls: {
-    update: string
-    finish: string
-  }
+    update: string;
+    finish: string;
+  };
 }
 
 // ─── 状态枚举（JudgeState） ───────────────────────────────────────────────────
@@ -91,7 +92,7 @@ export enum JudgeState {
 // ─── 中间状态回调（POST /heng/update/:submissionId/:judgeId） ─────────────────
 
 export interface JudgeStateUpdate {
-  state: JudgeState
+  state: JudgeState;
 }
 
 // ─── 结果 kind 枚举 ───────────────────────────────────────────────────────────
@@ -124,23 +125,23 @@ export enum JudgeResultKind {
 // ─── 单 case 结果 ─────────────────────────────────────────────────────────────
 
 export interface JudgeCaseResult {
-  kind: JudgeResultKind
-  time: number   // ms
-  memory: number // byte
-  extraMessage?: string
+  kind: JudgeResultKind;
+  time: number; // ms
+  memory: number; // byte
+  extraMessage?: string;
 }
 
 // ─── 最终结果回调（POST /heng/finish/:submissionId/:judgeId） ─────────────────
 
 export interface JudgeResult {
-  cases: JudgeCaseResult[]
+  cases: JudgeCaseResult[];
   extra?: {
-    user?: { compileMessage?: string; compileTime?: number }
-    spj?: { compileMessage?: string; compileTime?: number }
-    interactor?: { compileMessage?: string; compileTime?: number }
-  }
+    user?: { compileMessage?: string; compileTime?: number };
+    spj?: { compileMessage?: string; compileTime?: number };
+    interactor?: { compileMessage?: string; compileTime?: number };
+  };
   /** judger 标识（评测机名称），由 heng-controller 透传 */
-  judger?: string
+  judger?: string;
 }
 
 // ─── Submission 状态枚举（与数据库 status 字段对应） ──────────────────────────
@@ -182,7 +183,7 @@ export const JudgeResultKindToStatus: Record<JudgeResultKind, Status> = {
   [JudgeResultKind.SystemRuntimeError]: Status.SE,
   [JudgeResultKind.SystemCompileError]: Status.SE,
   [JudgeResultKind.Unjudged]: Status.SE,
-}
+};
 
 /** JudgeState → Status 映射 */
 export const JudgeStateToStatus: Record<JudgeState, Status> = {
@@ -191,22 +192,22 @@ export const JudgeStateToStatus: Record<JudgeState, Status> = {
   [JudgeState.Preparing]: Status.COMPILING,
   [JudgeState.Judging]: Status.JUDGING,
   [JudgeState.Finished]: Status.JUDGING,
-}
+};
 
 // ─── BullMQ Job 类型 ──────────────────────────────────────────────────────────
 
 /** judge-tx 队列 payload */
 export interface JudgeTxPayload {
-  submissionId: number
+  submissionId: number;
   /** CreateJudgeRequest 中除 callbackUrls 外的所有字段 */
-  task: Omit<CreateJudgeRequest, 'callbackUrls'>
+  task: Omit<CreateJudgeRequest, 'callbackUrls'>;
 }
 
 /** judge-rx 队列 payload */
 export type JudgeRxPayload = {
-  submissionId: number
-  judgeId: string
+  submissionId: number;
+  judgeId: string;
 } & (
   | { type: 'update'; data: JudgeStateUpdate }
   | { type: 'finish'; data: JudgeResult }
-)
+);

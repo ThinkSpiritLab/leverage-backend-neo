@@ -7,49 +7,49 @@ import {
   ManyToOne,
   PrimaryColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 export class ContestUser {
   @PrimaryColumn()
-  contestId: number
+  contestId: number;
 
   @ManyToOne('Contest', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'contestId' })
-  contest: any
+  contest: any;
 
   @PrimaryColumn()
-  userId: number
+  userId: number;
 
   @Index()
   @ManyToOne('User', { nullable: false })
   @JoinColumn({ name: 'userId' })
-  user: any
+  user: any;
 
   @Column('varchar', { name: 'password', select: false, nullable: true })
-  passwordHash: string | null
+  passwordHash: string | null;
 
   @Column('varchar', { nullable: true })
-  room: string | null
+  room: string | null;
 
   @Column('varchar', { nullable: true })
-  seat: string | null
+  seat: string | null;
 
   @Column('int', { default: 0 })
-  submits: number
+  submits: number;
 
   @Column('int', { default: 0 })
-  accepts: number
+  accepts: number;
 
   @Column('boolean', { default: false })
-  wildcard: boolean
+  wildcard: boolean;
 
   @Column('boolean', { default: false })
-  female: boolean
+  female: boolean;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

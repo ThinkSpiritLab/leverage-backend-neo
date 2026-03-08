@@ -1,10 +1,18 @@
-import { Controller, Get, Param, ParseIntPipe, Query, Res, UseGuards } from '@nestjs/common'
-import type { Response } from 'express'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { SuspicionService } from './suspicion.service'
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { SuspicionService } from './suspicion.service';
 
 @ApiTags('suspicion')
 @Controller('suspicion')
@@ -31,7 +39,7 @@ export class SuspicionController {
       contestId: contestId ? parseInt(contestId, 10) : undefined,
       page: parseInt(page, 10) || 1,
       perPage: Math.min(parseInt(perPage, 10) || 20, 100),
-    })
+    });
   }
 
   /**
@@ -44,9 +52,12 @@ export class SuspicionController {
     @Param('contestId', ParseIntPipe) contestId: number,
     @Res() res: Response,
   ) {
-    const buffer = await this.suspicionService.exportSus(contestId)
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
-    res.setHeader('Content-Disposition', `attachment; filename="sus-contest-${contestId}.csv"`)
-    res.send(buffer)
+    const buffer = await this.suspicionService.exportSus(contestId);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="sus-contest-${contestId}.csv"`,
+    );
+    res.send(buffer);
   }
 }

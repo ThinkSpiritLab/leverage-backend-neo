@@ -10,19 +10,19 @@ import {
   Post,
   Query,
   UseGuards,
-} from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { UserService } from './user.service'
-import { CreateUserDto } from './dto/create-user.dto'
-import { UpdateUserDto } from './dto/update-user.dto'
-import { UserQueryDto } from './dto/user-query.dto'
-import { ImportUsersDto } from './dto/import-users.dto'
-import { ChangePasswordDto } from './dto/change-password.dto'
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { UserService } from './user.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { UserQueryDto } from './dto/user-query.dto';
+import { ImportUsersDto } from './dto/import-users.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -38,7 +38,7 @@ export class UserController {
   @Roles('supervisor')
   @ApiOperation({ summary: '用户列表（分页 + 搜索）' })
   findAll(@Query() query: UserQueryDto) {
-    return this.userService.findAll(query)
+    return this.userService.findAll(query);
   }
 
   /**
@@ -50,7 +50,7 @@ export class UserController {
   @Roles('admin')
   @ApiOperation({ summary: '批量导入用户' })
   importUsers(@Body() dto: ImportUsersDto) {
-    return this.userService.importUsers(dto.users)
+    return this.userService.importUsers(dto.users);
   }
 
   /**
@@ -60,7 +60,7 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '用户详情' })
   findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.userService.findOne(id)
+    return this.userService.findOne(id);
   }
 
   /**
@@ -71,7 +71,7 @@ export class UserController {
   @Roles('admin')
   @ApiOperation({ summary: '创建用户' })
   create(@Body() dto: CreateUserDto) {
-    return this.userService.create(dto)
+    return this.userService.create(dto);
   }
 
   /**
@@ -86,7 +86,7 @@ export class UserController {
     @Body() dto: UpdateUserDto,
     @CurrentUser() currentUser: JwtPayload,
   ) {
-    return this.userService.update(id, dto, currentUser.role)
+    return this.userService.update(id, dto, currentUser.role);
   }
 
   /**
@@ -97,7 +97,7 @@ export class UserController {
   @Roles('admin')
   @ApiOperation({ summary: '删除用户' })
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.userService.remove(id)
+    return this.userService.remove(id);
   }
 
   /**
@@ -112,11 +112,11 @@ export class UserController {
     @CurrentUser() currentUser: JwtPayload,
   ) {
     // 只有本人或 admin+ 能修改密码
-    const isAdmin = currentUser.role === 'sa' || currentUser.role === 'admin'
+    const isAdmin = currentUser.role === 'sa' || currentUser.role === 'admin';
     if (currentUser.sub !== id && !isAdmin) {
-      throw new ForbiddenException('只能修改自己的密码')
+      throw new ForbiddenException('只能修改自己的密码');
     }
-    return this.userService.changePassword(id, dto)
+    return this.userService.changePassword(id, dto);
   }
 
   /**
@@ -130,8 +130,11 @@ export class UserController {
     @Query('problemIds') problemIdsStr: string,
   ) {
     const problemIds = problemIdsStr
-      ? problemIdsStr.split(',').map((s) => parseInt(s.trim())).filter((n) => !isNaN(n))
-      : []
-    return this.userService.getUserProblemStatus(id, problemIds)
+      ? problemIdsStr
+          .split(',')
+          .map((s) => parseInt(s.trim()))
+          .filter((n) => !isNaN(n))
+      : [];
+    return this.userService.getUserProblemStatus(id, problemIds);
   }
 }

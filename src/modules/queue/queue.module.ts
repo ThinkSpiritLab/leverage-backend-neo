@@ -1,10 +1,10 @@
-import { BullModule } from '@nestjs/bull'
-import { Module } from '@nestjs/common'
-import { ConfigService } from '@nestjs/config'
-import { BullBoardModule } from '@bull-board/nestjs'
-import { BullAdapter } from '@bull-board/api/bullAdapter'
-import { ExpressAdapter } from '@bull-board/express'
-import { JUDGE_RX_QUEUE, JUDGE_TX_QUEUE } from './queue.constants'
+import { BullModule } from '@nestjs/bull';
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { JUDGE_RX_QUEUE, JUDGE_TX_QUEUE } from './queue.constants';
 
 @Module({
   imports: [

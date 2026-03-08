@@ -7,43 +7,43 @@ import {
   ManyToOne,
   PrimaryColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 export class ContestProblem {
   @PrimaryColumn()
-  contestId: number
+  contestId: number;
 
   @ManyToOne('Contest', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'contestId' })
-  contest: any
+  contest: any;
 
   @PrimaryColumn()
-  problemId: number
+  problemId: number;
 
   @Index()
   @ManyToOne('Problem', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'problemId' })
-  problem: any
+  problem: any;
 
   @Column('int', { default: 1 })
-  weight: number
+  weight: number;
 
   @Column('char', { length: 1, nullable: true })
-  label: string | null
+  label: string | null;
 
   @Column('varchar', { length: 20, nullable: true })
-  color: string | null
+  color: string | null;
 
   @Column('int', { comment: '提交数', default: 0 })
-  submits: number
+  submits: number;
 
   @Column('int', { comment: '通过数', default: 0 })
-  accepts: number
+  accepts: number;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

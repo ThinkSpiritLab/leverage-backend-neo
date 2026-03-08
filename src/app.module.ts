@@ -1,37 +1,38 @@
-import { Module } from '@nestjs/common'
-import { APP_GUARD } from '@nestjs/core'
-import { AppController } from './app.controller'
-import { AppService } from './app.service'
-import { ConfigModule } from '@nestjs/config'
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
-import configuration from './config/configuration'
-import { validationSchema } from './config/validation.schema'
-import { DatabaseModule } from './database/database.module'
-import { LoggerModule } from './logger/logger.module'
-import { AuthModule } from './modules/auth/auth.module'
-import { HealthModule } from './modules/health/health.module'
-import { MetricsModule } from './modules/metrics/metrics.module'
-import { QueueModule } from './modules/queue/queue.module'
-import { RedisModule } from './modules/redis/redis.module'
-import { HengModule } from './modules/heng/heng.module'
-import { ReceiveModule } from './modules/receive/receive.module'
-import { ProblemModule } from './modules/problem/problem.module'
-import { SubmissionModule } from './modules/submission/submission.module'
-import { TagModule } from './modules/tag/tag.module'
-import { UserModule } from './modules/user/user.module'
-import { ContestModule } from './modules/contest/contest.module'
-import { CourseModule } from './modules/course/course.module'
-import { ProfessionCollegeModule } from './modules/profession-college/profession-college.module'
-import { SettingModule } from './modules/setting/setting.module'
-import { LogModule } from './modules/log/log.module'
-import { NotificationModule } from './modules/notification/notification.module'
-import { MediaModule } from './modules/media/media.module'
-import { SuspicionModule } from './modules/suspicion/suspicion.module'
-import { StatisticsModule } from './modules/statistics/statistics.module'
-import { InitModule } from './modules/init/init.module'
-import { CompeteModule } from './modules/compete/compete.module'
-import { TransmitModule } from './modules/transmit/transmit.module'
-import { MessageModule } from './modules/message/message.module'
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { ConfigModule } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import configuration from './config/configuration';
+import { validationSchema } from './config/validation.schema';
+import { DatabaseModule } from './database/database.module';
+import { LoggerModule } from './logger/logger.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { HealthModule } from './modules/health/health.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { QueueModule } from './modules/queue/queue.module';
+import { RedisModule } from './modules/redis/redis.module';
+import { HengModule } from './modules/heng/heng.module';
+import { ReceiveModule } from './modules/receive/receive.module';
+import { ProblemModule } from './modules/problem/problem.module';
+import { SubmissionModule } from './modules/submission/submission.module';
+import { TagModule } from './modules/tag/tag.module';
+import { UserModule } from './modules/user/user.module';
+import { ContestModule } from './modules/contest/contest.module';
+import { CourseModule } from './modules/course/course.module';
+import { ProfessionCollegeModule } from './modules/profession-college/profession-college.module';
+import { SettingModule } from './modules/setting/setting.module';
+import { LogModule } from './modules/log/log.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { MediaModule } from './modules/media/media.module';
+import { SuspicionModule } from './modules/suspicion/suspicion.module';
+import { StatisticsModule } from './modules/statistics/statistics.module';
+import { InitModule } from './modules/init/init.module';
+import { CompeteModule } from './modules/compete/compete.module';
+import { TransmitModule } from './modules/transmit/transmit.module';
+import { MessageModule } from './modules/message/message.module';
 
 @Module({
   imports: [
@@ -139,4 +140,10 @@ import { MessageModule } from './modules/message/message.module'
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(CorrelationIdMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

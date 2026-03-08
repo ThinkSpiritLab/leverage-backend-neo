@@ -1,6 +1,6 @@
-import { Module } from '@nestjs/common'
-import { RankService } from './rank.service'
-import { RedisModule } from '../redis/redis.module'
+import { Module } from '@nestjs/common';
+import { RankService } from './rank.service';
+import { RedisModule } from '../redis/redis.module';
 
 /**
  * RankModule

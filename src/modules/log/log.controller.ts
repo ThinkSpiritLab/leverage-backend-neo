@@ -1,9 +1,14 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { LogService } from './log.service'
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { LogService } from './log.service';
 
 @ApiTags('logs')
 @Controller('logs')
@@ -31,6 +36,6 @@ export class LogController {
       userId: userId ? parseInt(userId, 10) : undefined,
       page: parseInt(page, 10) || 1,
       perPage: Math.min(parseInt(perPage, 10) || 20, 100),
-    })
+    });
   }
 }

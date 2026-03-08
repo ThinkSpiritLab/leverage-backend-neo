@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 export default () => ({
   port: parseInt(process.env.PORT ?? '3000', 10) || 3000,
   baseUrl: process.env.BASE_URL ?? 'http://localhost:3000',
@@ -27,10 +26,11 @@ export default () => ({
     allowInsecureTls: process.env.HENG_ALLOW_INSECURE_TLS === 'true',
   },
   submission: {
-    maxPerMinute: parseInt(process.env.MAX_SUBMISSION_PER_MINUTE ?? '10', 10) || 10,
+    maxPerMinute:
+      parseInt(process.env.MAX_SUBMISSION_PER_MINUTE ?? '10', 10) || 10,
   },
   init: {
     saUsername: process.env.INIT_SA_USERNAME ?? 'admin',
     saPassword: process.env.INIT_SA_PASSWORD ?? 'Admin@123456',
   },
-})
+});

@@ -4,57 +4,57 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common'
-import { InjectRepository } from '@nestjs/typeorm'
-import { In, MoreThan, Repository } from 'typeorm'
-import * as path from 'path'
-import * as fs from 'fs'
-import { ensureDir, writeFile } from 'fs-extra'
-import { Parser as XmlParser } from 'xml2js'
-import TurndownService from 'turndown'
-import decode from 'decode-html'
-import { Problem } from '../../database/entities/problem.entity'
-import { Tag } from '../../database/entities/tag.entity'
-import { ContestProblem } from '../../database/entities/contest-problem.entity'
-import { CourseProblem } from '../../database/entities/course-problem.entity'
-import { Submission } from '../../database/entities/submission.entity'
-import { CacheService } from '../redis/cache.service'
-import { CreateProblemDto } from './dto/create-problem.dto'
-import { UpdateProblemDto } from './dto/update-problem.dto'
-import { ProblemQueryDto } from './dto/problem-query.dto'
-import { ZipHashDto } from './dto/zip-hash.dto'
-import { DataSource } from 'typeorm'
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, MoreThan, Repository } from 'typeorm';
+import * as path from 'path';
+import * as fs from 'fs';
+import { ensureDir, writeFile } from 'fs-extra';
+import { Parser as XmlParser } from 'xml2js';
+import TurndownService from 'turndown';
+import decode from 'decode-html';
+import { Problem } from '../../database/entities/problem.entity';
+import { Tag } from '../../database/entities/tag.entity';
+import { ContestProblem } from '../../database/entities/contest-problem.entity';
+import { CourseProblem } from '../../database/entities/course-problem.entity';
+import { Submission } from '../../database/entities/submission.entity';
+import { CacheService } from '../redis/cache.service';
+import { CreateProblemDto } from './dto/create-problem.dto';
+import { UpdateProblemDto } from './dto/update-problem.dto';
+import { ProblemQueryDto } from './dto/problem-query.dto';
+import { ZipHashDto } from './dto/zip-hash.dto';
+import { DataSource } from 'typeorm';
 
 /** FPS XML raw types */
 interface FPSImage {
-  src: string[]
-  base64: string[]
+  src: string[];
+  base64: string[];
 }
 
 interface FPSProblem {
-  title: string[]
-  time_limit: string[]
-  memory_limit: string[]
-  description: string[]
-  input?: string[]
-  output?: string[]
-  sample_input: string[]
-  sample_output: string[]
-  test_input?: string[]
-  test_output?: string[]
-  hint?: string[]
-  source: string[]
-  spj?: unknown[]
-  img?: FPSImage[]
+  title: string[];
+  time_limit: string[];
+  memory_limit: string[];
+  description: string[];
+  input?: string[];
+  output?: string[];
+  sample_input: string[];
+  sample_output: string[];
+  test_input?: string[];
+  test_output?: string[];
+  hint?: string[];
+  source: string[];
+  spj?: unknown[];
+  img?: FPSImage[];
 }
 
 interface FPSRawObject {
   fps: {
-    item: FPSProblem[]
-  }
+    item: FPSProblem[];
+  };
 }
 
-const TEST_CASES_PATH = process.env.TEST_CASES_PATH ?? '/tmp/testcases'
+const TEST_CASES_PATH = process.env.TEST_CASES_PATH ?? '/tmp/testcases';
 
 @Injectable()
 export class ProblemService {
@@ -85,29 +85,29 @@ export class ProblemService {
     query: ProblemQueryDto,
     isAdmin: boolean,
   ): Promise<{ items: Problem[]; total: number }> {
-    const { page = 1, perPage = 20, search, tagIds } = query
-    const skip = (page - 1) * perPage
+    const { page = 1, perPage = 20, search, tagIds } = query;
+    const skip = (page - 1) * perPage;
 
     const qb = this.problemRepo
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.tags', 'tags')
       .take(perPage)
       .skip(skip)
-      .orderBy('p.id', 'DESC')
+      .orderBy('p.id', 'DESC');
 
     if (!isAdmin) {
-      qb.andWhere('p.closed = :closed', { closed: false })
-      qb.andWhere('p.restricted = :restricted', { restricted: false })
+      qb.andWhere('p.closed = :closed', { closed: false });
+      qb.andWhere('p.restricted = :restricted', { restricted: false });
     }
 
     if (tagIds && tagIds.length > 0) {
-      qb.andWhere('tags.id IN (:...tagIds)', { tagIds })
+      qb.andWhere('tags.id IN (:...tagIds)', { tagIds });
     }
 
     if (search) {
-      const match = /^([A-Za-z]+)(\d+)?$/.exec(search)
+      const match = /^([A-Za-z]+)(\d+)?$/.exec(search);
       if (match) {
-        const [, prefix, logicId] = match
+        const [, prefix, logicId] = match;
         if (logicId && prefix) {
           qb.andWhere(
             '(p.prefix = :prefix AND p.logicId = :logicId OR p.title LIKE :title)',
@@ -116,23 +116,23 @@ export class ProblemService {
               logicId: parseInt(logicId),
               title: `%${search}%`,
             },
-          )
+          );
         } else {
           qb.andWhere('(p.prefix = :prefix OR p.title LIKE :title)', {
             prefix: prefix.toLowerCase(),
             title: `%${search}%`,
-          })
+          });
         }
       } else {
-        qb.andWhere(
-          '(p.title LIKE :title OR p.id = :id OR p.logicId = :id)',
-          { title: `%${search}%`, id: parseInt(search) || -1 },
-        )
+        qb.andWhere('(p.title LIKE :title OR p.id = :id OR p.logicId = :id)', {
+          title: `%${search}%`,
+          id: parseInt(search) || -1,
+        });
       }
     }
 
-    const [items, total] = await qb.getManyAndCount()
-    return { items, total }
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total };
   }
 
   /**
@@ -140,48 +140,47 @@ export class ProblemService {
    * 非 admin 不返回 closed/restricted 的题目
    */
   async findOne(id: number, isAdmin: boolean): Promise<Problem> {
-    const cacheKey = `problem:${id}:${isAdmin ? 'admin' : 'user'}`
-    const cached = await this.cacheService.get<Problem>(cacheKey)
-    if (cached) return cached
+    const cacheKey = `problem:${id}:${isAdmin ? 'admin' : 'user'}`;
+    const cached = await this.cacheService.get<Problem>(cacheKey);
+    if (cached) return cached;
 
     const qb = this.problemRepo
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.tags', 'tags')
-      .where('p.id = :id', { id })
+      .where('p.id = :id', { id });
 
     if (!isAdmin) {
-      qb.andWhere('p.closed = :closed', { closed: false })
-      qb.andWhere('p.restricted = :restricted', { restricted: false })
+      qb.andWhere('p.closed = :closed', { closed: false });
+      qb.andWhere('p.restricted = :restricted', { restricted: false });
     }
 
-    const problem = await qb.getOne()
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    const problem = await qb.getOne();
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
-    await this.cacheService.set(cacheKey, problem, 6)
-    return problem
+    await this.cacheService.set(cacheKey, problem, 6);
+    return problem;
   }
 
   /**
    * 创建题目
    */
   async create(dto: CreateProblemDto): Promise<Problem> {
-    const { tagIds, prefix = 'p', logicId, ...rest } = dto
+    const { tagIds, prefix = 'p', logicId, ...rest } = dto;
 
-    const actualLogicId =
-      logicId ?? (await this.getNextLogicId(prefix))
+    const actualLogicId = logicId ?? (await this.getNextLogicId(prefix));
 
     const tags = tagIds?.length
       ? await this.tagRepo.findBy({ id: In(tagIds) })
-      : []
+      : [];
 
     const problem = this.problemRepo.create({
       ...rest,
       prefix: prefix.toLowerCase(),
       logicId: actualLogicId,
       tags,
-    })
+    });
 
-    return this.problemRepo.save(problem)
+    return this.problemRepo.save(problem);
   }
 
   /**
@@ -191,50 +190,44 @@ export class ProblemService {
     const problem = await this.problemRepo.findOne({
       where: { id },
       relations: ['tags'],
-    })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
-    const { tagIds, ...rest } = dto
+    const { tagIds, ...rest } = dto;
 
     if (tagIds !== undefined) {
       problem.tags = tagIds.length
         ? await this.tagRepo.findBy({ id: In(tagIds) })
-        : []
+        : [];
     }
 
-    Object.assign(problem, rest)
-    const saved = await this.problemRepo.save(problem)
+    Object.assign(problem, rest);
+    const saved = await this.problemRepo.save(problem);
 
-    await this.cacheService.del(
-      `problem:${id}:admin`,
-      `problem:${id}:user`,
-    )
+    await this.cacheService.del(`problem:${id}:admin`, `problem:${id}:user`);
 
-    return saved
+    return saved;
   }
 
   /**
    * 删除题目
    */
   async remove(id: number): Promise<void> {
-    const problem = await this.problemRepo.findOne({ where: { id } })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    const problem = await this.problemRepo.findOne({ where: { id } });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
-    await this.problemRepo.remove(problem)
+    await this.problemRepo.remove(problem);
 
-    await this.cacheService.del(
-      `problem:${id}:admin`,
-      `problem:${id}:user`,
-    )
+    await this.cacheService.del(`problem:${id}:admin`, `problem:${id}:user`);
   }
 
   /**
    * 上传测试数据（校验必须是 zip）
    */
   async uploadTestData(id: number, file: Express.Multer.File): Promise<void> {
-    this.validateZipFile(file)
-    const problem = await this.problemRepo.findOne({ where: { id } })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    this.validateZipFile(file);
+    const problem = await this.problemRepo.findOne({ where: { id } });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
     // TODO: 实际项目中此处调用 OSS/MinIO 上传服务
   }
 
@@ -247,8 +240,8 @@ export class ProblemService {
    * 获取下一个可用 logicId（给定 prefix）
    */
   async getNextId(prefix: string): Promise<{ nextId: number }> {
-    const nextId = await this.getNextLogicId(prefix.toLowerCase())
-    return { nextId }
+    const nextId = await this.getNextLogicId(prefix.toLowerCase());
+    return { nextId };
   }
 
   /**
@@ -264,17 +257,19 @@ export class ProblemService {
       .createQueryBuilder('p')
       .leftJoinAndSelect('p.tags', 'tags')
       .where('p.prefix = :prefix', { prefix: prefix.toLowerCase() })
-      .andWhere('p.logicId = :logicId', { logicId })
+      .andWhere('p.logicId = :logicId', { logicId });
 
     if (!isAdmin) {
-      qb.andWhere('p.closed = :closed', { closed: false })
-      qb.andWhere('p.restricted = :restricted', { restricted: false })
+      qb.andWhere('p.closed = :closed', { closed: false });
+      qb.andWhere('p.restricted = :restricted', { restricted: false });
     }
 
-    const problem = await qb.getOne()
+    const problem = await qb.getOne();
     if (!problem)
-      throw new NotFoundException(`题目 ${prefix.toUpperCase()}${logicId} 不存在`)
-    return problem
+      throw new NotFoundException(
+        `题目 ${prefix.toUpperCase()}${logicId} 不存在`,
+      );
+    return problem;
   }
 
   /**
@@ -305,41 +300,41 @@ export class ProblemService {
       ])
       .take(perPage)
       .skip((page - 1) * perPage)
-      .cache(5000)
+      .cache(5000);
 
     if (!isAdmin) {
-      qb.andWhere('p.closed = :closed', { closed: false })
-      qb.andWhere('p.restricted = :restricted', { restricted: false })
+      qb.andWhere('p.closed = :closed', { closed: false });
+      qb.andWhere('p.restricted = :restricted', { restricted: false });
     } else {
-      qb.addSelect(['p.restricted', 'p.closed'])
+      qb.addSelect(['p.restricted', 'p.closed']);
     }
 
     if (tags.length > 0) {
-      qb.andWhere('tags.id IN (:...tags)', { tags })
+      qb.andWhere('tags.id IN (:...tags)', { tags });
     }
 
     if (title) {
-      const match = /^([A-Za-z]+)(\d+)?$/.exec(title)
+      const match = /^([A-Za-z]+)(\d+)?$/.exec(title);
       if (match) {
-        const [, prefix, logicId] = match
+        const [, prefix, logicId] = match;
         if (logicId && prefix) {
           qb.andWhere(
             '(p.prefix = :prefix AND p.logicId = :lid OR p.title LIKE :t)',
             { prefix: prefix.toLowerCase(), lid: logicId, t: `%${title}%` },
-          )
+          );
         } else if (prefix.length === 1) {
-          qb.andWhere('p.prefix = :prefix', { prefix: prefix.toLowerCase() })
+          qb.andWhere('p.prefix = :prefix', { prefix: prefix.toLowerCase() });
         } else {
           qb.andWhere('(p.prefix = :prefix OR p.title LIKE :t)', {
             prefix: prefix.toLowerCase(),
             t: `%${title}%`,
-          })
+          });
         }
       } else {
-        qb.andWhere(
-          '(p.title LIKE :t OR p.id = :id OR p.logicId = :id)',
-          { t: `%${title}%`, id: parseInt(title) || -1 },
-        )
+        qb.andWhere('(p.title LIKE :t OR p.id = :id OR p.logicId = :id)', {
+          t: `%${title}%`,
+          id: parseInt(title) || -1,
+        });
       }
     }
 
@@ -348,13 +343,15 @@ export class ProblemService {
         .createQueryBuilder('s')
         .select('s.problemId')
         .where('s.status = 0')
-        .andWhere('s.userId = :userId', { userId })
-      qb.andWhere(`p.id NOT IN (${subQ.getQuery()})`)
-        .setParameters({ ...qb.getParameters(), ...subQ.getParameters() })
+        .andWhere('s.userId = :userId', { userId });
+      qb.andWhere(`p.id NOT IN (${subQ.getQuery()})`).setParameters({
+        ...qb.getParameters(),
+        ...subQ.getParameters(),
+      });
     }
 
-    const [problems, count] = await Promise.all([qb.getMany(), qb.getCount()])
-    return [problems, count]
+    const [problems, count] = await Promise.all([qb.getMany(), qb.getCount()]);
+    return [problems, count];
   }
 
   /**
@@ -367,7 +364,7 @@ export class ProblemService {
     tags: number[] = [],
     title?: string,
   ): Promise<[Problem[], number]> {
-    return this.digestPartial(page, perPage, tags, title, true)
+    return this.digestPartial(page, perPage, tags, title, true);
   }
 
   /**
@@ -380,11 +377,19 @@ export class ProblemService {
   ): Promise<[Problem[], number]> {
     return this.problemRepo.findAndCount({
       where: { closed: false },
-      select: ['id', 'title', 'accepts', 'submits', 'restricted', 'logicId', 'prefix'],
+      select: [
+        'id',
+        'title',
+        'accepts',
+        'submits',
+        'restricted',
+        'logicId',
+        'prefix',
+      ],
       relations: ['tags'],
       take: perPage,
       skip: (page - 1) * perPage,
-    })
+    });
   }
 
   /**
@@ -395,9 +400,9 @@ export class ProblemService {
     const problem = await this.problemRepo.findOne({
       select: ['id', 'closed', 'restricted'],
       where: { id: problemId },
-    })
-    if (!problem) throw new NotFoundException(`题目 #${problemId} 不存在`)
-    if (problem.closed || problem.restricted) throw new ForbiddenException()
+    });
+    if (!problem) throw new NotFoundException(`题目 #${problemId} 不存在`);
+    if (problem.closed || problem.restricted) throw new ForbiddenException();
 
     return this.submissionRepo
       .createQueryBuilder('s')
@@ -406,7 +411,7 @@ export class ProblemService {
       .where('s.problemId = :problemId', { problemId })
       .groupBy('s.status')
       .cache(30 * 1000)
-      .getRawMany()
+      .getRawMany();
   }
 
   /**
@@ -425,7 +430,7 @@ export class ProblemService {
         relations: ['contest'],
         order: { contestId: 'DESC' },
       }),
-    ])
+    ]);
   }
 
   /**
@@ -436,9 +441,9 @@ export class ProblemService {
     const problem = await this.problemRepo.findOne({
       where: { id },
       relations: ['tags'],
-    })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
-    return problem.tags ?? []
+    });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
+    return problem.tags ?? [];
   }
 
   /**
@@ -449,19 +454,19 @@ export class ProblemService {
     const problem = await this.problemRepo.findOne({
       where: { id },
       relations: ['tags'],
-    })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
-    const tag = await this.tagRepo.findOne({ where: { id: tagId } })
-    if (!tag) throw new NotFoundException(`标签 #${tagId} 不存在`)
+    const tag = await this.tagRepo.findOne({ where: { id: tagId } });
+    if (!tag) throw new NotFoundException(`标签 #${tagId} 不存在`);
 
-    const alreadyHas = problem.tags?.some(t => t.id === tagId)
+    const alreadyHas = problem.tags?.some((t) => t.id === tagId);
     if (!alreadyHas) {
-      problem.tags = [...(problem.tags ?? []), tag]
-      await this.problemRepo.save(problem)
+      problem.tags = [...(problem.tags ?? []), tag];
+      await this.problemRepo.save(problem);
     }
 
-    return problem.tags
+    return problem.tags;
   }
 
   /**
@@ -472,13 +477,13 @@ export class ProblemService {
     const problem = await this.problemRepo.findOne({
       where: { id },
       relations: ['tags'],
-    })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
-    problem.tags = (problem.tags ?? []).filter(t => t.id !== tagId)
-    await this.problemRepo.save(problem)
+    problem.tags = (problem.tags ?? []).filter((t) => t.id !== tagId);
+    await this.problemRepo.save(problem);
 
-    return problem.tags
+    return problem.tags;
   }
 
   /**
@@ -489,13 +494,17 @@ export class ProblemService {
     const problem = await this.problemRepo.findOne({
       where: { id },
       select: ['id', 'prefix', 'logicId'],
-    })
-    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`)
+    });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
-    const dir = path.join(TEST_CASES_PATH, problem.prefix, problem.logicId.toString())
-    if (!fs.existsSync(dir)) return []
+    const dir = path.join(
+      TEST_CASES_PATH,
+      problem.prefix,
+      problem.logicId.toString(),
+    );
+    if (!fs.existsSync(dir)) return [];
 
-    return fs.readdirSync(dir)
+    return fs.readdirSync(dir);
   }
 
   /**
@@ -505,36 +514,40 @@ export class ProblemService {
   async importFps(
     buffer: Buffer,
     params: {
-      checkOnly: boolean
-      indices: number[]
-      prefix: string
-      source: string
-      restricted: boolean
-      closed: boolean
-      noMarkdown: boolean
+      checkOnly: boolean;
+      indices: number[];
+      prefix: string;
+      source: string;
+      restricted: boolean;
+      closed: boolean;
+      noMarkdown: boolean;
     },
   ) {
     if (params.checkOnly) {
-      return this.parseFps(buffer, true, params.noMarkdown)
+      return this.parseFps(buffer, true, params.noMarkdown);
     }
-    return this.saveFps(buffer, params)
+    return this.saveFps(buffer, params);
   }
 
   /**
    * POST /problems/simp-extra
    * 快速创建题目骨架
    */
-  async simpCreateExtra(title: string, prefix: string, createrId: number): Promise<Problem> {
-    prefix = prefix.toLowerCase()
+  async simpCreateExtra(
+    title: string,
+    prefix: string,
+    createrId: number,
+  ): Promise<Problem> {
+    prefix = prefix.toLowerCase();
 
-    let result!: Problem
-    await this.dataSource.transaction(async manager => {
+    let result!: Problem;
+    await this.dataSource.transaction(async (manager) => {
       const { maxId } = await manager
         .createQueryBuilder(Problem, 'p')
         .select('MAX(p.logicId)', 'maxId')
         .where('p.prefix = :prefix', { prefix })
-        .getRawOne()
-      const nextId: number = maxId != null ? maxId + 1 : 1000
+        .getRawOne();
+      const nextId: number = maxId != null ? maxId + 1 : 1000;
 
       result = manager.create(Problem, {
         title,
@@ -551,15 +564,19 @@ export class ProblemService {
         createrId,
         prefix,
         logicId: nextId,
-      })
-      result = await manager.save(Problem, result)
-    })
+      });
+      result = await manager.save(Problem, result);
+    });
 
-    const problemPath = path.join(TEST_CASES_PATH, result.prefix, result.logicId.toString())
-    await ensureDir(problemPath)
-    await writeFile(path.join(problemPath, 'keep'), '')
+    const problemPath = path.join(
+      TEST_CASES_PATH,
+      result.prefix,
+      result.logicId.toString(),
+    );
+    await ensureDir(problemPath);
+    await writeFile(path.join(problemPath, 'keep'), '');
 
-    return result
+    return result;
   }
 
   /**
@@ -567,24 +584,22 @@ export class ProblemService {
    * 批量获取测试数据 zip 的 hash（用于校验）
    */
   async manuallyZipHashTestCase(opt: ZipHashDto): Promise<{ message: string }> {
-    let problemIds: number[] = []
+    let problemIds: number[] = [];
 
     if (opt.all) {
       const problems = await this.problemRepo.find({
         select: ['id'],
         where: { cases: MoreThan(0) },
-      })
-      problemIds = problems.map(p => p.id)
+      });
+      problemIds = problems.map((p) => p.id);
     } else if (opt.problems) {
-      problemIds = opt.problems
+      problemIds = opt.problems;
     }
 
     // Fire-and-forget background zip+hash
-    this.doZipHash(problemIds).catch(e =>
-      Logger.error(e, 'ZipHash'),
-    )
+    this.doZipHash(problemIds).catch((e) => Logger.error(e, 'ZipHash'));
 
-    return { message: `已排队 ${problemIds.length} 个题目` }
+    return { message: `已排队 ${problemIds.length} 个题目` };
   }
 
   /**
@@ -595,8 +610,8 @@ export class ProblemService {
     const entries = await this.courseProblemRepo.find({
       where: { courseId },
       select: ['problemId'],
-    })
-    return entries.map(e => e.problemId)
+    });
+    return entries.map((e) => e.problemId);
   }
 
   /**
@@ -607,8 +622,8 @@ export class ProblemService {
     const entries = await this.contestProblemRepo.find({
       where: { contestId },
       select: ['problemId'],
-    })
-    return entries.map(e => e.problemId)
+    });
+    return entries.map((e) => e.problemId);
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -620,8 +635,8 @@ export class ProblemService {
       .createQueryBuilder('p')
       .select('MAX(p.logicId)', 'maxId')
       .where('p.prefix = :prefix', { prefix: prefix.toLowerCase() })
-      .getRawOne()
-    return result?.maxId != null ? result.maxId + 1 : 1000
+      .getRawOne();
+    return result?.maxId != null ? result.maxId + 1 : 1000;
   }
 
   private validateZipFile(file: Express.Multer.File): void {
@@ -629,15 +644,15 @@ export class ProblemService {
       'application/zip',
       'application/x-zip-compressed',
       'application/octet-stream',
-    ]
-    const ext = path.extname(file.originalname).toLowerCase()
+    ];
+    const ext = path.extname(file.originalname).toLowerCase();
     if (ext !== '.zip' || !allowedMimeTypes.includes(file.mimetype)) {
-      throw new BadRequestException('测试数据必须是 .zip 文件')
+      throw new BadRequestException('测试数据必须是 .zip 文件');
     }
   }
 
   formatDisplayId(problem: Problem): string {
-    return `${problem.prefix.toUpperCase()}${problem.logicId}`
+    return `${problem.prefix.toUpperCase()}${problem.logicId}`;
   }
 
   private async parseFps(
@@ -647,114 +662,115 @@ export class ProblemService {
   ): Promise<
     Array<Partial<Problem> & { testInputs: string[]; testOutputs: string[] }>
   > {
-    const ts = new TurndownService({ hr: '---' })
+    const ts = new TurndownService({ hr: '---' });
     ts.addRule('pre', {
       filter: ['pre'],
       replacement: (content: string) => '```\n' + content + '\n```\n',
-    })
+    });
     ts.addRule('h3', {
       filter: ['h3'],
       replacement: (content: string) => '#### ' + content,
-    })
+    });
     ts.addRule('style', {
       filter: ['style'],
       replacement: () => '',
-    })
+    });
 
-    const parser = new XmlParser()
-    const data = buffer.toString('utf-8')
-    const fps: FPSRawObject = await parser.parseStringPromise(data)
-    const problems = fps.fps.item
+    const parser = new XmlParser();
+    const data = buffer.toString('utf-8');
+    const fps: FPSRawObject = await parser.parseStringPromise(data);
+    const problems = fps.fps.item;
 
-    const cn = ['题目描述', '样例输入', '样例输出', '提示']
-    const en = ['Description', 'Sample Input', 'Sample Output', 'Hint']
+    const cn = ['题目描述', '样例输入', '样例输出', '提示'];
+    const en = ['Description', 'Sample Input', 'Sample Output', 'Hint'];
 
     function codeBlock(c: string) {
-      return '<pre class="hljs"><code>' + c + '</code></pre>'
+      return '<pre class="hljs"><code>' + c + '</code></pre>';
     }
 
     const results: Array<
       Partial<Problem> & { testInputs: string[]; testOutputs: string[] }
-    > = []
+    > = [];
 
     for (const p of problems) {
-      if (p.spj) continue // SPJ not supported
+      if (p.spj) continue; // SPJ not supported
 
       const problem: Partial<Problem> & {
-        testInputs: string[]
-        testOutputs: string[]
+        testInputs: string[];
+        testOutputs: string[];
       } = {
         testInputs: [],
         testOutputs: [],
-      }
+      };
 
-      problem.title = decode(p.title[0] || '')
-      problem.timeLimit = parseInt(p.time_limit[0]) || 0
-      problem.memoryLimit = parseInt(p.memory_limit[0]) || 0
-      problem.source = decode(p.source[0] || '')
+      problem.title = decode(p.title[0] || '');
+      problem.timeLimit = parseInt(p.time_limit[0]) || 0;
+      problem.memoryLimit = parseInt(p.memory_limit[0]) || 0;
+      problem.source = decode(p.source[0] || '');
 
-      const lang = /[\u4e00-\u9fa5]/.test(p.description[0]) ? cn : en
+      const lang = /[\u4e00-\u9fa5]/.test(p.description[0]) ? cn : en;
 
-      let content = `<h4>${lang[0]}</h4>${p.description[0] || ''}`
+      let content = `<h4>${lang[0]}</h4>${p.description[0] || ''}`;
 
-      const single = p.sample_input.length === 1
+      const single = p.sample_input.length === 1;
       for (const [i, e] of p.sample_input.entries()) {
         if (e && p.sample_output?.[i] !== undefined) {
           content +=
             `<h4>${lang[1]}${!single ? `#${i + 1}` : ''}</h4>${codeBlock(e)}` +
-            `<h4>${lang[2]}${!single ? `#${i + 1}` : ''}</h4>${codeBlock(p.sample_output[i])}`
+            `<h4>${lang[2]}${!single ? `#${i + 1}` : ''}</h4>${codeBlock(p.sample_output[i])}`;
         }
       }
 
-      if (p.hint?.[0]?.length) content += `<h4>${lang[3]}</h4>${p.hint[0]}`
+      if (p.hint?.[0]?.length) content += `<h4>${lang[3]}</h4>${p.hint[0]}`;
 
-      if (!noMarkdown) content = ts.turndown(content)
-      problem.content = decode(content)
+      if (!noMarkdown) content = ts.turndown(content);
+      problem.content = decode(content);
 
-      problem.cases = 0
+      problem.cases = 0;
       if (p.test_input && p.test_output) {
         for (let i = 0; ; i++) {
-          if (p.test_input[i] === undefined || p.test_output[i] === undefined) break
+          if (p.test_input[i] === undefined || p.test_output[i] === undefined)
+            break;
           if (!preview) {
-            problem.testInputs.push(p.test_input[i])
-            problem.testOutputs.push(p.test_output[i])
+            problem.testInputs.push(p.test_input[i]);
+            problem.testOutputs.push(p.test_output[i]);
           }
-          problem.cases++
+          problem.cases++;
         }
       }
 
-      results.push(problem)
+      results.push(problem);
     }
 
-    return results
+    return results;
   }
 
   private async saveFps(
     buffer: Buffer,
     params: {
-      indices: number[]
-      prefix: string
-      source: string
-      restricted: boolean
-      closed: boolean
-      noMarkdown: boolean
+      indices: number[];
+      prefix: string;
+      source: string;
+      restricted: boolean;
+      closed: boolean;
+      noMarkdown: boolean;
     },
   ): Promise<Problem[]> {
-    const prefix = params.prefix.toLowerCase()
-    const parsed = await this.parseFps(buffer, false, params.noMarkdown)
-    const saved: Problem[] = []
+    const prefix = params.prefix.toLowerCase();
+    const parsed = await this.parseFps(buffer, false, params.noMarkdown);
+    const saved: Problem[] = [];
 
     for (const [i, p] of parsed.entries()) {
-      if (!params.indices.includes(i)) continue
+      if (!params.indices.includes(i)) continue;
 
-      let result!: Problem
-      await this.dataSource.transaction(async manager => {
+      let result!: Problem;
+      await this.dataSource.transaction(async (manager) => {
         const { maxId } = await manager
           .createQueryBuilder(Problem, 'p')
           .select('MAX(p.logicId)', 'maxId')
           .where('p.prefix = :prefix', { prefix })
-          .getRawOne()
-        const nextId: number = maxId != null ? maxId + 1 : 1000
+          .getRawOne();
+        const nextId: number = maxId != null ? maxId + 1 : 1000;
 
         result = manager.create(Problem, {
           title: p.title,
@@ -768,22 +784,26 @@ export class ProblemService {
           logicId: nextId,
           restricted: params.restricted,
           closed: params.closed,
-        })
-        result = await manager.save(Problem, result)
-        saved.push(result)
-      })
+        });
+        result = await manager.save(Problem, result);
+        saved.push(result);
+      });
 
-      const destDir = path.join(TEST_CASES_PATH, result.prefix, result.logicId.toString())
-      await ensureDir(destDir)
+      const destDir = path.join(
+        TEST_CASES_PATH,
+        result.prefix,
+        result.logicId.toString(),
+      );
+      await ensureDir(destDir);
       for (const [idx, input] of (p.testInputs ?? []).entries()) {
-        await writeFile(path.join(destDir, `${idx + 1}.in`), input)
+        await writeFile(path.join(destDir, `${idx + 1}.in`), input);
       }
       for (const [idx, output] of (p.testOutputs ?? []).entries()) {
-        await writeFile(path.join(destDir, `${idx + 1}.out`), output)
+        await writeFile(path.join(destDir, `${idx + 1}.out`), output);
       }
     }
 
-    return saved
+    return saved;
   }
 
   private async doZipHash(problemIds: number[]): Promise<void> {
@@ -792,14 +812,17 @@ export class ProblemService {
         const problem = await this.problemRepo.findOne({
           where: { id },
           select: ['id', 'prefix', 'logicId'],
-        })
-        if (!problem) continue
-        Logger.log(`ZipHash: processing problem ${id}`, 'ZipHash')
+        });
+        if (!problem) continue;
+        Logger.log(`ZipHash: processing problem ${id}`, 'ZipHash');
         // Actual zip+hash logic depends on storage backend
       } catch (e: any) {
-        Logger.error(`ZipHash failed for problem ${id}: ${e?.message}`, 'ZipHash')
+        Logger.error(
+          `ZipHash failed for problem ${id}: ${e?.message}`,
+          'ZipHash',
+        );
       }
     }
-    Logger.log('ZipHash: done', 'ZipHash')
+    Logger.log('ZipHash: done', 'ZipHash');
   }
 }

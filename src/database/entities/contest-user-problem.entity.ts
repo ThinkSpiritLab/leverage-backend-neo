@@ -1,10 +1,19 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 @Index(['contestId', 'contestUserId'])
 export class ContestUserProblem {
   @PrimaryColumn('int', { name: 'contestUserContestId' })
-  contestId: number
+  contestId: number;
 
   @Index()
   @ManyToOne('ContestUser', { onDelete: 'CASCADE' })
@@ -12,20 +21,20 @@ export class ContestUserProblem {
     { name: 'contestUserContestId', referencedColumnName: 'contestId' },
     { name: 'contestUserUserId', referencedColumnName: 'userId' },
   ])
-  contestUser: any
+  contestUser: any;
 
   @PrimaryColumn('int', { name: 'contestUserUserId' })
-  contestUserId: number
+  contestUserId: number;
 
   @PrimaryColumn('int')
-  contestProblemId: number
+  contestProblemId: number;
 
   @Column({ default: false })
-  sent: boolean
+  sent: boolean;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

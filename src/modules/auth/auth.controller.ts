@@ -6,21 +6,21 @@ import {
   HttpStatus,
   Post,
   UseGuards,
-} from '@nestjs/common'
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
   ApiTags,
-} from '@nestjs/swagger'
-import { Throttle } from '@nestjs/throttler'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { AuthService } from './auth.service'
-import { LoginContestDto } from './dto/login-contest.dto'
-import { LoginDto } from './dto/login.dto'
-import { RefreshDto } from './dto/refresh.dto'
-import type { JwtPayload } from './strategies/jwt-access.strategy'
+} from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { AuthService } from './auth.service';
+import { LoginContestDto } from './dto/login-contest.dto';
+import { LoginDto } from './dto/login.dto';
+import { RefreshDto } from './dto/refresh.dto';
+import type { JwtPayload } from './strategies/jwt-access.strategy';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -30,11 +30,19 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
-  @ApiOperation({ summary: '普通用户登录', description: '使用用户名/密码登录，返回 access + refresh token' })
-  @ApiResponse({ status: 200, description: '登录成功，返回 accessToken 和 refreshToken' })
+  @ApiOperation({
+    summary: '普通用户登录',
+    description: '使用用户名/密码登录，返回 access + refresh token',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '登录成功，返回 accessToken 和 refreshToken',
+  })
   @ApiResponse({ status: 401, description: '用户名或密码错误' })
-  async login(@Body() dto: LoginDto): Promise<{ accessToken: string; refreshToken: string }> {
-    return this.authService.loginUser(dto.username, dto.password)
+  async login(
+    @Body() dto: LoginDto,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    return this.authService.loginUser(dto.username, dto.password);
   }
 
   @Post('login/contest')
@@ -46,17 +54,26 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: '登录成功，返回 accessToken' })
   @ApiResponse({ status: 401, description: '认证失败' })
-  async loginContest(@Body() dto: LoginContestDto): Promise<{ accessToken: string }> {
-    return this.authService.loginContest(dto.contestId, dto.username, dto.password)
+  async loginContest(
+    @Body() dto: LoginContestDto,
+  ): Promise<{ accessToken: string }> {
+    return this.authService.loginContest(
+      dto.contestId,
+      dto.username,
+      dto.password,
+    );
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '刷新 Token', description: '使用 refresh token 换取新的 access token' })
+  @ApiOperation({
+    summary: '刷新 Token',
+    description: '使用 refresh token 换取新的 access token',
+  })
   @ApiResponse({ status: 200, description: '返回新的 accessToken' })
   @ApiResponse({ status: 401, description: 'Refresh token 无效或已过期' })
   async refresh(@Body() dto: RefreshDto): Promise<{ accessToken: string }> {
-    return this.authService.refreshToken(dto.refreshToken)
+    return this.authService.refreshToken(dto.refreshToken);
   }
 
   @Post('logout')
@@ -74,10 +91,13 @@ export class AuthController {
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '获取当前用户信息', description: '需要有效的 access token' })
+  @ApiOperation({
+    summary: '获取当前用户信息',
+    description: '需要有效的 access token',
+  })
   @ApiResponse({ status: 200, description: '返回当前用户的 JWT payload' })
   @ApiResponse({ status: 401, description: 'Token 无效或已过期' })
   getProfile(@CurrentUser() user: JwtPayload): JwtPayload {
-    return user
+    return user;
   }
 }

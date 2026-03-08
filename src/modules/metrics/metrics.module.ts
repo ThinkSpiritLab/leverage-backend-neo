@@ -1,8 +1,12 @@
-import { Module } from '@nestjs/common'
-import { makeCounterProvider, makeHistogramProvider, PrometheusModule } from '@willsoto/nestjs-prometheus'
+import { Module } from '@nestjs/common';
+import {
+  makeCounterProvider,
+  makeHistogramProvider,
+  PrometheusModule,
+} from '@willsoto/nestjs-prometheus';
 
-export const SUBMISSION_TOTAL_COUNTER = 'submission_total'
-export const JUDGE_DURATION_HISTOGRAM = 'judge_duration_seconds'
+export const SUBMISSION_TOTAL_COUNTER = 'submission_total';
+export const JUDGE_DURATION_HISTOGRAM = 'judge_duration_seconds';
 
 @Module({
   imports: [

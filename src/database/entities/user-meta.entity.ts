@@ -1,24 +1,33 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm'
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
 @Entity()
 export class UserMeta {
   @PrimaryColumn()
-  userId: number
+  userId: number;
 
   @Index()
   @ManyToOne('User', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
-  user: any
+  user: any;
 
   @PrimaryColumn('varchar')
-  key: string
+  key: string;
 
   @Column('text')
-  valueString: string
+  valueString: string;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

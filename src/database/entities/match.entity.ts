@@ -8,36 +8,38 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 export class Match {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Index()
   @Column()
-  gameId: number
+  gameId: number;
 
   @ManyToOne('Game', { nullable: false, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'gameId' })
-  game: any
+  game: any;
 
   @Column('int', { default: 0 })
-  status: number
+  status: number;
 
   @Column('mediumtext', { nullable: true })
-  result: string
+  result: string;
 
   @Column('simple-array', { nullable: true })
-  score: string[]
+  score: string[];
 
-  @OneToMany('MatchGamerLink', (link: any) => link.match, { cascade: ['insert'] })
-  links: any[]
+  @OneToMany('MatchGamerLink', (link: any) => link.match, {
+    cascade: ['insert'],
+  })
+  links: any[];
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

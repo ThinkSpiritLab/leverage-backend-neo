@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
@@ -10,93 +10,99 @@ import {
   IsString,
   MaxLength,
   Min,
-} from 'class-validator'
+} from 'class-validator';
 
 export class CreateContestDto {
-  @ApiPropertyOptional({ description: '类型：contest | exam', default: 'contest' })
+  @ApiPropertyOptional({
+    description: '类型：contest | exam',
+    default: 'contest',
+  })
   @IsOptional()
   @IsString()
-  type?: string
+  type?: string;
 
   @ApiProperty({ description: '竞赛名称' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
-  name: string
+  name: string;
 
   @ApiProperty({ description: '开始时间' })
   @Type(() => Date)
   @IsDate()
-  startTime: Date
+  startTime: Date;
 
   @ApiProperty({ description: '结束时间' })
   @Type(() => Date)
   @IsDate()
-  endTime: Date
+  endTime: Date;
 
   @ApiPropertyOptional({ description: '竞赛描述', default: '' })
   @IsOptional()
   @IsString()
   @MaxLength(10000)
-  description?: string
+  description?: string;
 
   @ApiPropertyOptional({ description: '通知内容', default: '' })
   @IsOptional()
   @IsString()
   @MaxLength(4096)
-  notification?: string
+  notification?: string;
 
-  @ApiPropertyOptional({ description: '是否允许直接登录（用全站密码）', default: true })
+  @ApiPropertyOptional({
+    description: '是否允许直接登录（用全站密码）',
+    default: true,
+  })
   @IsOptional()
   @IsBoolean()
-  allowDirectLogin?: boolean
+  allowDirectLogin?: boolean;
 
   @ApiPropertyOptional({ description: '是否公开', default: false })
   @IsOptional()
   @IsBoolean()
-  public?: boolean
+  public?: boolean;
 
   @ApiPropertyOptional({ description: '是否开放注册', default: false })
   @IsOptional()
   @IsBoolean()
-  openForRegistration?: boolean
+  openForRegistration?: boolean;
 
   @ApiPropertyOptional({ description: '注册截止时间' })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
-  registrationEndTime?: Date
+  registrationEndTime?: Date;
 
   @ApiPropertyOptional({ description: '罚时（分钟）', default: 20 })
   @IsOptional()
   @IsInt()
   @Min(0)
-  penalty?: number
+  penalty?: number;
 
   @ApiPropertyOptional({ description: '设备绑定类型', default: 0 })
   @IsOptional()
   @IsInt()
-  deviceBindType?: number
+  deviceBindType?: number;
 
   @ApiPropertyOptional({ description: '是否按分数计算', default: false })
   @IsOptional()
   @IsBoolean()
-  scoreByPoint?: boolean
+  scoreByPoint?: boolean;
 
   @ApiPropertyOptional({ description: '是否完全封榜', default: false })
   @IsOptional()
   @IsBoolean()
-  fullyFreeze?: boolean
+  fullyFreeze?: boolean;
 
   @ApiPropertyOptional({ description: '封榜时间（分钟，距结束）', default: 0 })
   @IsOptional()
   @IsInt()
   @Min(0)
-  freezeTime?: number
+  freezeTime?: number;
 
   @ApiPropertyOptional({ description: '题目 ID 列表' })
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
-  problemIds?: number[]
+  problemIds?: number[];
 }

@@ -9,20 +9,20 @@ import {
   Post,
   Query,
   UseGuards,
-} from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { ContestService } from './contest.service'
-import { CreateContestDto } from './dto/create-contest.dto'
-import { UpdateContestDto } from './dto/update-contest.dto'
-import { ContestQueryDto } from './dto/contest-query.dto'
-import { ContestUserDto, RegisterContestUserDto } from './dto/contest-user.dto'
-import { CreateSubmissionDto } from '../submission/dto/create-submission.dto'
-import { SubmissionService } from '../submission/submission.service'
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { ContestService } from './contest.service';
+import { CreateContestDto } from './dto/create-contest.dto';
+import { UpdateContestDto } from './dto/update-contest.dto';
+import { ContestQueryDto } from './dto/contest-query.dto';
+import { ContestUserDto, RegisterContestUserDto } from './dto/contest-user.dto';
+import { CreateSubmissionDto } from '../submission/dto/create-submission.dto';
+import { SubmissionService } from '../submission/submission.service';
 
 @ApiTags('contests')
 @ApiBearerAuth()
@@ -40,7 +40,7 @@ export class ContestController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '竞赛列表（分页，支持状态过滤）' })
   findAll(@Query() query: ContestQueryDto) {
-    return this.contestService.findAll(query)
+    return this.contestService.findAll(query);
   }
 
   /**
@@ -51,7 +51,7 @@ export class ContestController {
   @Roles('admin')
   @ApiOperation({ summary: '创建竞赛' })
   create(@Body() dto: CreateContestDto) {
-    return this.contestService.create(dto)
+    return this.contestService.create(dto);
   }
 
   /**
@@ -61,7 +61,7 @@ export class ContestController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '竞赛详情（含题目列表）' })
   findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.contestService.findOne(id)
+    return this.contestService.findOne(id);
   }
 
   /**
@@ -72,7 +72,7 @@ export class ContestController {
   @Roles('admin')
   @ApiOperation({ summary: '更新竞赛' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateContestDto) {
-    return this.contestService.update(id, dto)
+    return this.contestService.update(id, dto);
   }
 
   /**
@@ -83,7 +83,7 @@ export class ContestController {
   @Roles('admin')
   @ApiOperation({ summary: '删除竞赛' })
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.contestService.remove(id)
+    return this.contestService.remove(id);
   }
 
   /**
@@ -98,8 +98,8 @@ export class ContestController {
     @CurrentUser() currentUser: JwtPayload,
   ) {
     // 普通用户只能注册自己
-    const userId = dto.userId ?? currentUser.sub
-    return this.contestService.registerUser(contestId, userId)
+    const userId = dto.userId ?? currentUser.sub;
+    return this.contestService.registerUser(contestId, userId);
   }
 
   /**
@@ -113,7 +113,7 @@ export class ContestController {
     @Param('id', ParseIntPipe) contestId: number,
     @Body() body: { users: ContestUserDto[] },
   ) {
-    return this.contestService.importContestUsers(contestId, body.users)
+    return this.contestService.importContestUsers(contestId, body.users);
   }
 
   /**
@@ -127,7 +127,7 @@ export class ContestController {
     @Query('page') page: number = 1,
     @Query('perPage') perPage: number = 50,
   ) {
-    return this.contestService.getRanking(contestId, +page, +perPage)
+    return this.contestService.getRanking(contestId, +page, +perPage);
   }
 
   /**
@@ -138,7 +138,7 @@ export class ContestController {
   @Roles('supervisor')
   @ApiOperation({ summary: '气球列表（首次 AC 未送达的记录）' })
   getBalloons(@Param('id', ParseIntPipe) contestId: number) {
-    return this.contestService.getBalloons(contestId)
+    return this.contestService.getBalloons(contestId);
   }
 
   /**
@@ -152,7 +152,7 @@ export class ContestController {
     @Param('id', ParseIntPipe) _contestId: number,
     @Param('bid', ParseIntPipe) bid: number,
   ) {
-    return this.contestService.markBalloonDelivered(bid)
+    return this.contestService.markBalloonDelivered(bid);
   }
 
   /**
@@ -170,7 +170,7 @@ export class ContestController {
       ...dto,
       contestId,
       courseId: undefined,
-    })
+    });
   }
 
   /**
@@ -184,6 +184,10 @@ export class ContestController {
     @Query('page') page: string = '1',
     @Query('perPage') perPage: string = '20',
   ) {
-    return this.submissionService.findAll({ page: parseInt(page), perPage: parseInt(perPage), contestId })
+    return this.submissionService.findAll({
+      page: parseInt(page),
+      perPage: parseInt(perPage),
+      contestId,
+    });
   }
 }

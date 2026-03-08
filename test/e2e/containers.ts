@@ -1,9 +1,12 @@
-import { MariaDbContainer, StartedMariaDbContainer } from '@testcontainers/mariadb'
-import { GenericContainer, StartedTestContainer } from 'testcontainers'
+import {
+  MariaDbContainer,
+  StartedMariaDbContainer,
+} from '@testcontainers/mariadb';
+import { GenericContainer, StartedTestContainer } from 'testcontainers';
 
 export interface TestContainers {
-  mariadb: StartedMariaDbContainer
-  redis: StartedTestContainer
+  mariadb: StartedMariaDbContainer;
+  redis: StartedTestContainer;
 }
 
 export async function startContainers(): Promise<TestContainers> {
@@ -13,16 +16,13 @@ export async function startContainers(): Promise<TestContainers> {
       .withUsername('test')
       .withUserPassword('testpass')
       .start(),
-    new GenericContainer('redis:7-alpine')
-      .withExposedPorts(6379)
-      .start(),
-  ])
-  return { mariadb, redis }
+    new GenericContainer('redis:7-alpine').withExposedPorts(6379).start(),
+  ]);
+  return { mariadb, redis };
 }
 
-export async function stopContainers(containers: TestContainers): Promise<void> {
-  await Promise.all([
-    containers.mariadb.stop(),
-    containers.redis.stop(),
-  ])
+export async function stopContainers(
+  containers: TestContainers,
+): Promise<void> {
+  await Promise.all([containers.mariadb.stop(), containers.redis.stop()]);
 }

@@ -10,7 +10,7 @@ import {
   PrimaryGeneratedColumn,
   Unique,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 export enum ProblemStatus {
   PENDING = 0,
@@ -22,81 +22,85 @@ export enum ProblemStatus {
 @Unique(['prefix', 'logicId'])
 export class Problem {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Column('varchar', { length: 8, default: 'p' })
-  prefix: string
+  prefix: string;
 
   @Column('int')
-  logicId: number
+  logicId: number;
 
   @Column('varchar')
-  title: string
+  title: string;
 
   @Column('text')
-  content: string
+  content: string;
 
   @Column('varchar')
-  source: string
+  source: string;
 
   @Column('int')
-  timeLimit: number
+  timeLimit: number;
 
   @Column('int')
-  memoryLimit: number
+  memoryLimit: number;
 
   @Column('int', { nullable: true })
-  difficulty: number
+  difficulty: number;
 
   @Column('int', { comment: '测试文件数量', default: 1 })
-  cases: number
+  cases: number;
 
-  @Column('boolean', { comment: '是否为多组输入', default: false, nullable: true })
-  multiCases: boolean
+  @Column('boolean', {
+    comment: '是否为多组输入',
+    default: false,
+    nullable: true,
+  })
+  multiCases: boolean;
 
   @Column('int', { comment: '提交数', default: 0 })
-  submits: number
+  submits: number;
 
   @Column('int', { comment: '通过数', default: 0 })
-  accepts: number
+  accepts: number;
 
   @Column('boolean', { comment: '限制访问', default: false })
-  restricted: boolean
+  restricted: boolean;
 
   @Index()
   @Column({ default: ProblemStatus.PENDING })
-  status: ProblemStatus
+  status: ProblemStatus;
 
   @Column({ nullable: true })
-  statusUpdatedAt: Date
+  statusUpdatedAt: Date;
 
   @Index()
   @Column('boolean', { comment: '禁止访问', default: true })
-  closed: boolean
+  closed: boolean;
 
   @Index()
   @Column({ nullable: true })
-  createrId: number
+  createrId: number;
 
   @ManyToOne('User')
   @JoinColumn({ name: 'createrId' })
-  creater: any
+  creater: any;
 
   @ManyToMany('Tag', { cascade: true })
   @JoinTable()
-  tags: any[]
+  tags: any[];
 
   @Index()
   @Column({ nullable: true })
-  spjId: number
+  spjId: number;
 
   @ManyToOne('Submission')
   @JoinColumn({ name: 'spjId' })
-  spj: any | null
+  spj: any | null;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

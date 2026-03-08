@@ -1,19 +1,19 @@
-import { Module } from '@nestjs/common'
-import { ConfigModule, ConfigService } from '@nestjs/config'
-import { JwtModule } from '@nestjs/jwt'
-import { PassportModule } from '@nestjs/passport'
-import { TypeOrmModule } from '@nestjs/typeorm'
-import { ContestUser } from '../../database/entities/contest-user.entity'
-import { Contest } from '../../database/entities/contest.entity'
-import { User } from '../../database/entities/user.entity'
-import { ContestAuthGuard } from '../../common/guards/contest-auth.guard'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { AuthController } from './auth.controller'
-import { AuthService } from './auth.service'
-import { JwtAccessStrategy } from './strategies/jwt-access.strategy'
-import { JwtContestStrategy } from './strategies/jwt-contest.strategy'
-import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy'
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ContestUser } from '../../database/entities/contest-user.entity';
+import { Contest } from '../../database/entities/contest.entity';
+import { User } from '../../database/entities/user.entity';
+import { ContestAuthGuard } from '../../common/guards/contest-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
+import { JwtAccessStrategy } from './strategies/jwt-access.strategy';
+import { JwtContestStrategy } from './strategies/jwt-contest.strategy';
+import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
 
 @Module({
   imports: [
@@ -23,15 +23,18 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy'
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const expiresIn = configService.get<string>('jwt.accessExpiresIn', '15m')
+        const expiresIn = configService.get<string>(
+          'jwt.accessExpiresIn',
+          '15m',
+        );
         return {
           secret: configService.get<string>('jwt.accessSecret'),
           signOptions: {
             // cast to any to bypass StringValue narrow type issue
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             expiresIn: expiresIn as any,
           },
-        }
+        };
       },
       inject: [ConfigService],
     }),
@@ -47,12 +50,6 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy'
     RolesGuard,
     ContestAuthGuard,
   ],
-  exports: [
-    AuthService,
-    JwtAuthGuard,
-    RolesGuard,
-    ContestAuthGuard,
-    JwtModule,
-  ],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, ContestAuthGuard, JwtModule],
 })
 export class AuthModule {}

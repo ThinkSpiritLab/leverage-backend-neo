@@ -9,18 +9,18 @@ import {
   Post,
   Query,
   UseGuards,
-} from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { RolesGuard } from '../../common/guards/roles.guard'
-import { Roles } from '../../common/decorators/roles.decorator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import type { JwtPayload } from '../auth/strategies/jwt-access.strategy'
-import { CourseService } from './course.service'
-import { CreateCourseDto } from './dto/create-course.dto'
-import { UpdateCourseDto } from './dto/update-course.dto'
-import { SubmissionService } from '../submission/submission.service'
-import { CreateSubmissionDto } from '../submission/dto/create-submission.dto'
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
+import { CourseService } from './course.service';
+import { CreateCourseDto } from './dto/create-course.dto';
+import { UpdateCourseDto } from './dto/update-course.dto';
+import { SubmissionService } from '../submission/submission.service';
+import { CreateSubmissionDto } from '../submission/dto/create-submission.dto';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -46,7 +46,7 @@ export class CourseController {
       page: parseInt(page),
       perPage: parseInt(perPage),
       type: type !== undefined ? parseInt(type) : undefined,
-    })
+    });
   }
 
   /**
@@ -57,7 +57,7 @@ export class CourseController {
   @Roles('admin')
   @ApiOperation({ summary: '创建课程' })
   create(@Body() dto: CreateCourseDto) {
-    return this.courseService.create(dto)
+    return this.courseService.create(dto);
   }
 
   /**
@@ -67,7 +67,7 @@ export class CourseController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '课程详情' })
   findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.courseService.findOne(id)
+    return this.courseService.findOne(id);
   }
 
   /**
@@ -78,7 +78,7 @@ export class CourseController {
   @Roles('admin')
   @ApiOperation({ summary: '更新课程' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCourseDto) {
-    return this.courseService.update(id, dto)
+    return this.courseService.update(id, dto);
   }
 
   /**
@@ -89,7 +89,7 @@ export class CourseController {
   @Roles('admin')
   @ApiOperation({ summary: '删除课程' })
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.courseService.remove(id)
+    return this.courseService.remove(id);
   }
 
   /**
@@ -103,7 +103,7 @@ export class CourseController {
     @Param('id', ParseIntPipe) courseId: number,
     @Body() body: { userIds: number[] },
   ) {
-    return this.courseService.addStudents(courseId, body.userIds)
+    return this.courseService.addStudents(courseId, body.userIds);
   }
 
   /**
@@ -117,7 +117,7 @@ export class CourseController {
     @Param('id', ParseIntPipe) courseId: number,
     @Param('userId', ParseIntPipe) userId: number,
   ) {
-    return this.courseService.removeStudent(courseId, userId)
+    return this.courseService.removeStudent(courseId, userId);
   }
 
   /**
@@ -127,7 +127,7 @@ export class CourseController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '课程排行榜' })
   getRanking(@Param('id', ParseIntPipe) courseId: number) {
-    return this.courseService.getRanking(courseId)
+    return this.courseService.getRanking(courseId);
   }
 
   /**
@@ -141,7 +141,7 @@ export class CourseController {
     @Param('id', ParseIntPipe) courseId: number,
     @Query('filters') filtersText: string = '',
   ) {
-    return this.courseService.exportSubmissions(courseId, filtersText)
+    return this.courseService.exportSubmissions(courseId, filtersText);
   }
 
   /**
@@ -159,7 +159,7 @@ export class CourseController {
       page: parseInt(page),
       perPage: parseInt(perPage),
       courseId,
-    })
+    });
   }
 
   /**
@@ -177,6 +177,6 @@ export class CourseController {
       ...dto,
       courseId,
       contestId: undefined,
-    })
+    });
   }
 }

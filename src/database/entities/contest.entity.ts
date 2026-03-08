@@ -7,78 +7,78 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
 @Entity()
 export class Contest {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Column('bool', { default: false })
-  allowDirectLogin: boolean
+  allowDirectLogin: boolean;
 
   @Column({ default: 0 })
-  deviceBindType: number
+  deviceBindType: number;
 
   @Index()
   @Column({ nullable: true })
-  consultantId: number
+  consultantId: number;
 
   @ManyToOne('User')
   @JoinColumn({ name: 'consultantId' })
-  consultant: any
+  consultant: any;
 
   @Column('varchar', { default: 'contest', comment: '类型：contest | exam' })
-  type: string
+  type: string;
 
   @Column('varchar')
-  name: string
+  name: string;
 
   @Column('varchar', { default: '' })
-  description: string
+  description: string;
 
   @Column('varchar', { default: '', length: 10240 })
-  notification: string
+  notification: string;
 
   @Column('datetime', { nullable: true })
-  registrationEndTime: Date | null
+  registrationEndTime: Date | null;
 
   @Index()
   @Column('datetime')
-  startTime: Date
+  startTime: Date;
 
   @Index()
   @Column('datetime')
-  endTime: Date
+  endTime: Date;
 
   @Column({ default: 0 })
-  penalty: number
+  penalty: number;
 
   @Index()
   @Column({ default: false })
-  public: boolean
+  public: boolean;
 
   @Column({ default: false })
-  scoreByPoint: boolean
+  scoreByPoint: boolean;
 
   @Column({ default: false })
-  openForRegistration: boolean
+  openForRegistration: boolean;
 
   @Column('bool', { default: false, comment: '是否完全封榜（只能查看自己）' })
-  fullyFreeze: boolean
+  fullyFreeze: boolean;
 
   @Column({ default: 0 })
-  freezeTime: number
+  freezeTime: number;
 
   @Column({ default: 0 })
-  freezeTimeAfterEnd: number
+  freezeTimeAfterEnd: number;
 
   @Column('varchar', { nullable: true })
-  enabledLanguageJSON: string | null
+  enabledLanguageJSON: string | null;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 }

@@ -7,84 +7,84 @@ import {
   PrimaryGeneratedColumn,
   Unique,
   UpdateDateColumn,
-} from 'typeorm'
+} from 'typeorm';
 
-export type Authority = 'user' | 'admin' | 'superadmin' | string
-export type Certification = string
+export type Authority = 'user' | 'admin' | 'superadmin' | string;
+export type Certification = string;
 
 @Entity()
 @Unique(['username'])
 export class User {
   @PrimaryGeneratedColumn()
-  id: number
+  id: number;
 
   @Column('varchar', { length: 20 })
-  username: string
+  username: string;
 
   @Column('varchar', { name: 'password', length: 200, select: false })
-  passwordHash: string
+  passwordHash: string;
 
   @Column('varchar', { nullable: true, length: 32 })
-  nickname: string | null
+  nickname: string | null;
 
   @Column('varchar', { default: null })
-  sex: string
+  sex: string;
 
   @Index()
   @Column('varchar', { comment: '用户权限', default: 'user' })
-  authority: Authority
+  authority: Authority;
 
   @Column('int', { default: 0 })
-  submits: number
+  submits: number;
 
   @Column('int', { default: null })
-  rank: number
+  rank: number;
 
   @Index()
   @Column('int', { default: 0 })
-  status: number
+  status: number;
 
   @Column('datetime', { nullable: true })
-  statusEndsAt: Date
+  statusEndsAt: Date;
 
   @Column('varchar', { default: null })
-  remarks: string
+  remarks: string;
 
   @Column('int', { default: 0 })
-  accepts: number
+  accepts: number;
 
   @Index()
   @Column('varchar', { comment: '真实姓名', length: 32, nullable: true })
-  certifiedName: string | null
+  certifiedName: string | null;
 
   @Column('varchar', { comment: '认证类别', length: 32, nullable: true })
-  certifyType: Certification | null
+  certifyType: Certification | null;
 
   @Index()
   @Column('varchar', { nullable: true, length: 16 })
-  grade: string | null
+  grade: string | null;
 
   @Index()
   @Column('varchar', { nullable: true, length: 32 })
-  college: string | null
+  college: string | null;
 
   @Index()
   @Column('varchar', { nullable: true, length: 32 })
-  profession: string | null
+  profession: string | null;
 
   @Column('varchar', { nullable: true, length: 32 })
-  class: string | null
+  class: string | null;
 
   /** 180 天未提交: 1, 360 天未提交: 2 */
   @Column('int', { default: 0, select: false })
-  shadowed: number
+  shadowed: number;
 
   @CreateDateColumn()
-  createdAt: Date
+  createdAt: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date
+  updatedAt: Date;
 
   @OneToMany('UserMeta', (meta: any) => meta.user, { cascade: true })
-  metas: any[]
+  metas: any[];
 }

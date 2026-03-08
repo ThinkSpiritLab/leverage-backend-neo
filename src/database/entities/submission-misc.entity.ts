@@ -1,20 +1,20 @@
-import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm'
+import { Column, Entity, JoinColumn, OneToOne, PrimaryColumn } from 'typeorm';
 
 @Entity()
 export class SubmissionMisc {
   @PrimaryColumn()
-  submissionId: number
+  submissionId: number;
 
   @OneToOne('Submission', (s: any) => s.misc, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'submissionId' })
-  submission: any
+  submission: any;
 
   @Column('text', { nullable: true })
-  judgeResult?: string
+  judgeResult?: string;
 
   @Column('text')
-  code: string
+  code: string;
 
   @Column('text', { nullable: true })
-  compileErrorMsg?: string
+  compileErrorMsg?: string;
 }
