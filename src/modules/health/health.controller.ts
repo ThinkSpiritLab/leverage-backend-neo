@@ -98,6 +98,67 @@ export class HealthController {
     return { status: 'ready', timestamp: new Date().toISOString() };
   }
 
+  @Get('system')
+  @ApiOperation({ summary: 'System info — process uptime, CPU, memory, Node version' })
+  async systemInfo() {
+    const mem = process.memoryUsage();
+    const cpu = process.cpuUsage();
+    const uptimeSec = process.uptime();
+
+    // DB response time
+    let dbLatencyMs = -1;
+    try {
+      const t0 = Date.now();
+      await this.dataSource.query('SELECT 1');
+      dbLatencyMs = Date.now() - t0;
+    } catch { /* ignore */ }
+
+    // Redis response time
+    let redisLatencyMs = -1;
+    try {
+      const t0 = Date.now();
+      await this.redis.getClient().ping();
+      redisLatencyMs = Date.now() - t0;
+    } catch { /* ignore */ }
+
+    const formatMB = (b: number) => `${(b / 1024 / 1024).toFixed(1)} MB`;
+    const formatUptime = (s: number) => {
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = Math.floor(s % 60);
+      return h > 0 ? `${h}h ${m}m ${sec}s` : m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+    };
+
+    return {
+      process: {
+        pid: process.pid,
+        uptime: formatUptime(uptimeSec),
+        uptimeSec: Math.floor(uptimeSec),
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch,
+      },
+      memory: {
+        heapUsed: formatMB(mem.heapUsed),
+        heapTotal: formatMB(mem.heapTotal),
+        rss: formatMB(mem.rss),
+        external: formatMB(mem.external),
+        heapUsedBytes: mem.heapUsed,
+        rssBytes: mem.rss,
+      },
+      cpu: {
+        userMs: Math.round(cpu.user / 1000),
+        systemMs: Math.round(cpu.system / 1000),
+      },
+      latency: {
+        dbMs: dbLatencyMs,
+        redisMs: redisLatencyMs,
+      },
+      env: process.env.NODE_ENV ?? 'development',
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   @Get('queues')
   @ApiOperation({ summary: 'Queue status — job counts for judge-tx queue' })
   async checkQueues() {
