@@ -129,6 +129,16 @@ export class ContestController {
   }
 
   /**
+   * GET /contests/:id/icpc-ranking — ICPC 式榜单
+   */
+  @Get(':id/icpc-ranking')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'ICPC 式榜单（实时计算，含每题状态/罚时/冻榜）' })
+  icpcRanking(@Param('id', ParseIntPipe) contestId: number) {
+    return this.contestService.icpcRanking(contestId);
+  }
+
+  /**
    * GET /contests/:id/ranking — 排行榜（分页）
    */
   @Get(':id/ranking')

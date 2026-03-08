@@ -5,7 +5,29 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
+
+// ── ICPC 榜单类型 ────────────────────────────────────────────────────────────
+export interface IcpcProblemStat {
+  problemId: number;
+  label: string;
+  /** null = 未尝试 */
+  acTime: number | null;  // 分钟（从比赛开始）
+  attempts: number;       // WA 次数（不含最终 AC）
+  frozen: boolean;        // 该题最新提交是否在冻榜期内（显示 ?）
+}
+
+export interface IcpcRankRow {
+  rank: number;
+  userId: number;
+  username: string;
+  certifiedName: string | null;
+  room: string | null;
+  seat: string | null;
+  solved: number;
+  totalPenalty: number; // 分钟（每道 AC 题：acTime + wa*penalty）
+  problems: Record<string, IcpcProblemStat>; // key = problemId
+}
 import { randomBytes } from 'crypto';
 import { Contest } from '../../database/entities/contest.entity';
 import { ContestProblem } from '../../database/entities/contest-problem.entity';
@@ -45,6 +67,7 @@ export class ContestService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly redisService: RedisService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -405,5 +428,148 @@ export class ContestService {
     if (dto.weight !== undefined) cp.weight = dto.weight;
     if (dto.label !== undefined) cp.label = dto.label;
     return this.contestProblemRepo.save(cp);
+  }
+
+  /**
+   * ICPC 式榜单
+   * - 从 submission 表实时计算（无需预先 Redis 写入）
+   * - 支持冻榜：冻榜期内的提交显示 ?，不影响排名
+   */
+  async icpcRanking(contestId: number): Promise<IcpcRankRow[]> {
+    const contest = await this.findOne(contestId);
+    const startMs = new Date(contest.startTime).getTime();
+    const endMs   = new Date(contest.endTime).getTime();
+    const penaltyMin: number = (contest as any).penalty ?? 20;
+
+    // 冻榜：freezeTime 分钟前开始冻结（0 = 不冻）
+    const freezeMin: number = (contest as any).freezeTime ?? 0;
+    const freezeMs = freezeMin > 0 ? endMs - freezeMin * 60_000 : Infinity;
+
+    // 获取该竞赛题目（label 信息）
+    const cpRows = await this.contestProblemRepo.find({ where: { contestId } });
+    const labelMap = new Map(cpRows.map((cp) => [cp.problemId, cp.label ?? '']));
+    const problemIds = cpRows.map((cp) => cp.problemId);
+
+    if (problemIds.length === 0) return [];
+
+    // 查竞赛所有提交（在比赛时间内，status ∈ 全部）
+    const subs: { userId: number; problemId: number; status: number; createdAt: Date }[] =
+      await this.dataSource.query(
+        `SELECT userId, problemId, status, createdAt
+         FROM submission
+         WHERE contestId = ?
+           AND createdAt >= ? AND createdAt <= ?
+         ORDER BY createdAt ASC`,
+        [contestId, contest.startTime, contest.endTime],
+      );
+
+    // 获取该竞赛参赛用户
+    const cuRows = await this.contestUserRepo.find({
+      where: { contestId },
+      relations: ['user'],
+    });
+    const userMap = new Map(cuRows.map((cu) => [cu.userId, cu]));
+
+    // 按 userId 分组并计算每题状态
+    // key = `${userId}-${problemId}`
+    type Acc = {
+      waCount: number;
+      acTime: number | null;
+      frozen: boolean;
+    };
+    const acc = new Map<string, Acc>();
+
+    for (const sub of subs) {
+      if (!problemIds.includes(sub.problemId)) continue;
+      if (!userMap.has(sub.userId)) continue;
+
+      const key = `${sub.userId}-${sub.problemId}`;
+      let state = acc.get(key);
+      if (!state) {
+        state = { waCount: 0, acTime: null, frozen: false };
+        acc.set(key, state);
+      }
+
+      // 已经 AC 了不再处理
+      if (state.acTime !== null) continue;
+
+      const subMs = new Date(sub.createdAt).getTime();
+      const elapsedMin = (subMs - startMs) / 60_000;
+      const inFreeze = subMs >= freezeMs;
+
+      if (sub.status === 0) {
+        // AC
+        if (inFreeze) {
+          state.frozen = true;
+          // 冻榜期内不确认 AC，标记 frozen
+        } else {
+          state.acTime = elapsedMin;
+        }
+      } else if ([1, 2, 3, 4, 6, 8].includes(sub.status)) {
+        // WA/TLE/MLE/CE/RE/CRLE
+        if (!inFreeze) {
+          state.waCount++;
+        } else {
+          state.frozen = true;
+        }
+      }
+    }
+
+    // 构建 rows
+    const rows: IcpcRankRow[] = [];
+    for (const [userId, cu] of userMap) {
+      const problems: Record<string, IcpcProblemStat> = {};
+      let solved = 0;
+      let totalPenalty = 0;
+
+      for (const pid of problemIds) {
+        const key = `${userId}-${pid}`;
+        const state = acc.get(key);
+        const label = labelMap.get(pid) ?? '';
+
+        if (!state) {
+          problems[pid] = { problemId: pid, label, acTime: null, attempts: 0, frozen: false };
+          continue;
+        }
+
+        const stat: IcpcProblemStat = {
+          problemId: pid,
+          label,
+          acTime: state.acTime,
+          attempts: state.waCount,
+          frozen: state.frozen,
+        };
+        problems[pid] = stat;
+
+        if (state.acTime !== null) {
+          solved++;
+          totalPenalty += Math.round(state.acTime) + state.waCount * penaltyMin;
+        }
+      }
+
+      const u = cu.user;
+      rows.push({
+        rank: 0,
+        userId,
+        username: u?.username ?? String(userId),
+        certifiedName: u?.certifiedName ?? null,
+        room: cu.room ?? null,
+        seat: cu.seat ?? null,
+        solved,
+        totalPenalty,
+        problems,
+      });
+    }
+
+    // 排序：AC 多 > 罚时少（冻榜用户不改变已确认位置）
+    rows.sort((a, b) => {
+      if (b.solved !== a.solved) return b.solved - a.solved;
+      return a.totalPenalty - b.totalPenalty;
+    });
+
+    // 赋 rank
+    rows.forEach((r, i) => { r.rank = i + 1; });
+
+    return rows;
   }
 }

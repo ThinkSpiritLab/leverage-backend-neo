@@ -19,6 +19,7 @@ import { ContestService } from './contest.service';
       ContestUserProblem,
       User,
     ]),
+    // Note: Submission is accessed via DataSource raw query to avoid circular imports
     AuthModule,
     SubmissionModule,
   ],
