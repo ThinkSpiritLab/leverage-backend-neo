@@ -184,3 +184,190 @@ The column **Auth** in the tables below uses:
 | 500 | Internal Server Error |
 
 For full request/response schemas, refer to the Swagger UI at `/api/docs`.
+
+---
+
+## Additional Routes (Post-Refactor)
+
+The following endpoints were added after the initial documentation was written. They supplement the routes listed above.
+
+---
+
+### Submissions — `/submissions` (Additional)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/submissions/count` | — | 返回提交总数（整数） |
+| GET | `/submissions/ratio` | supervisor | 通过率统计（按状态分组）；query: `problemId`（必填），`contestId`，`courseId` |
+| POST | `/submissions/search` | — | 分页搜索提交；body: `SearchSubmissionDto`；query: `page`，`contestId`，`courseId` |
+| POST | `/submissions/search-unlimited` | supervisor | 管理员无限制搜索，无 userId/visibiliy 过滤；body: `SearchSubmissionDto` |
+| POST | `/submissions/rejudge-log` | admin | 查询重判日志；body: `SearchSubmissionDto`；query: `page` |
+| GET | `/submissions/user-problem-status` | user | 查询当前用户对单题的提交状态；query: `userId`，`problemId`，`contestId`，`courseId` |
+| GET | `/submissions/user-problem-status/batch` | user | 批量查询当前用户对多题的提交状态；query: `userId`，`problemIds`（逗号分隔），`contestId`，`courseId` |
+| POST | `/submissions/batch-rejudge` | admin | 批量重判；body: `RejudgeDto`；query: `count`（仅统计数量） |
+| GET | `/submissions/code-zip` | admin | 下载代码 zip 包；query: `userId`，`contestId`，`courseId`，`problemId`，`take` |
+| GET | `/submissions/sus-recent` | admin | 最近未处理的可疑提交列表（最多 12 条，按评分降序） |
+| GET | `/submissions/sus-union` | admin | 按用户列表查重合并结果；query: `users`（逗号分隔的用户 ID） |
+| GET | `/submissions/sus-xlsx` | admin | 导出查重结果 CSV；query: `contestId`，`courseId`，`problemId`，`userId`，`take` |
+| GET | `/submissions/sus/:hashsum` | admin | 按 hashsum 查相同代码的提交列表 |
+| PUT | `/submissions/sus-checked/:id` | admin | 标记/取消标记查重记录为已处理 |
+| POST | `/submissions/sus-test` | admin | 对代码字符串计算查重指标；body: `{ code: string }` |
+| GET | `/submissions/ce/:id` | user | 获取编译错误详情（只能查自己，管理员不限） |
+| POST | `/submissions/:id/inspect` | user | 查看提交代码（只能查自己，管理员不限）；返回 `{ id, code }` |
+| DELETE | `/submissions/:id` | admin | 删除提交 |
+
+> **注意：** 以上路由中 `GET /submissions/sus-recent`、`sus-union`、`sus-xlsx`、`sus/:hashsum`、`sus-checked/:id`、`sus-test` 均需要 `admin+`；`ce/:id` 和 `:id/inspect` 需要登录，仅限本人或管理员查看。
+
+---
+
+### Problems — `/problems` (Additional)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/problems/next-id` | admin | 获取下一个可用 logicId；query: `prefix`（必填，如 `p`） |
+| GET | `/problems/logic` | — | 按 prefix + logicId 查询题目；query: `prefix`，`logicId` |
+| GET | `/problems/digest-partial` | — | 题目摘要列表（精简字段，用于选择器）；query: `page`，`tags`，`title`，`todo` |
+| GET | `/problems/manage-partial` | admin | 管理员视角题目列表（含隐藏题目）；query: `page`，`tags`，`title` |
+| GET | `/problems/manage/available-digest` | admin | 管理员可用题目摘要（未关闭）；query: `page` |
+| POST | `/problems/import-fps` | admin | 从 FPS XML 格式导入题目；multipart/form-data，字段 `file`（xml）和 `params`（JSON 字符串） |
+| POST | `/problems/simp-extra` | admin | 快速创建题目骨架；body: `SimpExtraDto`（`title`，`prefix`） |
+| POST | `/problems/batch-zip-hash` | admin | 批量生成测试数据 zip hash；body: `ZipHashDto` |
+| GET | `/problems/course-problem-list/:courseId` | admin | 获取课程的题目 ID 列表 |
+| GET | `/problems/contest-problem-list/:contestId` | admin | 获取竞赛的题目 ID 列表 |
+| GET | `/problems/:id/ratio` | — | 题目提交数/通过数统计 |
+| GET | `/problems/:id/refs` | admin | 题目被引用情况（在哪些竞赛/课程中使用） |
+| GET | `/problems/:id/tag` | — | 获取题目标签列表 |
+| POST | `/problems/:id/tag` | admin | 给题目添加标签；body: `{ tagId: number }` |
+| DELETE | `/problems/:id/tag/:tagId` | admin | 移除题目标签 |
+| GET | `/problems/:id/test-cases` | admin | 获取测试用例文件列表（文件名） |
+
+---
+
+### Users — `/users` (Additional)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/users/:id/problem-status` | user | 用户做题状态（从 Redis 读）；query: `problemIds`（逗号分隔） |
+
+> **注意：** 原有文档中的 `GET /users/:id/problem-status` 与此相同，已在原文档中列出。如需查询多题批量状态，请参考 `GET /submissions/user-problem-status/batch`。
+
+---
+
+### Compete (Bot Battle) — `/compete` (Additional)
+
+以下为 Compete 模块在原文档基础上新增的 **Rooms** 子模块端点：
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/compete/rooms` | user | 创建对战房间；body: `CreateRoomDto` |
+| GET | `/compete/rooms` | — | 列出所有开放中的房间 |
+| GET | `/compete/rooms/cooldown` | user | 查询当前用户创建房间的冷却时间 |
+| GET | `/compete/rooms/:id` | — | 获取房间详情 |
+| POST | `/compete/rooms/:id/submit` | user | 在房间中提交 Bot；body: `SubmitGamerDto` |
+| POST | `/compete/rooms/:id/start` | user | 开始对局（房主或 admin） |
+| PUT | `/compete/rooms/:id/open` | user | 开放房间（允许其他人加入） |
+| PUT | `/compete/rooms/:id/close` | user | 关闭房间（停止接受新加入） |
+| PUT | `/compete/rooms/:id/player` | user | 设置房间位置的玩家；body: `ModifyPlayerDto` |
+
+**Matches 子模块新增：**
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/compete/matches/:id/inspect` | user | 查看对局代码详情（含 gamer 代码） |
+
+---
+
+### Transmit — `/transmit`
+
+> 全新模块，所有端点需要 `admin+`。
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/transmit/judgers` | admin | 列出评测机（deprecated，返回静态数据） |
+| GET | `/transmit/refresh-test-files` | admin | 手动触发从 OSS 刷新测试数据文件（未配置 OSS 时跳过） |
+| GET | `/transmit/rebuild-rank-log` | admin | 手动重建竞赛/课程排行榜 Redis Sorted Set |
+| GET | `/transmit/queue-status` | admin | 查询 BullMQ 评测队列状态 |
+
+---
+
+### Notifications — `/notifications`
+
+> 原文档未收录，现补充完整。
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/notifications` | — | 通知列表；query: `page`，`perPage` |
+| POST | `/notifications` | admin | 创建通知；body: `CreateNotificationDto` |
+| GET | `/notifications/unread-count` | user | 获取当前用户未读通知数 |
+| PATCH | `/notifications/:id/read` | user | 标记通知已读（204 No Content） |
+
+---
+
+### Tags — `/tags`
+
+> 原文档未收录，现补充完整。
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/tags` | — | 获取所有标签（树形结构） |
+| POST | `/tags` | admin | 创建标签；body: `CreateTagDto` |
+| PATCH | `/tags/:id` | admin | 更新标签；body: `UpdateTagDto` |
+| DELETE | `/tags/:id` | admin | 删除标签（204 No Content） |
+
+---
+
+### Settings — `/settings`
+
+> 原文档未收录，现补充完整。
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/settings/public` | — | 获取公开配置（站点名称等） |
+| GET | `/settings` | admin | 获取所有配置 |
+| POST | `/settings` | admin | 设置配置；body: `{ key: string, value: any }` |
+
+---
+
+### Statistics — `/statistics`
+
+> 原文档未收录，现补充完整。
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/statistics/overview` | admin | 获取系统概览（用户数、提交数等） |
+| GET | `/statistics/problem/:id/ratio` | — | 获取题目通过率 |
+| GET | `/statistics/user/:id/activity` | — | 获取用户活跃度 |
+
+---
+
+### Logs — `/logs`
+
+> 原文档未收录，现补充完整。所有端点需要 `admin+`。
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/logs` | admin | 获取操作日志列表；query: `userId`，`page`，`perPage`（上限 100） |
+
+---
+
+### Colleges & Professions — `/colleges`, `/professions`
+
+> 原文档未收录，现补充完整（学院/专业管理）。
+
+**学院：**
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/colleges` | — | 获取所有学院列表 |
+| POST | `/colleges` | admin | 创建学院；body: `CreateCollegeDto` |
+| PATCH | `/colleges/:id` | admin | 更新学院；body: `UpdateCollegeDto` |
+| DELETE | `/colleges/:id` | admin | 删除学院 |
+
+**专业：**
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/professions` | — | 获取所有专业列表；query: `college`（学院名，可选过滤） |
+| POST | `/professions` | admin | 创建专业；body: `CreateProfessionDto` |
+| PATCH | `/professions/:id` | admin | 更新专业；body: `UpdateProfessionDto` |
+| DELETE | `/professions/:id` | admin | 删除专业 |
