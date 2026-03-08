@@ -20,10 +20,15 @@ const makeQb = (overrides: Record<string, any> = {}) => {
     andWhere: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     leftJoinAndSelect: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
     getMany: jest.fn().mockResolvedValue([]),
     getOne: jest.fn().mockResolvedValue(null),
+    getRawAndEntities: jest
+      .fn()
+      .mockResolvedValue({ raw: [], entities: [] }),
     ...overrides,
   };
   return qb;
@@ -192,17 +197,30 @@ describe('ContestService', () => {
   describe('findOne', () => {
     it('返回竞赛详情（含题目）', async () => {
       contestRepo.findOne.mockResolvedValue(contestFixture);
-      const problems = [{ contestId: 1, problemId: 10, label: 'A' }];
-      contestProblemRepo.find.mockResolvedValue(problems);
+      const qb = makeQb({
+        getRawAndEntities: jest.fn().mockResolvedValue({
+          entities: [{ contestId: 1, problemId: 10, label: 'A' }],
+          raw: [{ p_title: 'Two Sum', p_logicId: 'P1000', p_prefix: 'LC' }],
+        }),
+      });
+      contestProblemRepo.createQueryBuilder.mockReturnValue(qb);
 
       const result = await service.findOne(1);
 
       expect(result.id).toBe(1);
       expect(result.problems).toHaveLength(1);
-      expect(contestProblemRepo.find).toHaveBeenCalledWith({
-        where: { contestId: 1 },
-        order: { label: 'ASC' },
-      });
+      expect(result.problems[0]).toEqual(
+        expect.objectContaining({
+          contestId: 1,
+          problemId: 10,
+          label: 'A',
+          title: 'Two Sum',
+          logicId: 'P1000',
+          prefix: 'LC',
+        }),
+      );
+      expect(qb.leftJoin).toHaveBeenCalledWith('problem', 'p', 'p.id = cp.problemId');
+      expect(qb.where).toHaveBeenCalledWith('cp.contestId = :id', { id: 1 });
     });
 
     it('竞赛不存在时抛 NotFoundException', async () => {
