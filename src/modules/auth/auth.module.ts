@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContestUser } from '../../database/entities/contest-user.entity';
 import { Contest } from '../../database/entities/contest.entity';
 import { User } from '../../database/entities/user.entity';
+import { Setting } from '../../database/entities/setting.entity';
 import { ContestAuthGuard } from '../../common/guards/contest-auth.guard';
 import { MetricsModule } from '../metrics/metrics.module';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -21,7 +22,7 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
     ConfigModule,
     MetricsModule,
     PassportModule,
-    TypeOrmModule.forFeature([User, ContestUser, Contest]),
+    TypeOrmModule.forFeature([User, ContestUser, Contest, Setting]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {

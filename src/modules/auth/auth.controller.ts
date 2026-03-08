@@ -20,12 +20,24 @@ import { AuthService } from './auth.service';
 import { LoginContestDto } from './dto/login-contest.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { RegisterDto } from './dto/register.dto';
 import type { JwtPayload } from './strategies/jwt-access.strategy';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({ summary: '用户注册' })
+  @ApiResponse({ status: 201, description: '注册成功' })
+  @ApiResponse({ status: 403, description: '站点未开放注册' })
+  @ApiResponse({ status: 409, description: '用户名已存在' })
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.registerUser(dto);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

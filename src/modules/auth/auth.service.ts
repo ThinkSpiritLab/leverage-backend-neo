@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,6 +13,7 @@ import { Counter } from 'prom-client';
 import { LOGIN_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { ContestUser } from '../../database/entities/contest-user.entity';
 import { Contest } from '../../database/entities/contest.entity';
+import { Setting } from '../../database/entities/setting.entity';
 import { User } from '../../database/entities/user.entity';
 import {
   hashPassword,
@@ -36,11 +42,50 @@ export class AuthService {
     private contestUserRepo: Repository<ContestUser>,
     @InjectRepository(Contest)
     private contestRepo: Repository<Contest>,
+    @InjectRepository(Setting)
+    private settingRepo: Repository<Setting>,
     private jwtService: JwtService,
     private configService: ConfigService,
     @InjectMetric(LOGIN_TOTAL_COUNTER)
     private readonly loginCounter: Counter<string>,
   ) {}
+
+  async registerUser(dto: {
+    username: string;
+    password: string;
+    certifiedName?: string;
+    email?: string;
+  }): Promise<Omit<User, 'passwordHash'>> {
+    const registerOpen = await this.settingRepo.findOne({
+      where: { key: 'register.open' },
+      cache: 12 * 1000,
+    });
+    const isOpen = !registerOpen || ['true', '1'].includes(registerOpen.valueString);
+    if (!isOpen) {
+      throw new ForbiddenException('当前站点未开放注册');
+    }
+
+    const exists = await this.userRepo.findOne({
+      where: { username: dto.username },
+      select: ['id'],
+    });
+    if (exists) {
+      throw new ConflictException('用户名已存在');
+    }
+
+    void dto.email; // 当前 schema 暂不存 email，预留字段
+
+    const created = this.userRepo.create({
+      username: dto.username,
+      passwordHash: hashPassword(dto.password),
+      authority: 'user',
+      certifiedName: dto.certifiedName ?? null,
+    });
+
+    const saved = await this.userRepo.save(created);
+    const { passwordHash: _passwordHash, ...safeUser } = saved;
+    return safeUser;
+  }
 
   /**
    * 普通用户登录
