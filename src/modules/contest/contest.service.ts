@@ -365,7 +365,71 @@ export class ContestService {
     }
   }
 
+  async exportIcpcCsv(contestId: number): Promise<Buffer> {
+    const rows = await this.icpcRanking(contestId);
+    const contest = await this.findOne(contestId);
+    const cpRows = [...(contest.problems ?? [])].sort((a, b) => {
+      const aLabel = a.label ?? '';
+      const bLabel = b.label ?? '';
+      return aLabel.localeCompare(bLabel);
+    });
+
+    const headers = ['排名', '用户名', '姓名', 'AC数', '罚时'];
+    for (const cp of cpRows) {
+      const label = cp.label ?? String(cp.problemId);
+      headers.push(`题${label} AC时间`, `题${label} WA次数`);
+    }
+
+    const lines: string[] = [headers.join(',')];
+    for (const row of rows) {
+      const cols: Array<string | number> = [
+        row.rank,
+        row.username,
+        row.certifiedName ?? '',
+        row.solved,
+        row.totalPenalty,
+      ];
+
+      for (const cp of cpRows) {
+        const stat = row.problems[cp.problemId];
+        cols.push(stat?.acTime === null || stat?.acTime === undefined ? '' : Math.round(stat.acTime));
+        cols.push(stat?.attempts ?? 0);
+      }
+
+      lines.push(cols.map((value) => this.escapeCsv(value)).join(','));
+    }
+
+    return Buffer.from(`\uFEFF${lines.join('\n')}`, 'utf8');
+  }
+
+  async exportContestUsersCsv(contestId: number): Promise<Buffer> {
+    const contestUsers = await this.contestUserRepo.find({
+      where: { contestId },
+      relations: ['user'],
+      order: { userId: 'ASC' },
+    });
+
+    const lines: string[] = ['用户名,姓名,座位,房间'];
+    for (const contestUser of contestUsers) {
+      const username = contestUser.user?.username ?? String(contestUser.userId);
+      const name = contestUser.user?.certifiedName ?? '';
+      const seat = contestUser.seat ?? '';
+      const room = contestUser.room ?? '';
+      lines.push([username, name, seat, room].map((value) => this.escapeCsv(value)).join(','));
+    }
+
+    return Buffer.from(`\uFEFF${lines.join('\n')}`, 'utf8');
+  }
+
   // ─── 私有方法 ─────────────────────────────────────────────────────────────────
+
+  private escapeCsv(value: string | number): string {
+    const text = String(value ?? '');
+    if (/[",\n]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  }
 
   private async addProblems(
     contestId: number,

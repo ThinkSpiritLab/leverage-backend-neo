@@ -8,9 +8,11 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -136,6 +138,20 @@ export class ContestController {
   @ApiOperation({ summary: 'ICPC 式榜单（实时计算，含每题状态/罚时/冻榜）' })
   icpcRanking(@Param('id', ParseIntPipe) contestId: number) {
     return this.contestService.icpcRanking(contestId);
+  }
+
+  @Get(':id/results/export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '导出 ICPC 榜单 CSV（admin+）' })
+  async exportIcpcRankingCsv(
+    @Param('id', ParseIntPipe) contestId: number,
+    @Res() res: Response,
+  ) {
+    const csv = await this.contestService.exportIcpcCsv(contestId);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="contest-${contestId}-ranking.csv"`);
+    res.send(csv);
   }
 
   /**
