@@ -14,6 +14,10 @@ import { ReceiveModule } from './modules/receive/receive.module'
 import { ProblemModule } from './modules/problem/problem.module'
 import { SubmissionModule } from './modules/submission/submission.module'
 import { TagModule } from './modules/tag/tag.module'
+import { UserModule } from './modules/user/user.module'
+import { ContestModule } from './modules/contest/contest.module'
+import { CourseModule } from './modules/course/course.module'
+import { ProfessionCollegeModule } from './modules/profession-college/profession-college.module'
 
 @Module({
   imports: [
@@ -60,6 +64,18 @@ import { TagModule } from './modules/tag/tag.module'
 
     // 标签模块
     TagModule,
+
+    // 用户模块
+    UserModule,
+
+    // 学院/专业模块
+    ProfessionCollegeModule,
+
+    // 竞赛模块
+    ContestModule,
+
+    // 课程模块
+    CourseModule,
   ],
 })
 export class AppModule {}
