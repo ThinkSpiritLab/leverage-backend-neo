@@ -5,6 +5,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
+import { Request, Response, NextFunction } from 'express';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const jwt = require('jsonwebtoken');
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -14,6 +17,40 @@ async function bootstrap() {
 
   // Use nestjs-pino as the logger
   app.useLogger(app.get(Logger));
+
+  // Bull Board auth guard — must be registered BEFORE NestJS initializes routes
+  // because @bull-board/nestjs mounts as an Express sub-app, bypassing NestJS middleware
+  app.use('/admin/queues', (req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.headers['authorization'] as string | undefined;
+    const queryToken = req.query['token'] as string | undefined;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : queryToken;
+
+    if (!token) {
+      res.status(401).send(`
+        <html><body style="font-family:sans-serif;padding:2em">
+          <h2>🔒 Bull Board — Admin Only</h2>
+          <p>Please provide your admin JWT token:</p>
+          <form method="GET">
+            <input name="token" type="text" placeholder="Paste JWT token here" style="width:400px;padding:8px">
+            <button type="submit" style="padding:8px 16px">Enter</button>
+          </form>
+        </body></html>
+      `);
+      return;
+    }
+    try {
+      const secret = process.env.JWT_ACCESS_SECRET ?? 'change_me_access_secret';
+      const payload = jwt.verify(token, secret) as any;
+      const authority: string = payload.authority ?? payload.role ?? '';
+      if (!['admin', 'sa', 'superadmin'].includes(authority)) {
+        res.status(403).send('<html><body><h2>403 Forbidden — Admin role required</h2></body></html>');
+        return;
+      }
+      next();
+    } catch {
+      res.status(401).send('<html><body><h2>401 Unauthorized — Invalid or expired token</h2></body></html>');
+    }
+  });
 
   // gzip compression for large JSON responses (leaderboard, problem list, etc.)
   app.use(compression());
