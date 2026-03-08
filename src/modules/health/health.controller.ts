@@ -2,7 +2,7 @@ import { Controller, Get, ServiceUnavailableException } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bull'
 import { ApiOperation, ApiTags } from '@nestjs/swagger'
 import { InjectDataSource } from '@nestjs/typeorm'
-import { Queue } from 'bull'
+import Bull from 'bull'
 import { DataSource } from 'typeorm'
 import { RedisService } from '../redis/redis.service'
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants'
@@ -16,7 +16,7 @@ export class HealthController {
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     private readonly redis: RedisService,
-    @InjectQueue(JUDGE_TX_QUEUE) private readonly judgeTxQueue: Queue,
+    @InjectQueue(JUDGE_TX_QUEUE) private readonly judgeTxQueue: Bull.Queue,
   ) {}
 
   @Get()
