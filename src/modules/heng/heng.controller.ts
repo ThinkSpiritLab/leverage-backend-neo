@@ -7,10 +7,8 @@ import {
   Param,
   ParseIntPipe,
   Post,
-  Req,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { Request } from 'express';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -35,9 +33,6 @@ import { JudgeState } from './heng.types';
 export class HengController {
   private readonly logger = new Logger(HengController.name);
   private readonly callbackToken = process.env.HENG_CALLBACK_TOKEN;
-  private readonly allowedIps: string[] = process.env.HENG_ALLOWED_IPS
-    ? process.env.HENG_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
-    : [];
 
   constructor(
     @InjectQueue(JUDGE_RX_QUEUE)
@@ -55,10 +50,9 @@ export class HengController {
     @Param('submissionId', ParseIntPipe) submissionId: number,
     @Param('judgeId') judgeId: string,
     @Body() body: { state: JudgeState },
-    @Req() req: Request,
     @Headers('x-heng-token') token?: string,
   ): Promise<void> {
-    this.assertCallbackAuthorized(req, token);
+    this.assertCallbackAuthorized(token);
     this.logger.debug(
       `Update callback: submissionId=${submissionId}, state=${body.state}`,
     );
@@ -87,10 +81,9 @@ export class HengController {
     @Param('submissionId', ParseIntPipe) submissionId: number,
     @Param('judgeId') judgeId: string,
     @Body() body: Record<string, unknown>,
-    @Req() req: Request,
     @Headers('x-heng-token') token?: string,
   ): Promise<void> {
-    this.assertCallbackAuthorized(req, token);
+    this.assertCallbackAuthorized(token);
     const result = body as unknown as JudgeResult;
     this.logger.log(
       `Finish callback: submissionId=${submissionId}, cases=${result.cases?.length}`,
@@ -109,37 +102,11 @@ export class HengController {
     });
   }
 
-  /**
-   * 混合鉴权策略：IP 白名单 OR Token，任一通过即允许。
-   * 两个都未配置时开发模式放行（兼容旧行为）。
-   * 生产环境建议配置至少一项：
-   *   HENG_ALLOWED_IPS=10.0.0.1,10.0.0.2
-   *   HENG_CALLBACK_TOKEN=<random-secret>
-   */
-  private assertCallbackAuthorized(req: Request, token?: string): void {
-    const hasIpPolicy = this.allowedIps.length > 0;
-    const hasTokenPolicy = !!this.callbackToken;
-
-    // 两个都没配：开发兼容模式，放行并告警
-    if (!hasIpPolicy && !hasTokenPolicy) {
-      this.logger.warn('Heng callback received with no auth policy configured (dev mode)');
-      return;
+  private assertCallbackAuthorized(token?: string): void {
+    // 未配置 token 时保持兼容（建议生产环境配置 HENG_CALLBACK_TOKEN）
+    if (!this.callbackToken) return;
+    if (!token || token !== this.callbackToken) {
+      throw new UnauthorizedException('invalid heng callback token');
     }
-
-    // IP 白名单检查
-    if (hasIpPolicy) {
-      const clientIp =
-        (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
-        req.socket.remoteAddress ||
-        '';
-      // 支持 IPv4-mapped IPv6（如 ::ffff:127.0.0.1）
-      const normalizedIp = clientIp.replace(/^::ffff:/, '');
-      if (this.allowedIps.includes(normalizedIp)) return;
-    }
-
-    // Token 检查
-    if (hasTokenPolicy && token === this.callbackToken) return;
-
-    throw new UnauthorizedException('heng callback auth failed (IP or token mismatch)');
   }
 }
