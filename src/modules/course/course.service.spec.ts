@@ -265,7 +265,7 @@ describe('CourseService', () => {
 
   describe('create', () => {
     it('创建课程（无题目）', async () => {
-      const created = { id: 1, ...courseFixture };
+      const created = { ...courseFixture };
       courseRepo.create.mockReturnValue(created);
       courseRepo.save.mockResolvedValue(created);
 

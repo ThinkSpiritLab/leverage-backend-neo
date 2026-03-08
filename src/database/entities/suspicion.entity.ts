@@ -5,9 +5,9 @@ export class Suspicion {
   @PrimaryColumn()
   submissionId: number;
 
-  @OneToOne('Submission', (s: any) => s.sus, { onDelete: 'CASCADE' })
+  @OneToOne('Submission', (s: { sus: Suspicion }) => s.sus, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'submissionId' })
-  submission: any;
+  submission: unknown;
 
   @Column({ default: 0 })
   mas0: number;

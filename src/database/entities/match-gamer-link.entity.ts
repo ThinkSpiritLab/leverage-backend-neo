@@ -19,12 +19,12 @@ export class MatchGamerLink {
   @Column()
   matchId: number;
 
-  @ManyToOne('Match', (match: any) => match.links, {
+  @ManyToOne('Match', (match: { links: MatchGamerLink[] }) => match.links, {
     nullable: false,
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'matchId' })
-  match: any;
+  match: unknown;
 
   @Column('tinyint')
   index: number;

@@ -1,6 +1,6 @@
-import { Logger } from '@nestjs/common';
-import { Process, Processor } from '@nestjs/bull';
-import type { Job } from 'bull';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { InjectQueue, Process, Processor } from '@nestjs/bull';
+import type { Job, Queue } from 'bull';
 import { randomBytes } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { JUDGE_TX_QUEUE } from '../../queue/queue.constants';
@@ -17,15 +17,24 @@ import { CreateJudgeRequest, JudgeTxPayload } from '../heng.types';
  * 3. 构建 CreateJudgeRequest（含回调 URL）
  * 4. HTTP POST heng-controller /c/v1/judges
  */
+@Injectable()
 @Processor(JUDGE_TX_QUEUE)
-export class JudgeTxWorker {
+export class JudgeTxWorker implements OnApplicationShutdown {
   private readonly logger = new Logger(JudgeTxWorker.name);
 
   constructor(
+    @InjectQueue(JUDGE_TX_QUEUE) private readonly queue: Queue,
     private readonly hengClient: HengClientService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
   ) {}
+
+  async onApplicationShutdown(signal?: string): Promise<void> {
+    this.logger.log(`JudgeTxWorker shutting down on signal ${signal}`);
+    // Close the queue: stop accepting new jobs, wait for active jobs to complete
+    await this.queue.close();
+    this.logger.log('JudgeTxWorker queue closed');
+  }
 
   @Process('judge')
   async handle(job: Job<JudgeTxPayload>): Promise<void> {

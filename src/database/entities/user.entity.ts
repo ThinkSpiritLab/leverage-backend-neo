@@ -9,7 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export type Authority = 'user' | 'admin' | 'superadmin' | string;
+export type Authority = string;
 export type Certification = string;
 
 @Entity()
@@ -85,6 +85,6 @@ export class User {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @OneToMany('UserMeta', (meta: any) => meta.user, { cascade: true })
-  metas: any[];
+  @OneToMany('UserMeta', (meta: { user: User }) => meta.user, { cascade: true })
+  metas: unknown[];
 }

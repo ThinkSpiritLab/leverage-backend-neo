@@ -102,7 +102,7 @@ describe('ContestService', () => {
     contestUserProblemRepo = module.get(getRepositoryToken(ContestUserProblem));
     userRepo = module.get(getRepositoryToken(User));
     contestProblemRepo = module.get(getRepositoryToken(ContestProblem));
-    redisService = module.get<RedisService>(RedisService);
+    redisService = module.get(RedisService) as unknown as ReturnType<typeof mockRedisService>;
   });
 
   // ─── findAll ─────────────────────────────────────────────────────────────────

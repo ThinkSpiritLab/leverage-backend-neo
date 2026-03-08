@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InjectRepository } from '@nestjs/typeorm';
+import { IncomingMessage } from 'http';
+import { Socket } from 'net';
 import { Repository } from 'typeorm';
 import { ContestUser } from '../../database/entities/contest-user.entity';
 import { Contest } from '../../database/entities/contest.entity';
@@ -15,6 +17,12 @@ import { ContestJwtPayload } from '../../modules/auth/strategies/jwt-contest.str
 export const BindIp = 0b1;
 export const LoginTimeLimit = 0b10;
 export const OnlyOneLogin = 0b100;
+
+interface HttpRequest extends IncomingMessage {
+  user?: ContestJwtPayload;
+  connection: Socket;
+  socket: Socket;
+}
 
 /**
  * ContestUser JWT 认证守卫。
@@ -41,7 +49,7 @@ export class ContestAuthGuard
     const isJwtValid = await (super.canActivate(context) as Promise<boolean>);
     if (!isJwtValid) return false;
 
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<HttpRequest>();
     const user = request.user as ContestJwtPayload;
 
     // 获取竞赛信息
@@ -63,7 +71,7 @@ export class ContestAuthGuard
     // 检查 IP 绑定
     if ((contest.deviceBindType & BindIp) !== 0) {
       const clientIp = this.getClientIp(request);
-      const storedIp = (contestUser as any).bindIp;
+      const storedIp = (contestUser as unknown as Record<string, unknown>)['bindIp'] as string | undefined;
       if (storedIp && storedIp !== clientIp) {
         throw new UnauthorizedException(
           'IP 地址不匹配，请使用绑定的 IP 地址访问',
@@ -74,17 +82,21 @@ export class ContestAuthGuard
     return true;
   }
 
-  private getClientIp(request: any): string {
+  private getClientIp(request: HttpRequest): string {
+    const forwarded = request.headers['x-forwarded-for'];
+    const forwardedIp = Array.isArray(forwarded)
+      ? forwarded[0]
+      : forwarded?.split(',')[0]?.trim();
     return (
-      request.headers['x-forwarded-for']?.split(',')[0]?.trim() ??
-      request.headers['x-real-ip'] ??
+      forwardedIp ??
+      (request.headers['x-real-ip'] as string | undefined) ??
       request.connection?.remoteAddress ??
       request.socket?.remoteAddress ??
       '127.0.0.1'
     );
   }
 
-  handleRequest<TUser = any>(err: any, user: TUser, info: any): TUser {
+  handleRequest<TUser = unknown>(err: Error | null, user: TUser): TUser {
     if (err || !user) {
       throw err ?? new UnauthorizedException('Contest Token 无效');
     }

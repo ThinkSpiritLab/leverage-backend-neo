@@ -456,7 +456,7 @@ export class SubmissionService {
     const arc = archiver('zip');
     for (const s of submissions) {
       const ext = LANGUAGE_EXT_MAP[s.language] ?? 'txt';
-      arc.append(s.misc?.code ?? '', {
+      arc.append((s.misc as { code?: string } | null)?.code ?? '', {
         name: `${s.userId}-${s.problemId}-${s.id}-${s.status}.${ext}`,
       });
     }
@@ -490,7 +490,7 @@ export class SubmissionService {
     if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
     if (!isAdmin && submission.userId !== userId)
       throw new ForbiddenException('无权限查看此提交代码');
-    return { id: submission.id, code: submission.misc?.code };
+    return { id: submission.id, code: (submission.misc as { code?: string } | null)?.code };
   }
 
   async remove(id: number) {

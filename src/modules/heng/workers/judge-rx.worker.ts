@@ -1,6 +1,6 @@
-import { Logger } from '@nestjs/common';
-import { Process, Processor } from '@nestjs/bull';
-import type { Job } from 'bull';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { InjectQueue, Process, Processor } from '@nestjs/bull';
+import type { Job, Queue } from 'bull';
 import { JUDGE_RX_QUEUE } from '../../queue/queue.constants';
 import { RedisService } from '../../redis/redis.service';
 import { ReceiveService } from '../../receive/receive.service';
@@ -15,14 +15,23 @@ import { JudgeResult, JudgeRxPayload, JudgeStateUpdate } from '../heng.types';
  *    - update: 更新中间状态到 Redis
  *    - finish: 写入数据库，更新统计，更新排行榜
  */
+@Injectable()
 @Processor(JUDGE_RX_QUEUE)
-export class JudgeRxWorker {
+export class JudgeRxWorker implements OnApplicationShutdown {
   private readonly logger = new Logger(JudgeRxWorker.name);
 
   constructor(
+    @InjectQueue(JUDGE_RX_QUEUE) private readonly queue: Queue,
     private readonly redisService: RedisService,
     private readonly receiveService: ReceiveService,
   ) {}
+
+  async onApplicationShutdown(signal?: string): Promise<void> {
+    this.logger.log(`JudgeRxWorker shutting down on signal ${signal}`);
+    // Close the queue: stop accepting new jobs, wait for active jobs to complete
+    await this.queue.close();
+    this.logger.log('JudgeRxWorker queue closed');
+  }
 
   @Process()
   async handle(job: Job<JudgeRxPayload>): Promise<void> {

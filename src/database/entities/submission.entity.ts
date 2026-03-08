@@ -43,10 +43,12 @@ export class Submission {
   @Column('int', { nullable: true })
   memory: number;
 
-  @OneToOne('SubmissionMisc', (s: any) => s.submission, { cascade: true })
+  @OneToOne('SubmissionMisc', (s: { submission: Submission }) => s.submission, { cascade: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   misc: any;
 
-  @OneToOne('Suspicion', (s: any) => s.submission, { cascade: true })
+  @OneToOne('Suspicion', (s: { submission: Submission }) => s.submission, { cascade: true })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sus?: any;
 
   @Column('int', { nullable: true })
@@ -72,7 +74,8 @@ export class Submission {
   @JoinColumn({ name: 'contestId' })
   contest: any;
 
-  @OneToMany('RejudgeLog', (r: any) => r.submission)
+  @OneToMany('RejudgeLog', (r: { submission: Submission }) => r.submission)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rejudgeLogs: any[];
 
   @Index()

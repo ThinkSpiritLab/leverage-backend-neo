@@ -32,10 +32,10 @@ export class Match {
   @Column('simple-array', { nullable: true })
   score: string[];
 
-  @OneToMany('MatchGamerLink', (link: any) => link.match, {
+  @OneToMany('MatchGamerLink', (link: { match: Match }) => link.match, {
     cascade: ['insert'],
   })
-  links: any[];
+  links: unknown[];
 
   @CreateDateColumn()
   createdAt: Date;

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import mysql2 from 'mysql2';
 
 import { College } from './entities/college.entity';
 import { Contest } from './entities/contest.entity';
@@ -64,7 +65,7 @@ const entities = [
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'mysql',
-        driver: require('mysql2'),
+        driver: mysql2,
         host: config.get<string>('database.host'),
         port: config.get<number>('database.port'),
         database: config.get<string>('database.database'),

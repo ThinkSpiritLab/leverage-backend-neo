@@ -19,7 +19,7 @@ export class Log {
 
   @ManyToOne('User')
   @JoinColumn({ name: 'callerId' })
-  caller: any | null;
+  caller: unknown;
 
   @Column('varchar', { nullable: true })
   field: string | null;

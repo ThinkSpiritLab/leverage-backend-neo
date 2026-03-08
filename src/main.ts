@@ -59,6 +59,18 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
+  // Enable shutdown hooks — NestJS will call onApplicationShutdown() on SIGTERM/SIGINT
+  app.enableShutdownHooks();
+
+  // Fallback forced exit after 15s if graceful shutdown stalls
+  const SHUTDOWN_TIMEOUT = 15000;
+  process.on('SIGTERM', () => {
+    setTimeout(() => {
+      console.error('Forced exit after graceful shutdown timeout');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT).unref();
+  });
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('port', 3000);
   await app.listen(port);

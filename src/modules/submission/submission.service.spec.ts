@@ -1183,8 +1183,8 @@ describe('SubmissionService', () => {
     it('dateStart/dateEnd 范围过滤', async () => {
       const qb = makeBatchQb();
       submissionRepo.createQueryBuilder.mockReturnValue(qb);
-      const dateStart = new Date('2024-01-01');
-      const dateEnd = new Date('2024-12-31');
+      const dateStart = '2024-01-01';
+      const dateEnd = '2024-12-31';
       await service.batchRejudge({ dateStart, dateEnd }, true);
       expect(qb.andWhere).toHaveBeenCalledWith('s.createdAt >= :dateStart', {
         dateStart,

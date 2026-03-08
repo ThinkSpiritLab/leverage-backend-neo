@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
     PinoLoggerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
+      useFactory: () => {
         const isProduction = process.env.NODE_ENV === 'production';
         return {
           pinoHttp: {
@@ -26,10 +24,10 @@ import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
                 }),
             // Suppress health check noise
             autoLogging: {
-              ignore: (req: any) => req.url === '/health',
+              ignore: (req: { url?: string }) => req.url === '/health',
             },
             serializers: {
-              req(req: any) {
+              req(req: { method?: string; url?: string; remoteAddress?: string }) {
                 return {
                   method: req.method,
                   url: req.url,
