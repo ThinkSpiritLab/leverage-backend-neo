@@ -25,7 +25,9 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d data-source.ts",
-    "migration:show": "typeorm-ts-node-commonjs migration:show -d data-source.ts"
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d data-source.ts",
+    "load-test": "k6 run load-tests/auth.k6.js",
+    "load-test:all": "for f in load-tests/*.k6.js; do k6 run $f; done"
   },
   "dependencies": {
     "@bull-board/api": "^6.20.3",
