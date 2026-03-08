@@ -21,7 +21,7 @@ export class User {
   @Column('varchar', { length: 20 })
   username: string
 
-  @Column('varchar', { name: 'password', length: 128, select: false })
+  @Column('varchar', { name: 'password', length: 200, select: false })
   passwordHash: string
 
   @Column('varchar', { nullable: true, length: 32 })
