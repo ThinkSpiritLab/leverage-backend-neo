@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm'
 
 @Entity()
+@Index(['contestId', 'contestUserId'])
 export class ContestUserProblem {
   @PrimaryColumn('int', { name: 'contestUserContestId' })
   contestId: number

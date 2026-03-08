@@ -12,6 +12,7 @@ import {
 } from 'typeorm'
 
 @Entity()
+@Index(['userId', 'problemId'])
 export class Submission {
   @PrimaryGeneratedColumn()
   id: number
@@ -74,6 +75,7 @@ export class Submission {
   @OneToMany('RejudgeLog', (r: any) => r.submission)
   rejudgeLogs: any[]
 
+  @Index()
   @CreateDateColumn()
   createdAt: Date
 

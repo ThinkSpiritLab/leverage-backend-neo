@@ -43,15 +43,18 @@ export class Contest {
   @Column('datetime', { nullable: true })
   registrationEndTime: Date | null
 
+  @Index()
   @Column('datetime')
   startTime: Date
 
+  @Index()
   @Column('datetime')
   endTime: Date
 
   @Column({ default: 0 })
   penalty: number
 
+  @Index()
   @Column({ default: false })
   public: boolean
 

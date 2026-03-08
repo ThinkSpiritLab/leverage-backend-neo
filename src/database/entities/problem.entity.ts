@@ -63,12 +63,14 @@ export class Problem {
   @Column('boolean', { comment: '限制访问', default: false })
   restricted: boolean
 
+  @Index()
   @Column({ default: ProblemStatus.PENDING })
   status: ProblemStatus
 
   @Column({ nullable: true })
   statusUpdatedAt: Date
 
+  @Index()
   @Column('boolean', { comment: '禁止访问', default: true })
   closed: boolean
 

@@ -30,6 +30,7 @@ export class User {
   @Column('varchar', { default: null })
   sex: string
 
+  @Index()
   @Column('varchar', { comment: '用户权限', default: 'user' })
   authority: Authority
 
@@ -39,6 +40,7 @@ export class User {
   @Column('int', { default: null })
   rank: number
 
+  @Index()
   @Column('int', { default: 0 })
   status: number
 
@@ -58,12 +60,15 @@ export class User {
   @Column('varchar', { comment: '认证类别', length: 32, nullable: true })
   certifyType: Certification | null
 
+  @Index()
   @Column('varchar', { nullable: true, length: 16 })
   grade: string | null
 
+  @Index()
   @Column('varchar', { nullable: true, length: 32 })
   college: string | null
 
+  @Index()
   @Column('varchar', { nullable: true, length: 32 })
   profession: string | null
 

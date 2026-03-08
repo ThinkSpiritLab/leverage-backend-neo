@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -17,6 +18,7 @@ export class Message {
   @PrimaryGeneratedColumn()
   id: number
 
+  @Index()
   @Column()
   senderId: number
 
@@ -27,6 +29,7 @@ export class Message {
   /**
    * 可为 null（回复时根据 session 推导）
    */
+  @Index()
   @Column({ nullable: true })
   receiverId: number | null
 
@@ -37,6 +40,7 @@ export class Message {
   /**
    * null = 根消息；非 null = 指向根消息 id 的回复
    */
+  @Index()
   @Column({ nullable: true })
   sessionId: number | null
 
@@ -49,6 +53,7 @@ export class Message {
   /**
    * 是否已读
    */
+  @Index()
   @Column({ default: false })
   read: boolean
 
