@@ -82,16 +82,17 @@ describe('TransmitService', () => {
   // ─── listJudgers ─────────────────────────────────────────────────────────────
 
   describe('listJudgers', () => {
-    it('应返回静态 judger 数据', () => {
-      const result = service.listJudgers();
+    it('应返回静态 judger 数据', async () => {
+      const result = await service.listJudgers();
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ name: 'Heng' });
     });
 
-    it('返回数据包含 version 和 ttl 字段', () => {
-      const result = service.listJudgers();
+    it('返回数据包含 version 和 ttl 字段（未配置 baseUrl 时 ttl=0）', async () => {
+      delete process.env.HENG_BASE_URL;
+      const result = await service.listJudgers();
       expect(result[0]).toHaveProperty('version');
-      expect(result[0]).toHaveProperty('ttl');
+      expect(result[0]).toHaveProperty('ttl', 0);
     });
   });
 
