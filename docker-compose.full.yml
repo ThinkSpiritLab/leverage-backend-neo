@@ -69,6 +69,30 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ---- heng-controller (可选，真实评测机控制器) ----
+  # heng-controller 目前没有官方发布的 Docker image，需手动构建：
+  #   git clone https://github.com/ThinkSpiritLab/heng-controller
+  #   cd heng-controller && docker build -t heng-controller:local .
+  #
+  # heng-controller:
+  #   image: heng-controller:local            # 本地构建的 image
+  #   ports:
+  #     - "5000:5000"                          # heng-controller 默认端口（以实际配置为准）
+  #   environment:
+  #     - NODE_ENV=production
+  #     # Redis（heng-controller 内部使用）
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     # 其余配置参考 heng-controller/config/ 目录
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #
+  # 配置完成后，在 .env 中设置：
+  #   HENG_BASE_URL=http://heng-controller:5000
+  # 并参考 docs/HENG.md 了解完整接入流程。
+
 volumes:
   db_data:
   redis_data:
