@@ -10,4 +10,9 @@ export class CreateTagDto {
   @IsOptional()
   @IsInt()
   parentId?: number | null;
+
+  @ApiPropertyOptional({ description: '标签颜色（十六进制，如 #e63946）' })
+  @IsOptional()
+  @IsString()
+  color?: string | null;
 }

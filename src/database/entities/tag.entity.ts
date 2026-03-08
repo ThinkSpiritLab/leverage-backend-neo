@@ -21,4 +21,7 @@ export class Tag {
 
   @Column('varchar')
   name: string;
+
+  @Column({ type: 'varchar', length: 32, nullable: true, default: null })
+  color: string | null;
 }

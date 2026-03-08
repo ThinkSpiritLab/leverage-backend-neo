@@ -23,7 +23,7 @@ export class TagService {
    * 创建标签
    */
   async create(dto: CreateTagDto): Promise<Tag> {
-    const tag = this.tagRepo.create({ name: dto.name });
+    const tag = this.tagRepo.create({ name: dto.name, color: dto.color ?? null });
 
     if (dto.parentId) {
       const parent = await this.tagRepo.findOne({
@@ -45,6 +45,7 @@ export class TagService {
     if (!tag) throw new NotFoundException(`标签 #${id} 不存在`);
 
     if (dto.name !== undefined) tag.name = dto.name;
+    if (dto.color !== undefined) tag.color = dto.color ?? null;
 
     if (dto.parentId !== undefined) {
       if (dto.parentId === null) {
