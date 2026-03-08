@@ -29,4 +29,8 @@ export default () => ({
   submission: {
     maxPerMinute: parseInt(process.env.MAX_SUBMISSION_PER_MINUTE ?? '10', 10) || 10,
   },
+  init: {
+    saUsername: process.env.INIT_SA_USERNAME ?? 'admin',
+    saPassword: process.env.INIT_SA_PASSWORD ?? 'Admin@123456',
+  },
 })
