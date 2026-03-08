@@ -4,7 +4,7 @@ import type { Job, Queue } from 'bull';
 import { JUDGE_RX_QUEUE } from '../../queue/queue.constants';
 import { RedisService } from '../../redis/redis.service';
 import { ReceiveService } from '../../receive/receive.service';
-import { JudgeResult, JudgeRxPayload, JudgeStateUpdate } from '../heng.types';
+import { JudgeResult, JudgeRxPayload } from '../heng.types';
 
 /**
  * JudgeRxWorker

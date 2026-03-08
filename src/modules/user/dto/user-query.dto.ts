@@ -1,7 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import type { UserRole } from './create-user.dto';
 
 export class UserQueryDto {
   @ApiPropertyOptional({ description: '页码', default: 1 })

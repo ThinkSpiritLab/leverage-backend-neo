@@ -32,7 +32,8 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
         return {
           secret: configService.get<string>('jwt.accessSecret'),
           signOptions: {
-            expiresIn,
+            expiresIn:
+              expiresIn as `${number}${'s' | 'm' | 'h' | 'd' | 'w' | 'y'}`,
           },
         };
       },

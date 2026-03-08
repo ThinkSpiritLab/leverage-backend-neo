@@ -1,8 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bull';
 import type { Job } from 'bull';
 import { JudgeRxWorker } from './judge-rx.worker';
 import { RedisService } from '../../redis/redis.service';
 import { ReceiveService } from '../../receive/receive.service';
+import { JUDGE_RX_QUEUE } from '../../queue/queue.constants';
 import {
   JudgeResult,
   JudgeResultKind,
@@ -24,6 +26,10 @@ const mockRedisService = {
 const mockReceiveService = {
   receiveResult: jest.fn(),
   receiveUpdate: jest.fn(),
+};
+
+const mockQueue = {
+  close: jest.fn().mockResolvedValue(undefined),
 };
 
 /** 构建一个 finish payload（带 JudgeResult） */
@@ -89,6 +95,7 @@ describe('JudgeRxWorker', () => {
         JudgeRxWorker,
         { provide: RedisService, useValue: mockRedisService },
         { provide: ReceiveService, useValue: mockReceiveService },
+        { provide: getQueueToken(JUDGE_RX_QUEUE), useValue: mockQueue },
       ],
     }).compile();
 

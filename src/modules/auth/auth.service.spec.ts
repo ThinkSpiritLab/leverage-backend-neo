@@ -227,12 +227,12 @@ describe('AuthService', () => {
       expect(jwtService.verify).toHaveBeenCalled();
     });
 
-    it('无效 token → 抛出 UnauthorizedException', async () => {
+    it('无效 token → 抛出 UnauthorizedException', () => {
       jwtService.verify.mockImplementation(() => {
         throw new Error('invalid token');
       });
 
-      await expect(service.refreshToken('invalid-token')).rejects.toThrow(
+      expect(() => service.refreshToken('invalid-token')).toThrow(
         UnauthorizedException,
       );
     });

@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { DataSource, EntityManager, Not } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { RankService } from '../rank/rank.service';
 import {
   JudgeCaseResult,
   JudgeResult,
-  JudgeResultKind,
   JudgeResultKindToStatus,
   JudgeStateToStatus,
   JudgeStateUpdate,
@@ -383,8 +383,7 @@ export class ReceiveService {
 
       // 使用 SubmissionMisc.code 计算各查重指标
       const code = misc.code;
-      suspicion.hashsum = require('crypto')
-        .createHash('sha256')
+      suspicion.hashsum = createHash('sha256')
         .update(code)
         .digest('hex')
         .slice(0, 100);
