@@ -182,6 +182,21 @@ export class ContestService {
     );
   }
 
+  async getContestUsers(contestId: number): Promise<User[]> {
+    const contest = await this.contestRepo.findOne({ where: { id: contestId } });
+    if (!contest) throw new NotFoundException(`竞赛 ${contestId} 不存在`);
+
+    const contestUsers = await this.contestUserRepo.find({
+      where: { contestId },
+      relations: ['user'],
+      order: { userId: 'ASC' },
+    });
+
+    return contestUsers
+      .map((contestUser) => contestUser.user as User)
+      .filter((user): user is User => Boolean(user));
+  }
+
   /**
    * ContestUser 批量导入（生成随机密码）
    */

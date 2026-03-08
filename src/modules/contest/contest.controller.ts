@@ -86,6 +86,13 @@ export class ContestController {
     return this.contestService.remove(id);
   }
 
+  @Get(':id/users')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'sa', 'superadmin')
+  getContestUsers(@Param('id') id: string) {
+    return this.contestService.getContestUsers(Number(id));
+  }
+
   /**
    * POST /contests/:id/users — 注册参赛（用户自行注册或 admin 导入）
    */
