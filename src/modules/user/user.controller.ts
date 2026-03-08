@@ -137,4 +137,13 @@ export class UserController {
       : [];
     return this.userService.getUserProblemStatus(id, problemIds);
   }
+
+  /**
+   * GET /users/:id/accept — 用户通过的题目列表
+   */
+  @Get(':id/accept')
+  @ApiOperation({ summary: '用户通过题目列表（AC）' })
+  getAcceptedProblems(@Param('id', ParseIntPipe) id: number) {
+    return this.userService.getAcceptedProblems(id);
+  }
 }

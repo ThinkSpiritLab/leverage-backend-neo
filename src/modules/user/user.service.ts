@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Authority, User } from '../../database/entities/user.entity';
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, verifyPassword } from '../../common/utils/crypto.util';
@@ -39,6 +39,7 @@ export class UserService {
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
     private readonly redisService: RedisService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -303,5 +304,20 @@ export class UserService {
   private mapAuthorityToRole(authority: string): string {
     if (authority === 'superadmin') return 'sa';
     return authority;
+  }
+
+  /**
+   * 获取用户通过的题目列表（去重，status=0 AC）
+   */
+  async getAcceptedProblems(userId: number): Promise<{ items: { id: number; logicId: number; prefix: string; title: string }[] }> {
+    const rows = await this.dataSource.query(
+      `SELECT DISTINCT p.id, p.logicId, p.prefix, p.title
+       FROM submission s
+       JOIN problem p ON p.id = s.problemId
+       WHERE s.userId = ? AND s.status = 0
+       ORDER BY p.logicId ASC`,
+      [userId],
+    );
+    return { items: rows };
   }
 }
