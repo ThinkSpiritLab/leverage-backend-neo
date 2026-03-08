@@ -46,7 +46,8 @@ export interface RankItem {
   userId: number;
   username: string;
   certifiedName: string | null;
-  score: number;
+  solved: number;
+  penaltyMin: number;
   accepts: number;
   submits: number;
 }
@@ -358,13 +359,19 @@ export class ContestService {
       const user = userMap.get(userId);
       const cu = contestUserMap.get(userId);
       const scoreRaw = scores[index];
+      // 解码 Redis score：acCount * 1e9 - penaltySeconds
+      const encodedScore = scoreRaw ? parseFloat(scoreRaw) : 0;
+      const solved = Math.floor(encodedScore / 1_000_000_000);
+      const penaltySec = Math.max(0, solved * 1_000_000_000 - encodedScore);
+      const penaltyMin = Math.round(penaltySec / 60);
 
       return {
         rank: start + index + 1,
         userId,
         username: user?.username ?? String(userId),
         certifiedName: user?.certifiedName ?? null,
-        score: scoreRaw ? parseFloat(scoreRaw) : 0,
+        solved,
+        penaltyMin,
         accepts: cu?.accepts ?? 0,
         submits: cu?.submits ?? 0,
       };
