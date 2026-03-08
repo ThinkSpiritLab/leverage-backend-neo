@@ -88,7 +88,7 @@ export class ContestController {
 
   @Get(':id/users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'sa', 'superadmin')
+  @Roles('admin', 'sa')
   getContestUsers(@Param('id') id: string) {
     return this.contestService.getContestUsers(Number(id));
   }
