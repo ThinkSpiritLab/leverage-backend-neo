@@ -52,4 +52,14 @@ export class TransmitController {
   getQueueStatus() {
     return this.transmitService.getQueueStatus();
   }
+
+  /**
+   * GET /transmit/judge-stats
+   * 最近 1/5/10 分钟评测完成统计
+   */
+  @Get('judge-stats')
+  @ApiOperation({ summary: '最近 1/5/10 分钟评测完成数统计' })
+  getJudgeStats() {
+    return this.transmitService.getJudgeStats();
+  }
 }

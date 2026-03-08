@@ -140,4 +140,51 @@ export class TransmitService {
       delayed: counts.delayed ?? 0,
     };
   }
+
+  /**
+   * 查询最近 1/5/10 分钟评测完成数
+   * 以 submission.updatedAt 为准，status 为终态（非 PENDING/JUDGING/COMPILING）
+   */
+  async getJudgeStats(): Promise<{
+    last1min: number;
+    last5min: number;
+    last10min: number;
+    acLast1min: number;
+    acLast5min: number;
+    acLast10min: number;
+  }> {
+    const now = new Date();
+    const t1 = new Date(now.getTime() - 1 * 60 * 1000);
+    const t5 = new Date(now.getTime() - 5 * 60 * 1000);
+    const t10 = new Date(now.getTime() - 10 * 60 * 1000);
+
+    // 终态 status: 0=AC,1=WA,2=TLE,3=MLE,4=CE,5=SE,6=RE,7=PE,8=CRLE,12=OLE,13=SC
+    const finalStatuses = [0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 13];
+
+    const countIn = async (since: Date) =>
+      this.submissionRepo
+        .createQueryBuilder('s')
+        .where('s.updatedAt >= :since', { since })
+        .andWhere('s.status IN (:...statuses)', { statuses: finalStatuses })
+        .getCount();
+
+    const acCountIn = async (since: Date) =>
+      this.submissionRepo
+        .createQueryBuilder('s')
+        .where('s.updatedAt >= :since', { since })
+        .andWhere('s.status = 0')
+        .getCount();
+
+    const [last1min, last5min, last10min, acLast1min, acLast5min, acLast10min] =
+      await Promise.all([
+        countIn(t1),
+        countIn(t5),
+        countIn(t10),
+        acCountIn(t1),
+        acCountIn(t5),
+        acCountIn(t10),
+      ]);
+
+    return { last1min, last5min, last10min, acLast1min, acLast5min, acLast10min };
+  }
 }
