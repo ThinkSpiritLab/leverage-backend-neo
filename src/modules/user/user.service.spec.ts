@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common'
+import { ConflictException, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { getRepositoryToken } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
@@ -190,6 +190,131 @@ describe('UserService', () => {
       const result = await service.importUsers([{ username: '' } as any])
       expect(result.failed).toBe(1)
       expect(result.success).toBe(0)
+    })
+  })
+
+  // ─── findAll 搜索过滤、分页 ─────────────────────────────────────────────
+
+  describe('findAll', () => {
+    let mockQb: any
+
+    beforeEach(() => {
+      mockQb = {
+        take: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      }
+      userRepo.createQueryBuilder.mockReturnValue(mockQb)
+    })
+
+    it('应该正确计算分页偏移：page=2, perPage=10 → skip=10', async () => {
+      await service.findAll({ page: 2, perPage: 10 })
+      expect(mockQb.skip).toHaveBeenCalledWith(10)
+      expect(mockQb.take).toHaveBeenCalledWith(10)
+    })
+
+    it('传入 search 时应该添加 LIKE 过滤', async () => {
+      await service.findAll({ page: 1, perPage: 20, search: 'alice' })
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('LIKE'),
+        { search: '%alice%' },
+      )
+    })
+
+    it('传入 role 时应该过滤 authority', async () => {
+      await service.findAll({ page: 1, perPage: 20, role: 'admin' })
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        'u.authority = :authority',
+        { authority: 'admin' },
+      )
+    })
+
+    it('role=sa 应该映射为 superadmin', async () => {
+      await service.findAll({ page: 1, perPage: 20, role: 'sa' })
+      expect(mockQb.andWhere).toHaveBeenCalledWith(
+        'u.authority = :authority',
+        { authority: 'superadmin' },
+      )
+    })
+
+    it('返回 items 和 total', async () => {
+      const mockUser = { id: 1, username: 'alice' } as any
+      mockQb.getManyAndCount.mockResolvedValue([[mockUser], 1])
+
+      const result = await service.findAll({ page: 1, perPage: 20 })
+      expect(result.items).toEqual([mockUser])
+      expect(result.total).toBe(1)
+    })
+  })
+
+  // ─── update 权限校验 ────────────────────────────────────────────────────
+
+  describe('update', () => {
+    it('admin 可以更新 user', async () => {
+      const user: any = { id: 10, username: 'user1', authority: 'user' }
+      userRepo.findOne.mockResolvedValue(user)
+      userRepo.save.mockImplementation(async (u: any) => u)
+
+      const result = await service.update(10, { username: 'user1_updated' }, 'admin')
+      expect(result.username).toBe('user1_updated')
+    })
+
+    it('user 不能更新 admin（ForbiddenException）', async () => {
+      const adminUser: any = { id: 5, username: 'admin1', authority: 'admin' }
+      userRepo.findOne.mockResolvedValue(adminUser)
+
+      await expect(
+        service.update(5, { username: 'hacked' }, 'user'),
+      ).rejects.toThrow(ForbiddenException)
+    })
+
+    it('admin 不能直接任命 sa（ForbiddenException）', async () => {
+      const user: any = { id: 10, username: 'user1', authority: 'user' }
+      userRepo.findOne.mockResolvedValue(user)
+
+      await expect(
+        service.update(10, { role: 'sa' }, 'admin'),
+      ).rejects.toThrow(ForbiddenException)
+    })
+
+    it('目标用户不存在时应该抛出 NotFoundException', async () => {
+      userRepo.findOne.mockResolvedValue(null)
+
+      await expect(
+        service.update(999, { username: 'x' }, 'admin'),
+      ).rejects.toThrow(NotFoundException)
+    })
+
+    it('应该更新密码（hash 存储）', async () => {
+      const user: any = { id: 10, username: 'user1', authority: 'user', passwordHash: 'old' }
+      userRepo.findOne.mockResolvedValue(user)
+      userRepo.save.mockImplementation(async (u: any) => u)
+
+      await service.update(10, { password: 'newpassword123' }, 'admin')
+
+      expect(user.passwordHash).not.toBe('old')
+      expect(user.passwordHash).toMatch(/^pbkdf2:/)
+    })
+  })
+
+  // ─── remove ────────────────────────────────────────────────────────────
+
+  describe('remove', () => {
+    it('应该删除存在的用户', async () => {
+      const user: any = { id: 1, username: 'user1' }
+      userRepo.findOne.mockResolvedValue(user)
+
+      await service.remove(1)
+
+      expect(userRepo.remove).toHaveBeenCalledWith(user)
+    })
+
+    it('用户不存在时应该抛出 NotFoundException', async () => {
+      userRepo.findOne.mockResolvedValue(null)
+
+      await expect(service.remove(999)).rejects.toThrow(NotFoundException)
     })
   })
 })
