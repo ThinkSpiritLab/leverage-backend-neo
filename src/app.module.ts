@@ -4,6 +4,7 @@ import configuration from './config/configuration'
 import { validationSchema } from './config/validation.schema'
 import { DatabaseModule } from './database/database.module'
 import { LoggerModule } from './logger/logger.module'
+import { HealthModule } from './modules/health/health.module'
 import { MetricsModule } from './modules/metrics/metrics.module'
 import { QueueModule } from './modules/queue/queue.module'
 import { RedisModule } from './modules/redis/redis.module'
@@ -32,6 +33,9 @@ import { RedisModule } from './modules/redis/redis.module'
 
     // Prometheus Metrics
     MetricsModule,
+
+    // Health check
+    HealthModule,
   ],
 })
 export class AppModule {}
