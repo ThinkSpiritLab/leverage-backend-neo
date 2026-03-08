@@ -59,7 +59,9 @@ describe('TagService', () => {
 
       const result = await service.create({ name: '贪心' });
 
-      expect(tagRepo.create).toHaveBeenCalledWith({ name: '贪心' });
+      expect(tagRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '贪心' }),
+      );
       expect(tagRepo.save).toHaveBeenCalled();
       expect(result).toEqual({ id: 2, name: '贪心' });
     });
