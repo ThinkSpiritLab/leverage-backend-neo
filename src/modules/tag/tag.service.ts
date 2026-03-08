@@ -48,7 +48,7 @@ export class TagService {
 
     if (dto.parentId !== undefined) {
       if (dto.parentId === null) {
-        tag.parent = null as any;
+        tag.parent = null as unknown as Tag;
       } else {
         const parent = await this.tagRepo.findOne({
           where: { id: dto.parentId },

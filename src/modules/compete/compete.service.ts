@@ -381,13 +381,13 @@ export class CompeteService {
       .where('m.status = :status', { status: MatchStatus.FINISHED })
       .groupBy('mgl.gamerId')
       .orderBy('wins / total', 'DESC')
-      .getRawMany();
+      .getRawMany<{ gamerId: number; wins: string; total: string }>();
 
     return results.map((r) => ({
       gamerId: r.gamerId,
       wins: Number(r.wins),
       total: Number(r.total),
-      winRate: r.total > 0 ? Number(r.wins) / Number(r.total) : 0,
+      winRate: Number(r.total) > 0 ? Number(r.wins) / Number(r.total) : 0,
     }));
   }
 
@@ -441,10 +441,9 @@ export class CompeteService {
     if (!game) throw new NotFoundException(`游戏 #${dto.gameId} 不存在`);
     if (game.disabled && !isAdmin) throw new NotFoundException();
 
-    const userResult = await this.dataSource.query(
-      'SELECT id, username FROM `user` WHERE id = ?',
-      [userId],
-    );
+    const userResult = await this.dataSource.query<
+      { id: number; username: string }[]
+    >('SELECT id, username FROM `user` WHERE id = ?', [userId]);
     const user = userResult[0];
     if (!user) throw new NotFoundException('用户不存在');
 
@@ -523,14 +522,14 @@ export class CompeteService {
 
       // 已开始的对局
       if (startRes && startRes[0] === null && startRes[1]) {
-        return { matchId: parseInt(String(startRes[1])) };
+        return { matchId: parseInt(startRes[1] as string) };
       }
 
       if (!infoRes || infoRes[0] !== null || !infoRes[1]) {
         throw new InternalServerErrorException('no such room');
       }
 
-      const info: RoomInfo = JSON.parse(String(infoRes[1]));
+      const info = JSON.parse(infoRes[1] as string) as RoomInfo;
       if (openRes && openRes[0] === null) {
         info.open = !!openRes[1];
       }
@@ -572,10 +571,9 @@ export class CompeteService {
     if (!gamer) throw new NotFoundException(`Bot #${dto.gamerId} 不存在`);
     if (gamer.userId !== userId) throw new ForbiddenException();
 
-    const userResult = await this.dataSource.query(
-      'SELECT id, username FROM `user` WHERE id = ?',
-      [userId],
-    );
+    const userResult = await this.dataSource.query<
+      { id: number; username: string }[]
+    >('SELECT id, username FROM `user` WHERE id = ?', [userId]);
     const user = userResult[0];
 
     const submitterKey = this.submittedGamerKey(roomId);
@@ -629,7 +627,7 @@ export class CompeteService {
       const gamerIds: number[] = [];
       for (let i = 0; i < gamerQuantity; i++) {
         if (players[String(i)]) {
-          const gamer = JSON.parse(players[String(i)]);
+          const gamer = JSON.parse(players[String(i)]) as { id: number };
           gamerIds.push(gamer.id);
         } else {
           throw new BadRequestException(`位置 ${i} 还没有选手`);

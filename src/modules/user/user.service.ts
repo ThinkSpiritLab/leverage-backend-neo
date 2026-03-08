@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { User } from '../../database/entities/user.entity';
+import { Authority, User } from '../../database/entities/user.entity';
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, verifyPassword } from '../../common/utils/crypto.util';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -145,7 +145,7 @@ export class UserService {
       if (dto.role === 'sa') {
         throw new ForbiddenException('无法通过 API 直接任命超级管理员');
       }
-      user.authority = newRole as any;
+      user.authority = newRole as Authority;
     }
 
     if (dto.password) {
@@ -224,15 +224,16 @@ export class UserService {
             ? ({ 男: 'male', 女: 'female' }[u.sex] ?? u.sex)
             : 'unknown',
           grade: u.grade ?? null,
-          authority: (u.role ?? 'user') as any,
+          authority: u.role ?? 'user',
         });
 
         await this.userRepo.save(user);
         success++;
       } catch (err) {
         failed++;
-        errors.push(`[${u.username}] ${err.message || err}`);
-        this.logger.warn(`importUsers error for ${u.username}: ${err.message}`);
+        const errMsg = (err as { message?: string })?.message ?? String(err);
+        errors.push(`[${u.username}] ${errMsg}`);
+        this.logger.warn(`importUsers error for ${u.username}: ${errMsg}`);
       }
     }
 

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, MoreThan, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Contest } from '../../database/entities/contest.entity';
 import { ContestProblem } from '../../database/entities/contest-problem.entity';
@@ -16,7 +16,7 @@ import { RedisService } from '../redis/redis.service';
 import { hashPassword } from '../../common/utils/crypto.util';
 import { CreateContestDto } from './dto/create-contest.dto';
 import { UpdateContestDto } from './dto/update-contest.dto';
-import { ContestQueryDto, ContestStatus } from './dto/contest-query.dto';
+import { ContestQueryDto } from './dto/contest-query.dto';
 import { ContestUserDto } from './dto/contest-user.dto';
 
 export interface RankItem {

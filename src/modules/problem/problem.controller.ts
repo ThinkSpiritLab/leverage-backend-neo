@@ -212,7 +212,7 @@ export class ProblemController {
       noMarkdown: boolean;
     };
     try {
-      params = JSON.parse(paramsStr);
+      params = JSON.parse(paramsStr) as typeof params;
     } catch {
       throw new BadRequestException('params 必须是合法 JSON');
     }

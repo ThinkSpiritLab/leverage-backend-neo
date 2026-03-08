@@ -29,7 +29,11 @@
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d data-source.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d data-source.ts",
     "load-test": "k6 run load-tests/auth.k6.js",
-    "load-test:all": "for f in load-tests/*.k6.js; do k6 run $f; done"
+    "load-test:all": "for f in load-tests/*.k6.js; do k6 run $f; done",
+    "mock:heng": "node scripts/mock-heng.js",
+    "mock:heng:wa": "node scripts/mock-heng.js --result=WA",
+    "mock:heng:ce": "node scripts/mock-heng.js --result=CE",
+    "mock:heng:interactive": "node scripts/mock-heng.js --interactive=true"
   },
   "dependencies": {
     "@bull-board/api": "^6.20.3",

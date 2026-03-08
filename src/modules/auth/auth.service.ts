@@ -170,9 +170,11 @@ export class AuthService {
       '15m',
     );
 
-    return this.jwtService.sign(payload as any, {
+    return this.jwtService.sign(payload as object, {
       secret: this.configService.get<string>('jwt.accessSecret'),
-      expiresIn: expiresIn as any,
+      expiresIn: expiresIn as
+        | `${number}${'s' | 'm' | 'h' | 'd' | 'w' | 'y'}`
+        | undefined,
     });
   }
 
@@ -182,9 +184,11 @@ export class AuthService {
       '7d',
     );
 
-    return this.jwtService.sign(payload as any, {
+    return this.jwtService.sign(payload as object, {
       secret: this.configService.get<string>('jwt.refreshSecret'),
-      expiresIn: expiresIn as any,
+      expiresIn: expiresIn as
+        | `${number}${'s' | 'm' | 'h' | 'd' | 'w' | 'y'}`
+        | undefined,
     });
   }
 
@@ -194,9 +198,11 @@ export class AuthService {
       '15m',
     );
 
-    return this.jwtService.sign(payload as any, {
+    return this.jwtService.sign(payload as object, {
       secret: this.configService.get<string>('jwt.accessSecret'),
-      expiresIn: expiresIn as any,
+      expiresIn: expiresIn as
+        | `${number}${'s' | 'm' | 'h' | 'd' | 'w' | 'y'}`
+        | undefined,
     });
   }
 

@@ -422,8 +422,8 @@ export class SubmissionService {
     if (countOnly) return q.getCount();
     const ids = await q
       .select('s.id', 'id')
-      .getRawMany()
-      .then((rows) => rows.map((r: any) => r.id as number));
+      .getRawMany<{ id: number }>()
+      .then((rows) => rows.map((r) => r.id));
     (async () => {
       for (const id of ids) {
         try {
@@ -483,13 +483,14 @@ export class SubmissionService {
     if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
     if (!isAdmin && submission.userId !== userId)
       throw new ForbiddenException('无权限查看此提交');
-    const result: any = { ...submission };
-    if (result.misc) {
-      delete result.misc.code;
-      delete result.misc.judgeResult;
+    const result = { ...submission };
+    const misc = result.misc as Record<string, unknown> | null | undefined;
+    if (misc) {
+      delete misc.code;
+      delete misc.judgeResult;
     }
-    delete result.time;
-    delete result.memory;
+    delete (result as { time?: unknown }).time;
+    delete (result as { memory?: unknown }).memory;
     return result;
   }
 
@@ -584,11 +585,11 @@ export class SubmissionService {
     else triedQb.andWhere('s.courseId IS NULL');
 
     const [acRows, triedRows] = await Promise.all([
-      acQb.getRawMany(),
-      triedQb.getRawMany(),
+      acQb.getRawMany<{ problemId: string }>(),
+      triedQb.getRawMany<{ problemId: string }>(),
     ]);
-    const acSet = new Set(acRows.map((r: any) => Number(r.problemId)));
-    const triedSet = new Set(triedRows.map((r: any) => Number(r.problemId)));
+    const acSet = new Set(acRows.map((r) => Number(r.problemId)));
+    const triedSet = new Set(triedRows.map((r) => Number(r.problemId)));
     for (const pid of problemIds) {
       if (acSet.has(pid)) result[pid] = UserProblemStatus.ACCEPTED;
       else if (triedSet.has(pid)) result[pid] = UserProblemStatus.ATTEMPTED;
@@ -630,8 +631,8 @@ export class SubmissionService {
       .select('ss.hashsum', 'hashsum')
       .groupBy('ss.hashsum')
       .having('COUNT(DISTINCT s.userId) >= :length', { length: userIds.length })
-      .getRawMany()
-      .then((rows) => rows.map((r: any) => r.hashsum as string));
+      .getRawMany<{ hashsum: string }>()
+      .then((rows) => rows.map((r) => r.hashsum));
     if (hashes.length === 0) return [];
     return this.suspicionRepo
       .createQueryBuilder('ss')
@@ -717,7 +718,7 @@ export class SubmissionService {
     if (problemId !== undefined)
       q.andWhere('s.problemId = :problemId', { problemId });
     if (userId !== undefined) q.andWhere('s.userId = :userId', { userId });
-    const rows = await q.getRawMany();
+    const rows = await q.getRawMany<Record<string, unknown>>();
     const headers =
       rows.length > 0
         ? Object.keys(rows[0])

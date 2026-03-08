@@ -71,9 +71,9 @@ export class SuspicionService {
     for (const sus of items) {
       const sub = sus.submission as
         | {
-            userId?: unknown;
-            user?: { username?: unknown };
-            problemId?: unknown;
+            userId?: string | number | null;
+            user?: { username?: string | null };
+            problemId?: string | number | null;
           }
         | null
         | undefined;

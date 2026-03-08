@@ -34,7 +34,7 @@ export class StatisticsService {
       .select('COUNT(*)', 'total')
       .addSelect('SUM(CASE WHEN s.status = 1 THEN 1 ELSE 0 END)', 'accepted')
       .where('s.problemId = :problemId', { problemId })
-      .getRawOne();
+      .getRawOne<{ accepted: string; total: string }>();
 
     return {
       accepted: Number(result?.accepted ?? 0),
@@ -54,7 +54,7 @@ export class StatisticsService {
       .andWhere('s.createdAt >= DATE_SUB(NOW(), INTERVAL 365 DAY)')
       .groupBy('DATE(s.createdAt)')
       .orderBy('date', 'ASC')
-      .getRawMany();
+      .getRawMany<{ date: string; count: string }>();
 
     return results.map((r) => ({
       date: r.date,
