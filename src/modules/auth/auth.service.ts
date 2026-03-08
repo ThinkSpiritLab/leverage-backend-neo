@@ -193,6 +193,7 @@ export class AuthService {
   private mapAuthority(authority: string): string {
     switch (authority) {
       case 'superadmin':
+      case 'sa':
         return 'sa'
       case 'admin':
         return 'admin'
