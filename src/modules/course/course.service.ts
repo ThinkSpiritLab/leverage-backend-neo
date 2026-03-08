@@ -91,6 +91,21 @@ export class CourseService {
     if (type !== undefined) qb.andWhere('c.type = :type', { type });
 
     const [items, total] = await qb.getManyAndCount();
+
+    // 附带每个课程的题目数
+    if (items.length > 0) {
+      const ids = items.map((c) => c.id);
+      const counts: { courseId: number; cnt: string }[] =
+        await this.courseRepo.manager.query(
+          `SELECT courseId, COUNT(*) as cnt FROM course_problem WHERE courseId IN (${ids.map(() => '?').join(',')}) GROUP BY courseId`,
+          ids,
+        );
+      const countMap = new Map(counts.map((r) => [r.courseId, parseInt(r.cnt)]));
+      for (const item of items) {
+        (item as any).problemCount = countMap.get(item.id) ?? 0;
+      }
+    }
+
     return { items, total };
   }
 

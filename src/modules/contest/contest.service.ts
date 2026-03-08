@@ -109,6 +109,21 @@ export class ContestService {
     if (type) qb.andWhere('c.type = :type', { type });
 
     const [items, total] = await qb.getManyAndCount();
+
+    // 附带每个竞赛的题目数
+    if (items.length > 0) {
+      const ids = items.map((c) => c.id);
+      const counts: { contestId: number; cnt: string }[] =
+        await this.contestRepo.manager.query(
+          `SELECT contestId, COUNT(*) as cnt FROM contest_problem WHERE contestId IN (${ids.map(() => '?').join(',')}) GROUP BY contestId`,
+          ids,
+        );
+      const countMap = new Map(counts.map((r) => [r.contestId, parseInt(r.cnt)]));
+      for (const item of items) {
+        (item as any).problemCount = countMap.get(item.id) ?? 0;
+      }
+    }
+
     return { items, total };
   }
 
