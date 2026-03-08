@@ -69,6 +69,10 @@ export class SettingService {
     return this.settingRepo.find();
   }
 
+  async getOne(key: string): Promise<Setting | null> {
+    return this.settingRepo.findOne({ where: { key } });
+  }
+
   /**
    * 获取公开配置（特定 key 列表）
    */
