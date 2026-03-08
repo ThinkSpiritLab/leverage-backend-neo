@@ -97,10 +97,27 @@ export class CourseService {
   /**
    * 详情
    */
-  async findOne(id: number): Promise<Course> {
+  async findOne(id: number): Promise<Course & { problems: any[] }> {
     const course = await this.courseRepo.findOne({ where: { id } });
     if (!course) throw new NotFoundException(`课程 ${id} 不存在`);
-    return course;
+
+    // Join problems with title/logicId/prefix
+    const raw = await this.courseProblemRepo
+      .createQueryBuilder('cp')
+      .leftJoin('problem', 'p', 'p.id = cp.problemId')
+      .addSelect(['p.title', 'p.logicId', 'p.prefix'])
+      .where('cp.courseId = :id', { id })
+      .orderBy('cp.problemId', 'ASC')
+      .getRawAndEntities();
+
+    const problems = raw.entities.map((cp, i) => ({
+      ...cp,
+      title: raw.raw[i]?.p_title ?? undefined,
+      logicId: raw.raw[i]?.p_logicId ?? undefined,
+      prefix: raw.raw[i]?.p_prefix ?? undefined,
+    }));
+
+    return { ...course, problems };
   }
 
   /**
