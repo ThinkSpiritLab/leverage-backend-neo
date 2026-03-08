@@ -2,6 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compression from 'compression';
+import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -12,6 +14,23 @@ async function bootstrap() {
 
   // Use nestjs-pino as the logger
   app.useLogger(app.get(Logger));
+
+  // gzip compression for large JSON responses (leaderboard, problem list, etc.)
+  app.use(compression());
+
+  // Helmet security headers
+  app.use(
+    helmet({
+      contentSecurityPolicy: false, // SPA doesn't need strict CSP
+      crossOriginEmbedderPolicy: false, // allow embedding images etc.
+    }),
+  );
+
+  // CORS — restrict origin in production via CORS_ORIGIN env variable
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true,
+  });
 
   // Global validation pipe
   app.useGlobalPipes(

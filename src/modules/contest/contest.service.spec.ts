@@ -217,7 +217,7 @@ describe('ContestService', () => {
 
   describe('create', () => {
     it('创建竞赛（无题目）', async () => {
-      const created = { id: 1, ...contestFixture };
+      const created = { ...contestFixture };
       contestRepo.create.mockReturnValue(created);
       contestRepo.save.mockResolvedValue(created);
 

@@ -72,13 +72,13 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   @Length(1, 32)
-  certifiedName?: string;
+  certifiedName?: string | null;
 
   @ApiPropertyOptional({ description: '昵称' })
   @IsOptional()
   @IsString()
   @Length(1, 32)
-  nickname?: string;
+  nickname?: string | null;
 
   @ApiPropertyOptional({
     description: '性别',

@@ -194,3 +194,30 @@
 - 用户管理（create / import / delete）：6 个
 - compete 游戏管理（create / delete）：4 个
 - 需要登录的接口（提交/房间/status）：3 个
+
+---
+
+## HTTP Security Headers (Helmet)
+
+Production deployment includes Helmet middleware:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Strict-Transport-Security` (HSTS)
+- `X-XSS-Protection`
+
+Configuration: `contentSecurityPolicy` and `crossOriginEmbedderPolicy` are disabled to support SPA and embedded media.
+
+## Response Compression
+
+gzip compression enabled via `compression` middleware.
+Typical savings: 60-80% for JSON responses (leaderboard, problem list, etc.).
+
+## CORS Configuration
+
+Restrict allowed origins in production via the `CORS_ORIGIN` environment variable:
+
+```env
+CORS_ORIGIN=https://your-domain.com
+```
+
+If unset, defaults to `*` (all origins). Always set this in production.

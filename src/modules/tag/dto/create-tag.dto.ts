@@ -9,5 +9,5 @@ export class CreateTagDto {
   @ApiPropertyOptional({ description: '父标签 ID（用于层级结构）' })
   @IsOptional()
   @IsInt()
-  parentId?: number;
+  parentId?: number | null;
 }
