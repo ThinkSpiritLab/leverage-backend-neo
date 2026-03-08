@@ -48,6 +48,13 @@ export class HengController {
         if (hostname && !manual.includes(hostname)) {
           manual.push(hostname);
         }
+        // localhost ↔ 127.0.0.1 互为别名，两个都加入
+        if (hostname === 'localhost' && !manual.includes('127.0.0.1')) {
+          manual.push('127.0.0.1');
+        }
+        if (hostname === '127.0.0.1' && !manual.includes('localhost')) {
+          manual.push('localhost');
+        }
       } catch { /* invalid URL, ignore */ }
     }
     return manual;
