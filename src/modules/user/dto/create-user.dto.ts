@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEmail,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -111,4 +112,20 @@ export class CreateUserDto {
   @IsString()
   @MaxLength(50)
   class?: string;
+
+  @ApiPropertyOptional({ description: '账号状态（0=正常, 2=封禁）' })
+  @IsOptional()
+  @IsInt()
+  status?: number;
+
+  @ApiPropertyOptional({ description: '封禁截止时间（ISO8601）' })
+  @IsOptional()
+  @IsString()
+  statusEndsAt?: string | null;
+
+  @ApiPropertyOptional({ description: '封禁/备注原因' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remarks?: string | null;
 }

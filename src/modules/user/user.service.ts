@@ -174,6 +174,10 @@ export class UserService {
     if (dto.college !== undefined) user.college = dto.college ?? null;
     if (dto.profession !== undefined) user.profession = dto.profession ?? null;
     if (dto.class !== undefined) user.class = dto.class ?? null;
+    if (dto.status !== undefined) user.status = dto.status;
+    if (dto.statusEndsAt !== undefined)
+      user.statusEndsAt = dto.statusEndsAt ? new Date(dto.statusEndsAt) : (null as any);
+    if (dto.remarks !== undefined) user.remarks = dto.remarks ?? null;
 
     return this.userRepo.save(user);
   }
