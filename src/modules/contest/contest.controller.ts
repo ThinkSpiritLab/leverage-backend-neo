@@ -219,4 +219,16 @@ export class ContestController {
   ) {
     return this.contestService.removeProblem(contestId, problemId);
   }
+
+  @Patch(':id/problems/:problemId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'sa')
+  @ApiOperation({ summary: '更新竞赛题目属性（颜色/分值/标签）' })
+  updateProblem(
+    @Param('id', ParseIntPipe) contestId: number,
+    @Param('problemId', ParseIntPipe) problemId: number,
+    @Body() dto: { color?: string | null; weight?: number; label?: string },
+  ) {
+    return this.contestService.updateProblem(contestId, problemId, dto);
+  }
 }

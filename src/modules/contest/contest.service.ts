@@ -89,7 +89,7 @@ export class ContestService {
     const problems = await this.contestProblemRepo
       .createQueryBuilder('cp')
       .leftJoin('problem', 'p', 'p.id = cp.problemId')
-      .addSelect(['p.title', 'p.logicId'])
+      .addSelect(['p.title', 'p.logicId', 'p.prefix'])
       .where('cp.contestId = :id', { id })
       .orderBy('cp.label', 'ASC')
       .getRawAndEntities();
@@ -98,6 +98,7 @@ export class ContestService {
       ...cp,
       title: problems.raw[i]?.p_title ?? undefined,
       logicId: problems.raw[i]?.p_logicId ?? undefined,
+      prefix: problems.raw[i]?.p_prefix ?? undefined,
     }));
 
     return { ...contest, problems: enriched };
@@ -388,5 +389,21 @@ export class ContestService {
     const cp = await this.contestProblemRepo.findOne({ where: { contestId, problemId } });
     if (!cp) throw new NotFoundException(`竞赛题目不存在`);
     await this.contestProblemRepo.remove(cp);
+  }
+
+  /**
+   * 更新竞赛题目属性（颜色、分值、标签）
+   */
+  async updateProblem(
+    contestId: number,
+    problemId: number,
+    dto: { color?: string | null; weight?: number; label?: string },
+  ): Promise<ContestProblem> {
+    const cp = await this.contestProblemRepo.findOne({ where: { contestId, problemId } });
+    if (!cp) throw new NotFoundException(`竞赛题目不存在`);
+    if (dto.color !== undefined) cp.color = dto.color ?? null;
+    if (dto.weight !== undefined) cp.weight = dto.weight;
+    if (dto.label !== undefined) cp.label = dto.label;
+    return this.contestProblemRepo.save(cp);
   }
 }
