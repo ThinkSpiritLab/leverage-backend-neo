@@ -1,8 +1,7 @@
 name: E2E Tests
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # 仅手动触发，节省 Actions 配额
 
 jobs:
   e2e:
