@@ -35,7 +35,7 @@ export class Match {
   @OneToMany('MatchGamerLink', (link: { match: Match }) => link.match, {
     cascade: ['insert'],
   })
-  links: unknown[];
+  links: any[];
 
   @CreateDateColumn()
   createdAt: Date;

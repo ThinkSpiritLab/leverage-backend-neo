@@ -3,10 +3,16 @@ import { InjectQueue, Process, Processor } from '@nestjs/bull';
 import type { Job, Queue } from 'bull';
 import { randomBytes } from 'crypto';
 import { ConfigService } from '@nestjs/config';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Gauge } from 'prom-client';
 import { JUDGE_TX_QUEUE } from '../../queue/queue.constants';
 import { HengClientService } from '../heng-client.service';
 import { RedisService } from '../../redis/redis.service';
 import { CreateJudgeRequest, JudgeTxPayload } from '../heng.types';
+import {
+  JUDGE_QUEUE_ACTIVE_GAUGE,
+  JUDGE_QUEUE_WAITING_GAUGE,
+} from '../../metrics/metrics.module';
 
 /**
  * JudgeTxWorker
@@ -27,6 +33,10 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     private readonly hengClient: HengClientService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    @InjectMetric(JUDGE_QUEUE_WAITING_GAUGE)
+    private readonly waitingGauge: Gauge<string>,
+    @InjectMetric(JUDGE_QUEUE_ACTIVE_GAUGE)
+    private readonly activeGauge: Gauge<string>,
   ) {}
 
   async onApplicationShutdown(signal?: string): Promise<void> {
@@ -39,6 +49,14 @@ export class JudgeTxWorker implements OnApplicationShutdown {
   @Process('judge')
   async handle(job: Job<JudgeTxPayload>): Promise<void> {
     const { submissionId, task } = job.data;
+
+    // Update queue gauges
+    const [waiting, active] = await Promise.all([
+      this.queue.getWaitingCount(),
+      this.queue.getActiveCount(),
+    ]);
+    this.waitingGauge.set(waiting);
+    this.activeGauge.set(active);
 
     // Step 1: 生成唯一 judgeId（32 字节随机 hex）
     const judgeId = randomBytes(16).toString('hex');

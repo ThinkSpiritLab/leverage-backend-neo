@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ILike, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { User } from '../../database/entities/user.entity';
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, verifyPassword } from '../../common/utils/crypto.util';

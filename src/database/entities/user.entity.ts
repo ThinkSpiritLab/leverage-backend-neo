@@ -86,5 +86,5 @@ export class User {
   updatedAt: Date;
 
   @OneToMany('UserMeta', (meta: { user: User }) => meta.user, { cascade: true })
-  metas: unknown[];
+  metas: any[];
 }

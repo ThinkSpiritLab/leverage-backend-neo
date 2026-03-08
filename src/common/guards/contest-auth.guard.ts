@@ -71,7 +71,9 @@ export class ContestAuthGuard
     // 检查 IP 绑定
     if ((contest.deviceBindType & BindIp) !== 0) {
       const clientIp = this.getClientIp(request);
-      const storedIp = (contestUser as unknown as Record<string, unknown>)['bindIp'] as string | undefined;
+      const storedIp = (contestUser as unknown as Record<string, unknown>)[
+        'bindIp'
+      ] as string | undefined;
       if (storedIp && storedIp !== clientIp) {
         throw new UnauthorizedException(
           'IP 地址不匹配，请使用绑定的 IP 地址访问',

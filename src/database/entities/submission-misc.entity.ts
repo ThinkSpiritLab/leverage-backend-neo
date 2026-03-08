@@ -5,9 +5,11 @@ export class SubmissionMisc {
   @PrimaryColumn()
   submissionId: number;
 
-  @OneToOne('Submission', (s: { misc: SubmissionMisc }) => s.misc, { onDelete: 'CASCADE' })
+  @OneToOne('Submission', (s: { misc: SubmissionMisc }) => s.misc, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'submissionId' })
-  submission: unknown;
+  submission: any;
 
   @Column('text', { nullable: true })
   judgeResult?: string;

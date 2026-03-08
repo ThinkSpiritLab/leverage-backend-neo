@@ -14,9 +14,13 @@ export class JwtRefreshStrategy extends PassportStrategy(
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         // 从 body 提取
-        (req: Request) => req?.body?.refreshToken ?? null,
+        (req: Request) =>
+          (req?.body as { refreshToken?: string } | undefined)?.refreshToken ??
+          null,
         // 从 Cookie 提取
-        (req: Request) => req?.cookies?.refreshToken ?? null,
+        (req: Request) =>
+          (req?.cookies as { refreshToken?: string } | undefined)
+            ?.refreshToken ?? null,
       ]),
       ignoreExpiration: false,
       secretOrKey:

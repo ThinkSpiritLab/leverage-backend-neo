@@ -69,7 +69,14 @@ export class SuspicionService {
     ];
 
     for (const sus of items) {
-      const sub = sus.submission as { userId?: unknown; user?: { username?: unknown }; problemId?: unknown } | null | undefined;
+      const sub = sus.submission as
+        | {
+            userId?: unknown;
+            user?: { username?: unknown };
+            problemId?: unknown;
+          }
+        | null
+        | undefined;
       rows.push(
         [
           sus.submissionId,

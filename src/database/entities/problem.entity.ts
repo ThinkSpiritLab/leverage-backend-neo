@@ -96,7 +96,7 @@ export class Problem {
 
   @ManyToOne('Submission')
   @JoinColumn({ name: 'spjId' })
-  spj: unknown;
+  spj: any;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -3,6 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Counter } from 'prom-client';
+import { LOGIN_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { ContestUser } from '../../database/entities/contest-user.entity';
 import { Contest } from '../../database/entities/contest.entity';
 import { User } from '../../database/entities/user.entity';
@@ -35,6 +38,8 @@ export class AuthService {
     private contestRepo: Repository<Contest>,
     private jwtService: JwtService,
     private configService: ConfigService,
+    @InjectMetric(LOGIN_TOTAL_COUNTER)
+    private readonly loginCounter: Counter<string>,
   ) {}
 
   /**
@@ -50,10 +55,12 @@ export class AuthService {
     });
 
     if (!user) {
+      this.loginCounter.labels({ success: 'false', type: 'user' }).inc();
       throw new UnauthorizedException('用户名或密码错误');
     }
 
     if (!verifyPassword(password, user.passwordHash)) {
+      this.loginCounter.labels({ success: 'false', type: 'user' }).inc();
       throw new UnauthorizedException('用户名或密码错误');
     }
 
@@ -66,6 +73,7 @@ export class AuthService {
       role: this.mapAuthority(user.authority),
     };
 
+    this.loginCounter.labels({ success: 'true', type: 'user' }).inc();
     return {
       accessToken: this.generateAccessToken(payload),
       refreshToken: this.generateRefreshToken(payload),
@@ -138,7 +146,7 @@ export class AuthService {
   /**
    * 用 refresh token 换新 access token
    */
-  async refreshToken(refreshToken: string): Promise<{ accessToken: string }> {
+  refreshToken(refreshToken: string): { accessToken: string } {
     try {
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
         secret: this.configService.get<string>('jwt.refreshSecret'),

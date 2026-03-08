@@ -13,7 +13,11 @@ import { randomUUID } from 'crypto';
  */
 @Injectable()
 export class CorrelationIdMiddleware implements NestMiddleware {
-  use(req: Request & { correlationId?: string }, res: Response, next: NextFunction): void {
+  use(
+    req: Request & { correlationId?: string },
+    res: Response,
+    next: NextFunction,
+  ): void {
     const correlationId =
       (req.headers['x-correlation-id'] as string) || randomUUID();
 

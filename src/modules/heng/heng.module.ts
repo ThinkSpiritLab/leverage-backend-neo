@@ -3,6 +3,7 @@ import { HengClientService } from './heng-client.service';
 import { HengController } from './heng.controller';
 import { JudgeTxWorker } from './workers/judge-tx.worker';
 import { JudgeRxWorker } from './workers/judge-rx.worker';
+import { MetricsModule } from '../metrics/metrics.module';
 import { QueueModule } from '../queue/queue.module';
 import { RedisModule } from '../redis/redis.module';
 import { ReceiveModule } from '../receive/receive.module';
@@ -17,7 +18,7 @@ import { ReceiveModule } from '../receive/receive.module';
  * - JudgeRxWorker：消费 judge-rx 队列，分发给 ReceiveService
  */
 @Module({
-  imports: [QueueModule, RedisModule, ReceiveModule],
+  imports: [MetricsModule, QueueModule, RedisModule, ReceiveModule],
   controllers: [HengController],
   providers: [HengClientService, JudgeTxWorker, JudgeRxWorker],
   exports: [HengClientService],

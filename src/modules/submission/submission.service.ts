@@ -10,7 +10,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import type { Queue } from 'bull';
-import { In, IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import archiver from 'archiver';
 import { Submission } from '../../database/entities/submission.entity';
@@ -29,6 +29,9 @@ import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { SubmissionQueryDto } from './dto/submission-query.dto';
 import { SearchSubmissionDto } from './dto/search-submission.dto';
 import { RejudgeDto } from './dto/rejudge.dto';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Counter } from 'prom-client';
+import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
 
 export enum UserProblemStatus {
   TODO = 0,
@@ -80,6 +83,8 @@ export class SubmissionService {
     private readonly configService: ConfigService,
     @InjectQueue(JUDGE_TX_QUEUE)
     private readonly judgeTxQueue: Queue,
+    @InjectMetric(SUBMISSION_TOTAL_COUNTER)
+    private readonly submissionCounter: Counter<string>,
   ) {}
 
   async create(userId: number, dto: CreateSubmissionDto): Promise<Submission> {
@@ -112,6 +117,12 @@ export class SubmissionService {
         testDataUrl: this.buildTestDataUrl(problem),
       },
     });
+    // Increment business metric counter
+    const langName = LANGUAGE_EXT_MAP[dto.language] ?? String(dto.language);
+    this.submissionCounter
+      .labels({ language: langName, status: 'pending' })
+      .inc();
+
     this.logger.log(
       `Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}`,
     );
@@ -490,7 +501,10 @@ export class SubmissionService {
     if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
     if (!isAdmin && submission.userId !== userId)
       throw new ForbiddenException('无权限查看此提交代码');
-    return { id: submission.id, code: (submission.misc as { code?: string } | null)?.code };
+    return {
+      id: submission.id,
+      code: (submission.misc as { code?: string } | null)?.code,
+    };
   }
 
   async remove(id: number) {
@@ -736,11 +750,11 @@ export class SubmissionService {
       .replace(/"(.*?)"/g, '');
     const hashsum = createHash('sha1').update(source).digest('hex');
     const occ = (pattern: RegExp) => (source.match(pattern) || []).length;
-    const mas0 = occ(/[*+\-]0\b/g);
-    const md1 = occ(/[\/*]1[^.\d]/g) * 3;
+    const mas0 = occ(/[*+-]0\b/g);
+    const md1 = occ(/[/*]1[^.\d]/g) * 3;
     const defCnt = occ(/#define/g);
     const def = Math.min(Math.round(1.4 ** defCnt - 1), 2000);
-    const con = occ(/[+\-*\/^%&|]\d+[+\-*\/^%&|]\d+/g);
+    const con = occ(/[+\-*^%&|]\d+[+\-*^%&|]\d+/g);
     const cpp = Math.round(
       occ(
         /virtual|nullptr|constexpr|typename|template|friend|decltype|override|explicit|mutable|volatile/g,

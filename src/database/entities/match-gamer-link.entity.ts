@@ -24,7 +24,7 @@ export class MatchGamerLink {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'matchId' })
-  match: unknown;
+  match: any;
 
   @Column('tinyint')
   index: number;

@@ -6,6 +6,7 @@ import { Problem } from '../../database/entities/problem.entity';
 import { RejudgeLog } from '../../database/entities/rejudge-log.entity';
 import { Suspicion } from '../../database/entities/suspicion.entity';
 import { AuthModule } from '../auth/auth.module';
+import { MetricsModule } from '../metrics/metrics.module';
 import { QueueModule } from '../queue/queue.module';
 import { SubmissionController } from './submission.controller';
 import { SubmissionService } from './submission.service';
@@ -20,6 +21,7 @@ import { SubmissionService } from './submission.service';
       Suspicion,
     ]),
     AuthModule,
+    MetricsModule,
     QueueModule,
   ],
   controllers: [SubmissionController],

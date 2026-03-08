@@ -27,7 +27,11 @@ import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
               ignore: (req: { url?: string }) => req.url === '/health',
             },
             serializers: {
-              req(req: { method?: string; url?: string; remoteAddress?: string }) {
+              req(req: {
+                method?: string;
+                url?: string;
+                remoteAddress?: string;
+              }) {
                 return {
                   method: req.method,
                   url: req.url,

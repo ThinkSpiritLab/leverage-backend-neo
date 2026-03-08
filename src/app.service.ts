@@ -14,13 +14,18 @@ export class AppService {
     const results = await Promise.all([
       this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM problem'),
       this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM user'),
-      this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM submission'),
-      this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM notification'),
+      this.dataSource.query<CountRow[]>(
+        'SELECT COUNT(*) AS cnt FROM submission',
+      ),
+      this.dataSource.query<CountRow[]>(
+        'SELECT COUNT(*) AS cnt FROM notification',
+      ),
       this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM message'),
       this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM course'),
       this.dataSource.query<CountRow[]>('SELECT COUNT(*) AS cnt FROM contest'),
     ]);
-    const [problem, user, submission, notification, message, course, contest] = results;
+    const [problem, user, submission, notification, message, course, contest] =
+      results;
     return {
       problem: Number(problem[0]?.cnt ?? 0),
       user: Number(user[0]?.cnt ?? 0),

@@ -1,6 +1,12 @@
-import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { MetricsAuthMiddleware } from './common/middleware/metrics-auth.middleware';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -142,6 +148,11 @@ import { MessageModule } from './modules/message/message.module';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // Protect /metrics from public access (IP whitelist + optional Bearer token)
+    consumer
+      .apply(MetricsAuthMiddleware)
+      .forRoutes({ path: 'metrics', method: RequestMethod.GET });
+
     consumer
       .apply(CorrelationIdMiddleware)
       .forRoutes({ path: '*', method: RequestMethod.ALL });
