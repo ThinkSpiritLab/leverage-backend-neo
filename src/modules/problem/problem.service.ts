@@ -233,7 +233,7 @@ export class ProblemService {
       .createQueryBuilder('p')
       .where('p.prefix = :prefix', { prefix: src.prefix })
       .select('MAX(p.logicId)', 'maxId')
-      .getRawOne<{ maxId: number | null }>();
+      .getRawOne() as { maxId: number | null };
     const newLogicId = (maxRow?.maxId ?? 0) + 1;
 
     const newProblem = this.problemRepo.create({
@@ -248,13 +248,13 @@ export class ProblemService {
       cases: src.cases,
       multiCases: src.multiCases,
       difficulty: src.difficulty,
-      hidden: true,          // fork 默认隐藏，需手动开放
-      closed: src.closed,
+      closed: true,          // fork 默认关闭（hidden），需手动开放
       restricted: src.restricted,
       tags: src.tags,
     });
 
-    return this.problemRepo.save(newProblem);
+    const saved = await this.problemRepo.save(newProblem);
+    return Array.isArray(saved) ? saved[0] : saved;
   }
 
   /**

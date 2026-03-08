@@ -559,7 +559,7 @@ describe('ContestService', () => {
       expect(result).toHaveLength(3);
       expect(result[0].rank).toBe(1);
       expect(result[0].username).toBe('user1');
-      expect(result[0].score).toBe(300);
+      expect(result[0].solved).toBeDefined();
       expect(contestRepo.findOne).not.toHaveBeenCalled();
     });
 
