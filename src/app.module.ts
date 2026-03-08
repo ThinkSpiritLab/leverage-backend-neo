@@ -11,6 +11,9 @@ import { QueueModule } from './modules/queue/queue.module'
 import { RedisModule } from './modules/redis/redis.module'
 import { HengModule } from './modules/heng/heng.module'
 import { ReceiveModule } from './modules/receive/receive.module'
+import { ProblemModule } from './modules/problem/problem.module'
+import { SubmissionModule } from './modules/submission/submission.module'
+import { TagModule } from './modules/tag/tag.module'
 
 @Module({
   imports: [
@@ -48,6 +51,15 @@ import { ReceiveModule } from './modules/receive/receive.module'
 
     // 评测结果接收处理
     ReceiveModule,
+
+    // 题目模块
+    ProblemModule,
+
+    // 提交模块
+    SubmissionModule,
+
+    // 标签模块
+    TagModule,
   ],
 })
 export class AppModule {}
