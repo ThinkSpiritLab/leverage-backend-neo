@@ -5,6 +5,7 @@ export const validationSchema = Joi.object({
   PORT: Joi.number().default(3000),
   NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
   SKIP_INIT: Joi.boolean().default(false),
+  BASE_URL: Joi.string().default('http://localhost:3000'),
 
   // Database (required)
   DB_HOST: Joi.string().default('localhost'),
