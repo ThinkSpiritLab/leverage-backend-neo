@@ -16,6 +16,7 @@ import { Tag } from '../src/database/entities/tag.entity'
 import { ContestProblem } from '../src/database/entities/contest-problem.entity'
 import { CourseProblem } from '../src/database/entities/course-problem.entity'
 import { ContestUser } from '../src/database/entities/contest-user.entity'
+import { ContestUserProblem } from '../src/database/entities/contest-user-problem.entity'
 import { CourseUser } from '../src/database/entities/course-user.entity'
 import { Submission } from '../src/database/entities/submission.entity'
 import { SubmissionMisc } from '../src/database/entities/submission-misc.entity'
@@ -523,6 +524,7 @@ async function main() {
   const contestProblemRepo = AppDataSource.getRepository(ContestProblem)
   const courseProblemRepo = AppDataSource.getRepository(CourseProblem)
   const contestUserRepo = AppDataSource.getRepository(ContestUser)
+  const contestUserProblemRepo = AppDataSource.getRepository(ContestUserProblem)
   const courseUserRepo = AppDataSource.getRepository(CourseUser)
   const submissionRepo = AppDataSource.getRepository(Submission)
   const submissionMiscRepo = AppDataSource.getRepository(SubmissionMisc)
@@ -755,100 +757,120 @@ async function main() {
     stats.contestUsersUpserted += 1
   }
 
-  // 6) 竞赛1模拟提交（若已很多则跳过）
-  console.log('\n📨 写入竞赛1模拟提交...')
-  const contest1ExistsCountFixed = await submissionRepo.count({ where: { contestId: 1 } })
-  const contest1ExistsCountReal = contest1.id === 1 ? contest1ExistsCountFixed : await submissionRepo.count({ where: { contestId: contest1.id } })
+  // 6) 竞赛1模拟提交（重建，确保 AC / 气球 / accepts 一致）
+  console.log('\n📨 重建竞赛1模拟提交与气球数据...')
 
-  if (contest1ExistsCountFixed > 10 || contest1ExistsCountReal > 10) {
-    console.log(`  - 提交已存在（contestId=1: ${contest1ExistsCountFixed}, contestId=${contest1.id}: ${contest1ExistsCountReal}），跳过插入`)
-  } else {
-    const userByName = Object.fromEntries(seedUsers.map((u) => [u.username, u])) as Record<string, User>
-    const contest1ProblemByLabel: Record<string, number> = {
-      A: problemByLogicId[1001].id,
-      B: problemByLogicId[1002].id,
-      C: problemByLogicId[1003].id,
-      D: problemByLogicId[1004].id,
-      E: problemByLogicId[1005].id,
-    }
+  await submissionRepo.delete({ contestId: contest1.id })
+  await contestUserProblemRepo.delete({ contestId: contest1.id })
 
-    const plans: Array<{ user: string; label: keyof typeof contest1ProblemByLabel; status: 0 | 1; minute: number; time: number; memory: number }> = [
-      { user: 'user1', label: 'A', status: 0, minute: 30, time: 120, memory: 16384 },
-      { user: 'user1', label: 'B', status: 1, minute: 55, time: 300, memory: 20480 },
-      { user: 'user1', label: 'B', status: 0, minute: 60, time: 180, memory: 20480 },
-      { user: 'user1', label: 'C', status: 1, minute: 70, time: 500, memory: 32768 },
+  const userByName = Object.fromEntries(seedUsers.map((u) => [u.username, u])) as Record<string, User>
+  const contest1ProblemByLabel: Record<string, number> = {
+    A: problemByLogicId[1001].id,
+    B: problemByLogicId[1002].id,
+    C: problemByLogicId[1003].id,
+    D: problemByLogicId[1004].id,
+    E: problemByLogicId[1005].id,
+  }
 
-      { user: 'user2', label: 'A', status: 0, minute: 45, time: 130, memory: 16384 },
-      { user: 'user2', label: 'B', status: 0, minute: 90, time: 210, memory: 24576 },
-      { user: 'user2', label: 'D', status: 0, minute: 120, time: 190, memory: 20480 },
+  const plans: Array<{ user: string; label: keyof typeof contest1ProblemByLabel; status: 0 | 1; minute: number; time: number; memory: number }> = [
+    { user: 'user1', label: 'A', status: 0, minute: 30, time: 120, memory: 16384 },
+    { user: 'user1', label: 'B', status: 1, minute: 55, time: 300, memory: 20480 },
+    { user: 'user1', label: 'B', status: 0, minute: 60, time: 180, memory: 20480 },
+    { user: 'user1', label: 'C', status: 1, minute: 70, time: 500, memory: 32768 },
 
-      { user: 'user3', label: 'A', status: 1, minute: 42, time: 420, memory: 16384 },
-      { user: 'user3', label: 'A', status: 0, minute: 50, time: 160, memory: 16384 },
-      { user: 'user3', label: 'B', status: 1, minute: 85, time: 410, memory: 24576 },
+    { user: 'user2', label: 'A', status: 0, minute: 45, time: 130, memory: 16384 },
+    { user: 'user2', label: 'B', status: 0, minute: 90, time: 210, memory: 24576 },
+    { user: 'user2', label: 'D', status: 0, minute: 120, time: 190, memory: 20480 },
 
-      { user: 'user4', label: 'A', status: 0, minute: 20, time: 100, memory: 12288 },
+    { user: 'user3', label: 'A', status: 1, minute: 42, time: 420, memory: 16384 },
+    { user: 'user3', label: 'A', status: 0, minute: 50, time: 160, memory: 16384 },
+    { user: 'user3', label: 'B', status: 1, minute: 85, time: 410, memory: 24576 },
 
-      { user: 'user5', label: 'A', status: 1, minute: 35, time: 400, memory: 16000 },
-      { user: 'user5', label: 'A', status: 0, minute: 48, time: 180, memory: 16000 },
-      { user: 'user5', label: 'C', status: 0, minute: 105, time: 260, memory: 30000 },
+    { user: 'user4', label: 'A', status: 0, minute: 20, time: 100, memory: 12288 },
 
-      { user: 'user6', label: 'B', status: 1, minute: 65, time: 360, memory: 22000 },
-      { user: 'user6', label: 'B', status: 1, minute: 75, time: 350, memory: 22000 },
-      { user: 'user6', label: 'D', status: 0, minute: 118, time: 240, memory: 26000 },
+    { user: 'user5', label: 'A', status: 1, minute: 35, time: 400, memory: 16000 },
+    { user: 'user5', label: 'A', status: 0, minute: 48, time: 180, memory: 16000 },
+    { user: 'user5', label: 'C', status: 0, minute: 105, time: 260, memory: 30000 },
 
-      { user: 'user7', label: 'A', status: 0, minute: 28, time: 125, memory: 15000 },
-      { user: 'user7', label: 'E', status: 1, minute: 95, time: 520, memory: 32000 },
+    { user: 'user6', label: 'B', status: 1, minute: 65, time: 360, memory: 22000 },
+    { user: 'user6', label: 'B', status: 1, minute: 75, time: 350, memory: 22000 },
+    { user: 'user6', label: 'D', status: 0, minute: 118, time: 240, memory: 26000 },
 
-      { user: 'user8', label: 'C', status: 1, minute: 80, time: 480, memory: 28000 },
-      { user: 'user8', label: 'C', status: 0, minute: 112, time: 220, memory: 28000 },
+    { user: 'user7', label: 'A', status: 0, minute: 28, time: 125, memory: 15000 },
+    { user: 'user7', label: 'E', status: 1, minute: 95, time: 520, memory: 32000 },
 
-      { user: 'user9', label: 'A', status: 1, minute: 22, time: 390, memory: 15000 },
-      { user: 'user9', label: 'B', status: 1, minute: 55, time: 420, memory: 23000 },
-      { user: 'user9', label: 'E', status: 0, minute: 119, time: 300, memory: 35000 },
+    { user: 'user8', label: 'C', status: 1, minute: 80, time: 480, memory: 28000 },
+    { user: 'user8', label: 'C', status: 0, minute: 112, time: 220, memory: 28000 },
 
-      { user: 'user10', label: 'D', status: 1, minute: 100, time: 530, memory: 26000 },
-      { user: 'user10', label: 'D', status: 0, minute: 121, time: 210, memory: 26000 },
-    ]
+    { user: 'user9', label: 'A', status: 1, minute: 22, time: 390, memory: 15000 },
+    { user: 'user9', label: 'B', status: 1, minute: 55, time: 420, memory: 23000 },
+    { user: 'user9', label: 'E', status: 0, minute: 119, time: 300, memory: 35000 },
 
-    for (const plan of plans) {
-      const createdAt = new Date(contest1.startTime.getTime() + plan.minute * 60 * 1000)
-      const submission = await submissionRepo.save(
-        submissionRepo.create({
-          userId: userByName[plan.user].id,
-          problemId: contest1ProblemByLabel[plan.label],
-          language: 1,
-          status: plan.status,
-          time: plan.time,
-          memory: plan.memory,
+    { user: 'user10', label: 'D', status: 1, minute: 100, time: 530, memory: 26000 },
+    { user: 'user10', label: 'D', status: 0, minute: 121, time: 210, memory: 26000 },
+  ]
+
+  const acSetMap = new Map<number, Set<number>>()
+
+  for (const plan of plans) {
+    const userId = userByName[plan.user].id
+    const problemId = contest1ProblemByLabel[plan.label]
+    const createdAt = new Date(contest1.startTime.getTime() + plan.minute * 60 * 1000)
+    const submission = await submissionRepo.save(
+      submissionRepo.create({
+        userId,
+        problemId,
+        language: 1,
+        status: plan.status,
+        time: plan.time,
+        memory: plan.memory,
+        contestId: contest1.id,
+        createdAt,
+      }),
+    )
+
+    await submissionMiscRepo.save(
+      submissionMiscRepo.create({
+        submissionId: submission.id,
+        code: `// ${plan.user} - ${plan.label}\nint main(){return 0;}`,
+        judgeResult: JSON.stringify({ status: plan.status === 0 ? 'AC' : 'WA' }),
+        compileErrorMsg: undefined,
+      } as SubmissionMisc),
+    )
+
+    if (plan.status === 0) {
+      const userAcSet = acSetMap.get(userId) ?? new Set<number>()
+      userAcSet.add(problemId)
+      acSetMap.set(userId, userAcSet)
+
+      await contestUserProblemRepo
+        .createQueryBuilder()
+        .insert()
+        .values({
           contestId: contest1.id,
-          createdAt,
-        }),
-      )
-
-      await submissionMiscRepo.save(
-        submissionMiscRepo.create({
-          submissionId: submission.id,
-          code: `// ${plan.user} - ${plan.label}\nint main(){return 0;}`,
-          judgeResult: JSON.stringify({ status: plan.status === 0 ? 'AC' : 'WA' }),
-          compileErrorMsg: undefined,
-        } as SubmissionMisc),
-      )
-      stats.submissionsInserted += 1
+          contestUserId: userId,
+          contestProblemId: problemId,
+          sent: false,
+        })
+        .orIgnore()
+        .execute()
     }
 
-    // 更新 contest_user 统计
-    for (const user of seedUsers.slice(0, 10)) {
-      const subs = await submissionRepo.find({ where: { contestId: contest1.id, userId: user.id } })
-      const acSet = new Set(subs.filter((s) => s.status === 0).map((s) => s.problemId))
-      await contestUserRepo.save(
-        contestUserRepo.create({
-          contestId: contest1.id,
-          userId: user.id,
-          submits: subs.length,
-          accepts: acSet.size,
-        }),
-      )
-    }
+    stats.submissionsInserted += 1
+  }
+
+  // 更新 contest_user 统计（accepts=AC 题目数）
+  for (const user of seedUsers.slice(0, 10)) {
+    const subs = await submissionRepo.find({ where: { contestId: contest1.id, userId: user.id } })
+    const acSet = acSetMap.get(user.id) ?? new Set<number>()
+    await contestUserRepo.save(
+      contestUserRepo.create({
+        contestId: contest1.id,
+        userId: user.id,
+        submits: subs.length,
+        accepts: acSet.size,
+      }),
+    )
   }
 
   // 7) 课程（包含全部10题）

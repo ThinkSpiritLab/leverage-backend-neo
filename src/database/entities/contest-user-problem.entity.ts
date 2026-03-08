@@ -26,6 +26,13 @@ export class ContestUserProblem {
   @PrimaryColumn('int')
   contestProblemId: number;
 
+  @ManyToOne('ContestProblem', { onDelete: 'CASCADE' })
+  @JoinColumn([
+    { name: 'contestUserContestId', referencedColumnName: 'contestId' },
+    { name: 'contestProblemId', referencedColumnName: 'problemId' },
+  ])
+  contestProblem: any;
+
   @Column({ default: false })
   sent: boolean;
 

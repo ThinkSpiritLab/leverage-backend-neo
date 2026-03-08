@@ -374,13 +374,28 @@ export class ContestService {
   /**
    * 获取气球列表（ContestUserProblem 首次 AC 记录，sent=false）
    */
-  async getBalloons(contestId: number): Promise<ContestUserProblem[]> {
-    return this.contestUserProblemRepo
+  async getBalloons(contestId: number): Promise<any[]> {
+    const balloons = await this.contestUserProblemRepo
       .createQueryBuilder('cup')
+      .leftJoinAndSelect('cup.contestUser', 'cu')
+      .leftJoinAndSelect('cu.user', 'user')
+      .leftJoinAndSelect('cup.contestProblem', 'cp')
       .where('cup.contestUserContestId = :contestId', { contestId })
       .andWhere('cup.sent = false')
       .orderBy('cup.createdAt', 'ASC')
       .getMany();
+
+    return balloons.map((cup) => ({
+      id: cup.contestProblemId,
+      contestProblemId: cup.contestProblemId,
+      userId: cup.contestUser?.userId,
+      username: cup.contestUser?.user?.username,
+      problemLabel: cup.contestProblem?.label,
+      problemId: cup.contestProblem?.problemId,
+      sent: cup.sent,
+      delivered: cup.sent,
+      createdAt: cup.createdAt,
+    }));
   }
 
   /**
