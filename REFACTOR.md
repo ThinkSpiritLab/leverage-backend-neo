@@ -160,6 +160,43 @@ MAX_SUBMISSION_PER_MINUTE=10
 - Swagger 文档：`/api/docs`（`@nestjs/swagger`）
 - 所有 Controller 用 `@ApiTags` + `@ApiOperation` 注释
 
+## Commit 规范（重要）
+
+**粒度要细，越碎越好**，每完成一个小单元就 commit，不要攒着。
+
+格式：`type(scope): 描述`
+
+类型：
+- `feat` — 新功能
+- `fix` — bug 修复
+- `refactor` — 重构（不改功能）
+- `test` — 测试
+- `chore` — 配置/依赖/工具
+- `docs` — 文档
+
+**粒度示例（正确做法）：**
+```
+feat(auth): 添加 JWT access token 生成
+feat(auth): 添加 JWT refresh token 逻辑
+feat(auth): 添加 login 接口
+feat(auth): 添加 logout 接口
+feat(auth): 添加 JwtAuthGuard
+test(auth): 添加 AuthService 密码哈希测试
+test(auth): 添加 AuthService login 流程测试
+feat(submission): 添加提交实体和 DTO
+feat(submission): 添加频率限制逻辑（Redis INCR）
+feat(submission): 添加资源倍增（bonus）逻辑
+test(submission): 添加频率限制单元测试
+```
+
+**错误示范：**
+```
+feat(auth): 完成认证模块   ← 太粗
+feat: 添加各种功能         ← 毫无意义
+```
+
+每个 commit 应该只做一件事，能用一句话说清楚。
+
 ## 测试要求
 
 - 框架：Jest + `@nestjs/testing`
