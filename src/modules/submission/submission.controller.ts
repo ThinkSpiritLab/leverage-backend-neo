@@ -324,10 +324,10 @@ export class SubmissionController {
 
   @Post(':id/rejudge')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('supervisor')
+  @Roles('admin')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '重评单条（需要 supervisor 权限）' })
+  @ApiOperation({ summary: '重评单条（需要 admin 权限）' })
   @ApiParam({ name: 'id', description: '提交 ID' })
   async rejudge(@Param('id', ParseIntPipe) id: number) {
     await this.submissionService.rejudge(id)

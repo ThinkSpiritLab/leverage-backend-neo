@@ -16,6 +16,7 @@ import { Log } from './entities/log.entity'
 import { Match } from './entities/match.entity'
 import { MatchGamerLink } from './entities/match-gamer-link.entity'
 import { Media } from './entities/media.entity'
+import { Message } from './entities/message.entity'
 import { Notification } from './entities/notification.entity'
 import { Problem } from './entities/problem.entity'
 import { Profession } from './entities/profession.entity'
@@ -47,6 +48,7 @@ const entities = [
   CourseProblem,
   Tag,
   Log,
+  Message,
   Notification,
   Media,
   Setting,

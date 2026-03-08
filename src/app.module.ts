@@ -27,6 +27,7 @@ import { StatisticsModule } from './modules/statistics/statistics.module'
 import { InitModule } from './modules/init/init.module'
 import { CompeteModule } from './modules/compete/compete.module'
 import { TransmitModule } from './modules/transmit/transmit.module'
+import { MessageModule } from './modules/message/message.module'
 
 @Module({
   imports: [
@@ -112,6 +113,9 @@ import { TransmitModule } from './modules/transmit/transmit.module'
 
     // 运维工具模块
     TransmitModule,
+
+    // 站内信模块
+    MessageModule,
   ],
 })
 export class AppModule {}
