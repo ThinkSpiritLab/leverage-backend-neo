@@ -1,5 +1,5 @@
 import { Controller, Get, Param, ParseIntPipe, Query, Res, UseGuards } from '@nestjs/common'
-import { Response } from 'express'
+import type { Response } from 'express'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { RolesGuard } from '../../common/guards/roles.guard'

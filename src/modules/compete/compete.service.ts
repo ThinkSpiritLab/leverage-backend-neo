@@ -6,7 +6,7 @@ import {
 import { InjectQueue } from '@nestjs/bull'
 import { InjectRepository } from '@nestjs/typeorm'
 import { DataSource, In, Repository } from 'typeorm'
-import { Queue } from 'bull'
+import type { Queue } from 'bull'
 import * as path from 'path'
 import * as fs from 'fs'
 import { Game } from '../../database/entities/game.entity'
