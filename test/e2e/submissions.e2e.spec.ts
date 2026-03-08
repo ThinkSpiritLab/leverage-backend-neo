@@ -3,19 +3,57 @@
  *
  * E2E tests for Submissions endpoints using real MariaDB + Redis (started by globalSetup).
  *
- * POST /submissions requires JwtAuthGuard. Rate limiting and queue tests
- * are skipped as they require pre-existing problems in the DB.
+ * POST /submissions requires JwtAuthGuard.
+ * The default InitModule sa user (admin/Admin@123456) has authority='sa' which maps to
+ * JWT role='sa' (weight=0), satisfying @Roles('admin') (weight=1) and above.
+ *
+ * Heng HTTP calls are intercepted by nock (HENG_BASE_URL=http://mock-heng.test).
+ * JudgeTxWorker generates its own judgeId (randomBytes), so we poll Redis to get it.
  */
 import request from 'supertest'
 import { INestApplication } from '@nestjs/common'
+import nock from 'nock'
 import { createTestApp } from './test-app'
+import { mockHengCreateJudge, cleanupNockMocks } from './mocks/heng-mock'
+import { RedisService } from '../../src/modules/redis/redis.service'
+import { JudgeResultKind, Status } from '../../src/modules/heng/heng.types'
+
+/** Mock heng 的 baseURL（与 global-setup.ts HENG_BASE_URL 一致） */
+const MOCK_HENG_URL = 'http://mock-heng.test'
+
+/** 从 JWT accessToken 解析 userId */
+function parseUserId(token: string): number {
+  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+  return payload.sub as number
+}
+
+/** 等待 Redis set 中出现第一个成员，返回该成员；超时则返回 undefined */
+async function pollRedisSet(
+  redisService: RedisService,
+  key: string,
+  maxMs = 5000,
+  intervalMs = 200,
+): Promise<string | undefined> {
+  const start = Date.now()
+  while (Date.now() - start < maxMs) {
+    const members = await redisService.smembers(key)
+    if (members.length > 0) return members[0]
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  return undefined
+}
 
 describe('Submissions E2E', () => {
   let app: INestApplication
   let accessToken: string
+  let redisService: RedisService
 
   beforeAll(async () => {
+    // Allow localhost connections for supertest; nock intercepts mock-heng.test only
+    nock.enableNetConnect(/127\.0\.0\.1|localhost/)
+
     app = await createTestApp()
+    redisService = app.get(RedisService)
 
     const res = await request(app.getHttpServer())
       .post('/auth/login')
@@ -24,7 +62,14 @@ describe('Submissions E2E', () => {
   }, 60_000)
 
   afterAll(async () => {
+    nock.enableNetConnect()
+    cleanupNockMocks()
     await app.close()
+  })
+
+  afterEach(() => {
+    // 清理未消费的 nock 拦截，避免跨测试污染
+    cleanupNockMocks()
   })
 
   describe('GET /submissions', () => {
@@ -48,6 +93,10 @@ describe('Submissions E2E', () => {
     })
 
     it('should return 404 when problem does not exist', async () => {
+      // 先清理速率计数，保证此请求不因速率限制失败
+      const userId = parseUserId(accessToken)
+      await redisService.del(`submit-throttle:${userId}`)
+
       await request(app.getHttpServer())
         .post('/submissions')
         .set('Authorization', `Bearer ${accessToken}`)
@@ -63,19 +112,111 @@ describe('Submissions E2E', () => {
         .expect(400)
     })
 
-    it.skip('TODO: rate limited after N requests — needs pre-existing problem (requires admin role fix)', async () => {
-      // To enable: fix mapAuthority bug → create problem → override MAX_SUBMISSION_PER_MINUTE=1
-      // 1. POST /problems → 201 (once admin role works)
-      // 2. POST /submissions (problemId) → 201
-      // 3. POST /submissions (problemId) → 429
-    })
+    it('rate limited after 1 request per minute (MAX_SUBMISSION_PER_MINUTE=1)', async () => {
+      const userId = parseUserId(accessToken)
+      // 清理速率计数器
+      await redisService.del(`submit-throttle:${userId}`)
 
-    it.skip('TODO: creates submission with PENDING status — needs pre-existing problem', async () => {
-      // To enable: fix mapAuthority bug → create problem → submit → check status=PENDING
-      // 1. POST /problems → get id
-      // 2. POST /submissions { problemId: id, code: '...', language: 1 } → 201
-      // 3. expect(res.body.status).toBe('PENDING')
-    })
+      // 创建题目（sa role 满足 @Roles('admin')）
+      const problemRes = await request(app.getHttpServer())
+        .post('/problems')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'Rate Limit Test Problem',
+          content: '# Rate Limit\nTest.',
+          source: 'Test',
+          timeLimit: 1000,
+          memoryLimit: 256,
+        })
+        .expect(201)
+      const problemId = problemRes.body.id
+
+      // nock 拦截第一次提交的 heng 调用（JudgeTxWorker 异步处理）
+      mockHengCreateJudge(MOCK_HENG_URL)
+
+      // 第一次提交：成功（count=1, 1>1 = false → 201）
+      await request(app.getHttpServer())
+        .post('/submissions')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ problemId, code: 'print(1)', language: 1 })
+        .expect(201)
+
+      // 第二次提交：触发速率限制（count=2, 2>1 = true → 429）
+      await request(app.getHttpServer())
+        .post('/submissions')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ problemId, code: 'print(1)', language: 1 })
+        .expect(429)
+
+      // 等待 JudgeTxWorker 完成（避免 afterEach cleanupNockMocks 在 worker 运行前清理拦截器）
+      await new Promise((r) => setTimeout(r, 1000))
+    }, 15_000)
+
+    it('creates submission with PENDING status, then AC via mock heng callback', async () => {
+      const userId = parseUserId(accessToken)
+      // 清理速率计数器（上一个测试可能已使用）
+      await redisService.del(`submit-throttle:${userId}`)
+
+      // Step 1: 创建题目
+      const problemRes = await request(app.getHttpServer())
+        .post('/problems')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'Full E2E Judge Test Problem',
+          content: '# A+B Problem\nGiven A and B, output A+B.',
+          source: 'Test',
+          timeLimit: 1000,
+          memoryLimit: 256,
+        })
+        .expect(201)
+      const problemId = problemRes.body.id
+      expect(problemId).toBeDefined()
+
+      // Step 2: nock 拦截 heng createJudge 请求（JudgeTxWorker 异步调用）
+      mockHengCreateJudge(MOCK_HENG_URL)
+
+      // Step 3: 提交代码 → 201，状态为 PENDING
+      const submitRes = await request(app.getHttpServer())
+        .post('/submissions')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          problemId,
+          code: '#include<stdio.h>\nint main(){int a,b;scanf("%d%d",&a,&b);printf("%d",a+b);}',
+          language: 2, // C
+        })
+        .expect(201)
+
+      const submissionId: number = submitRes.body.id
+      expect(submissionId).toBeDefined()
+      expect(submitRes.body.status).toBe(Status.PENDING) // 9
+
+      // Step 4: 等待 JudgeTxWorker 处理（轮询 Redis 获取 judgeId）
+      // JudgeTxWorker 会 SADD judge-ids:<submissionId> <judgeId>
+      const judgeId = await pollRedisSet(redisService, `judge-ids:${submissionId}`, 5000, 200)
+      expect(judgeId).toBeDefined()
+
+      // Step 5: 模拟 heng 回调 POST /heng/finish/:submissionId/:judgeId
+      const finishPayload = {
+        cases: [
+          { kind: JudgeResultKind.Accepted, time: 15, memory: 2048 },
+        ],
+        judger: 'mock-judger-001',
+      }
+      await request(app.getHttpServer())
+        .post(`/heng/finish/${submissionId}/${judgeId}`)
+        .send(finishPayload)
+        .expect(200)
+
+      // Step 6: 等待 JudgeRxWorker 处理（写入 DB）
+      await new Promise((r) => setTimeout(r, 2000))
+
+      // Step 7: GET /submissions/:id → 验证最终状态为 AC (0)
+      const finalRes = await request(app.getHttpServer())
+        .get(`/submissions/${submissionId}`)
+        .expect(200)
+
+      expect(finalRes.body.status).toBe(Status.AC) // 0
+    }, 30_000)
   })
 
   describe('GET /submissions/:id', () => {

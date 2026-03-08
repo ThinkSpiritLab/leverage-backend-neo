@@ -56,8 +56,10 @@ export default async function globalSetup() {
   process.env.JWT_REFRESH_EXPIRES_IN = '7d'
   process.env.NODE_ENV = 'test'
   process.env.SKIP_INIT = 'false'
-  // Heng is optional but validation schema requires a URI if provided
-  process.env.HENG_BASE_URL = 'http://localhost:9999'
+  // Heng: 使用 mock URL，由 nock 拦截，不发送到真实 heng
+  process.env.HENG_BASE_URL = 'http://mock-heng.test'
   process.env.HENG_AK = 'test-ak'
   process.env.HENG_SK = 'test-sk'
+  // 限速设置：设为 1，测试速率限制（count > max 才触发，所以第2次提交才429）
+  process.env.MAX_SUBMISSION_PER_MINUTE = '1'
 }
