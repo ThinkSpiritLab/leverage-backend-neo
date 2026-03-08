@@ -19,7 +19,7 @@ import { AuthService } from './auth.service'
 import { LoginContestDto } from './dto/login-contest.dto'
 import { LoginDto } from './dto/login.dto'
 import { RefreshDto } from './dto/refresh.dto'
-import { JwtPayload } from './strategies/jwt-access.strategy'
+import type { JwtPayload } from './strategies/jwt-access.strategy'
 
 @ApiTags('auth')
 @Controller('auth')

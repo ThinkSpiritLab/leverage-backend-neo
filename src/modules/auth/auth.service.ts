@@ -151,23 +151,29 @@ export class AuthService {
   }
 
   private generateAccessToken(payload: JwtPayload): string {
-    return this.jwtService.sign(payload, {
+    const expiresIn = this.configService.get<string>('jwt.accessExpiresIn', '15m')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.jwtService.sign(payload as any, {
       secret: this.configService.get<string>('jwt.accessSecret'),
-      expiresIn: this.configService.get<string>('jwt.accessExpiresIn', '15m'),
+      expiresIn: expiresIn as any,
     })
   }
 
   private generateRefreshToken(payload: JwtPayload): string {
-    return this.jwtService.sign(payload, {
+    const expiresIn = this.configService.get<string>('jwt.refreshExpiresIn', '7d')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.jwtService.sign(payload as any, {
       secret: this.configService.get<string>('jwt.refreshSecret'),
-      expiresIn: this.configService.get<string>('jwt.refreshExpiresIn', '7d'),
+      expiresIn: expiresIn as any,
     })
   }
 
   private generateContestToken(payload: ContestJwtPayload): string {
-    return this.jwtService.sign(payload, {
+    const expiresIn = this.configService.get<string>('jwt.accessExpiresIn', '15m')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.jwtService.sign(payload as any, {
       secret: this.configService.get<string>('jwt.accessSecret'),
-      expiresIn: this.configService.get<string>('jwt.accessExpiresIn', '15m'),
+      expiresIn: expiresIn as any,
     })
   }
 

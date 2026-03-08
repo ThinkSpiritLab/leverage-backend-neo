@@ -22,12 +22,17 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy'
     TypeOrmModule.forFeature([User, ContestUser, Contest]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('jwt.accessSecret'),
-        signOptions: {
-          expiresIn: configService.get<string>('jwt.accessExpiresIn', '15m'),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const expiresIn = configService.get<string>('jwt.accessExpiresIn', '15m')
+        return {
+          secret: configService.get<string>('jwt.accessSecret'),
+          signOptions: {
+            // cast to any to bypass StringValue narrow type issue
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expiresIn: expiresIn as any,
+          },
+        }
+      },
       inject: [ConfigService],
     }),
   ],
