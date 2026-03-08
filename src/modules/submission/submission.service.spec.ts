@@ -322,4 +322,72 @@ describe('SubmissionService', () => {
       expect(result).toEqual({ status: Status.PENDING })
     })
   })
+
+  // ─── create with contestId / courseId 分支 ────────────────────────────────
+
+  describe('create - contestId / courseId 分支', () => {
+    it('传入 contestId 时提交应该关联竞赛', async () => {
+      redisService.incr = jest.fn().mockResolvedValue(1)
+      const savedSubmission = { ...mockSubmission, contestId: 10 }
+      submissionRepo.save = jest.fn().mockResolvedValue(savedSubmission)
+
+      const dto = { problemId: 1, code: 'int main(){}', language: 1, contestId: 10 }
+      const result = await service.create(1, dto)
+
+      expect(submissionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ contestId: 10 }),
+      )
+      expect(result.contestId).toBe(10)
+    })
+
+    it('传入 courseId 时提交应该关联课程', async () => {
+      redisService.incr = jest.fn().mockResolvedValue(1)
+      const savedSubmission = { ...mockSubmission, courseId: 5 }
+      submissionRepo.save = jest.fn().mockResolvedValue(savedSubmission)
+
+      const dto = { problemId: 1, code: 'int main(){}', language: 1, courseId: 5 }
+      const result = await service.create(1, dto)
+
+      expect(submissionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ courseId: 5 }),
+      )
+      expect(result.courseId).toBe(5)
+    })
+
+    it('不传 contestId/courseId 时应该存为 null', async () => {
+      redisService.incr = jest.fn().mockResolvedValue(1)
+
+      const dto = { problemId: 1, code: 'int main(){}', language: 1 }
+      await service.create(1, dto)
+
+      expect(submissionRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ contestId: null, courseId: null }),
+      )
+    })
+  })
+
+  // ─── rejudge - misc 不存在时抛出 NotFoundException ────────────────────────
+
+  describe('rejudge - misc 缺失', () => {
+    it('misc 不存在时应该抛出 NotFoundException', async () => {
+      submissionRepo.findOne = jest.fn().mockResolvedValue({
+        ...mockSubmission,
+        problem: mockProblem,
+      })
+      miscRepo.findOne = jest.fn().mockResolvedValue(null)
+
+      await expect(service.rejudge(42)).rejects.toThrow(NotFoundException)
+    })
+  })
+
+  // ─── getStatus - 提交不存在时 ─────────────────────────────────────────────
+
+  describe('getStatus - 提交不存在', () => {
+    it('Redis 无缓存且 DB 也无记录时应该抛出 NotFoundException', async () => {
+      redisService.get = jest.fn().mockResolvedValue(null)
+      submissionRepo.findOne = jest.fn().mockResolvedValue(null)
+
+      await expect(service.getStatus(999)).rejects.toThrow(NotFoundException)
+    })
+  })
 })
