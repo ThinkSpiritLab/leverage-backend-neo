@@ -39,4 +39,10 @@ export class ProblemQueryDto {
   @IsArray()
   @IsInt({ each: true })
   tagIds?: number[];
+
+  @ApiPropertyOptional({ description: '单个标签 ID（兼容前端 tagId 参数）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tagId?: number;
 }

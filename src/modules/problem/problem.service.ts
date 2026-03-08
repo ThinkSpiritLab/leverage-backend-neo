@@ -85,7 +85,12 @@ export class ProblemService {
     query: ProblemQueryDto,
     isAdmin: boolean,
   ): Promise<{ items: Problem[]; total: number }> {
-    const { page = 1, perPage = 20, search, tagIds } = query;
+    const { page = 1, perPage = 20, search, tagId } = query;
+    // 合并 tagId（单数）和 tagIds（复数）
+    const tagIds = [
+      ...(query.tagIds ?? []),
+      ...(tagId ? [tagId] : []),
+    ];
     const skip = (page - 1) * perPage;
 
     const qb = this.problemRepo
