@@ -35,9 +35,23 @@ import { JudgeState } from './heng.types';
 export class HengController {
   private readonly logger = new Logger(HengController.name);
   private readonly callbackToken = process.env.HENG_CALLBACK_TOKEN;
-  private readonly allowedIps: string[] = process.env.HENG_ALLOWED_IPS
-    ? process.env.HENG_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
-    : [];
+  private readonly allowedIps: string[] = (() => {
+    const manual = process.env.HENG_ALLOWED_IPS
+      ? process.env.HENG_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
+      : [];
+    // 自动从 HENG_BASE_URL 中提取 hostname 并加入白名单
+    // 这样只要 OJ 配置了评测机地址，该机器的回调就自动被信任
+    const hengUrl = process.env.HENG_BASE_URL;
+    if (hengUrl) {
+      try {
+        const { hostname } = new URL(hengUrl);
+        if (hostname && !manual.includes(hostname)) {
+          manual.push(hostname);
+        }
+      } catch { /* invalid URL, ignore */ }
+    }
+    return manual;
+  })();
 
   constructor(
     @InjectQueue(JUDGE_RX_QUEUE)
