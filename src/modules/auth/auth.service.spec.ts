@@ -223,4 +223,149 @@ describe('AuthService', () => {
       await expect(service.refreshToken('invalid-token')).rejects.toThrow(UnauthorizedException)
     })
   })
+
+  // ─── loginContest 分支补充 ──────────────────────────────────────────────────
+
+  describe('loginContest - 未覆盖分支', () => {
+    it('用户不存在 → 抛出 UnauthorizedException', async () => {
+      userRepo.findOne.mockResolvedValue(null)
+      await expect(service.loginContest(1, 'nobody', 'pass')).rejects.toThrow(UnauthorizedException)
+    })
+
+    it('用户不在竞赛中（contestUser 不存在）→ 抛出 UnauthorizedException', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1, username: 'alice', passwordHash: hashPassword('pass'),
+      } as User)
+      contestUserRepo.findOne.mockResolvedValue(null)
+      await expect(service.loginContest(1, 'alice', 'pass')).rejects.toThrow(UnauthorizedException)
+    })
+
+    it('竞赛不存在 → 抛出 UnauthorizedException', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1, username: 'alice', passwordHash: hashPassword('pass'),
+      } as User)
+      contestUserRepo.findOne.mockResolvedValue({
+        contestId: 1, userId: 1, passwordHash: null,
+      } as ContestUser)
+      contestRepo.findOne.mockResolvedValue(null)
+      await expect(service.loginContest(1, 'alice', 'pass')).rejects.toThrow(UnauthorizedException)
+    })
+
+    it('allowDirectLogin=true 密码错误 → 抛出 UnauthorizedException', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1, username: 'alice', passwordHash: hashPassword('correct'),
+      } as User)
+      contestUserRepo.findOne.mockResolvedValue({
+        contestId: 1, userId: 1, passwordHash: null,
+      } as ContestUser)
+      contestRepo.findOne.mockResolvedValue({ id: 1, allowDirectLogin: true } as Contest)
+      await expect(service.loginContest(1, 'alice', 'wrong')).rejects.toThrow(UnauthorizedException)
+    })
+
+    it('allowDirectLogin=false + contestUser.passwordHash=null → 直接通过（无需密码）', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1, username: 'alice', passwordHash: hashPassword('globalPass'),
+      } as User)
+      contestUserRepo.findOne.mockResolvedValue({
+        contestId: 1, userId: 1, passwordHash: null,
+      } as ContestUser)
+      contestRepo.findOne.mockResolvedValue({ id: 1, allowDirectLogin: false } as Contest)
+      const result = await service.loginContest(1, 'alice', 'anyPassword')
+      expect(result).toHaveProperty('accessToken')
+    })
+
+    it('allowDirectLogin=false + 竞赛密码错误 → 抛出 UnauthorizedException', async () => {
+      const contestPass = 'correctContestPass'
+      userRepo.findOne.mockResolvedValue({
+        id: 2, username: 'bob', passwordHash: hashPassword('globalPass'),
+      } as User)
+      contestUserRepo.findOne.mockResolvedValue({
+        contestId: 1, userId: 2, passwordHash: hashPassword(contestPass),
+      } as ContestUser)
+      contestRepo.findOne.mockResolvedValue({ id: 1, allowDirectLogin: false } as Contest)
+      await expect(service.loginContest(1, 'bob', 'wrongContestPass')).rejects.toThrow(UnauthorizedException)
+    })
+  })
+
+  // ─── mapAuthority 分支覆盖 ──────────────────────────────────────────────────
+
+  describe('mapAuthority - 所有权限分支', () => {
+    const makeUser = (authority: string) => ({
+      id: 1, username: 'test', authority, passwordHash: hashPassword('pass'), status: 0,
+    } as User)
+
+    it('authority=superadmin → role=sa', async () => {
+      userRepo.findOne.mockResolvedValue(makeUser('superadmin'))
+      await service.loginUser('test', 'pass')
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'sa' }), expect.any(Object),
+      )
+    })
+
+    it('authority=sa → role=sa', async () => {
+      userRepo.findOne.mockResolvedValue(makeUser('sa'))
+      await service.loginUser('test', 'pass')
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'sa' }), expect.any(Object),
+      )
+    })
+
+    it('authority=admin → role=admin', async () => {
+      userRepo.findOne.mockResolvedValue(makeUser('admin'))
+      await service.loginUser('test', 'pass')
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'admin' }), expect.any(Object),
+      )
+    })
+
+    it('authority=supervisor → role=supervisor', async () => {
+      userRepo.findOne.mockResolvedValue(makeUser('supervisor'))
+      await service.loginUser('test', 'pass')
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'supervisor' }), expect.any(Object),
+      )
+    })
+
+    it('authority=unknown → role=user（default）', async () => {
+      userRepo.findOne.mockResolvedValue(makeUser('something_else'))
+      await service.loginUser('test', 'pass')
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'user' }), expect.any(Object),
+      )
+    })
+  })
+
+  // ─── upgradePasswordIfNeeded - 旧格式密码自动升级 ────────────────────────────
+
+  describe('upgradePasswordIfNeeded - 旧格式密码', () => {
+    it('旧格式密码登录时应触发 update（upgradePasswordIfNeeded）', async () => {
+      // 构造一个符合旧格式的密码 hash（不含 pbkdf2: 前缀）并通过 legacy verify
+      const hmacKey = 'test-hmac-key-for-test'
+      const password = 'testPassword123'
+      const { createHash, createHmac } = require('crypto')
+      const legacyHash = createHmac('sha256', hmacKey)
+        .update(createHash('md5').update(password).digest('hex'))
+        .digest('hex')
+
+      // Temporarily set the HMAC key env
+      const origKey = process.env.PASSWORD_HMAC_KEY
+      process.env.PASSWORD_HMAC_KEY = hmacKey
+
+      try {
+        userRepo.findOne.mockResolvedValue({
+          id: 1, username: 'alice', authority: 'user',
+          passwordHash: legacyHash, // 旧格式
+          status: 0,
+        } as User)
+        userRepo.update.mockResolvedValue({ affected: 1 } as any)
+
+        await service.loginUser('alice', password)
+
+        // upgradePasswordIfNeeded should call userRepo.update
+        expect(userRepo.update).toHaveBeenCalledWith(1, expect.objectContaining({ passwordHash: expect.stringMatching(/^pbkdf2:/) }))
+      } finally {
+        process.env.PASSWORD_HMAC_KEY = origKey
+      }
+    })
+  })
 })

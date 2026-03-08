@@ -758,4 +758,215 @@ describe('SubmissionService', () => {
       expect(result.hashsum).toBeDefined()
     })
   })
+
+  // =========================================================================
+  // search - title 分支覆盖（lines 181-192）
+  // =========================================================================
+
+  describe('search - title 各种格式分支', () => {
+    function makeSearchQb(items: any[] = [], total = 0) {
+      return makeQb({
+        getRawMany: jest.fn().mockResolvedValue(items),
+        getCount:   jest.fn().mockResolvedValue(total),
+      })
+    }
+
+    it('title="P1001"（prefix+logicId）应使用 prefix AND logicId 过滤', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, false, false, { title: 'P1001' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('problem.logicId'),
+        expect.any(Object),
+      )
+    })
+
+    it('title="P"（单字母 prefix）应使用 prefix 精确过滤', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, false, false, { title: 'P' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('problem.prefix = :prefix', { prefix: 'p' })
+    })
+
+    it('title="AB"（多字母 prefix）应使用 prefix OR title LIKE 过滤', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, false, false, { title: 'AB' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('problem.title LIKE'),
+        expect.any(Object),
+      )
+    })
+
+    it('title="123"（纯数字/无前缀）应使用 title LIKE OR id 过滤', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, false, false, { title: '123' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('problem.id'),
+        expect.any(Object),
+      )
+    })
+
+    it('name 过滤（非 userId）应按 username/certifiedName 模糊查', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, false, false, { name: 'alice' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('user.username LIKE'),
+        expect.any(Object),
+      )
+    })
+
+    it('courseId=number 时应过滤 courseId', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, 5, false, {}, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.courseId = :courseId', { courseId: 5 })
+    })
+
+    it('courseId=null (false) 时应过滤 courseId IS NULL', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, null, false, {}, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.courseId IS NULL')
+    })
+
+    it('contestId=number 时应过滤 contestId', async () => {
+      const qb = makeSearchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.search(true, false, 10, {}, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.contestId = :contestId', { contestId: 10 })
+    })
+  })
+
+  // =========================================================================
+  // searchRejudgeLog - 额外分支（lines 255-277）
+  // =========================================================================
+
+  describe('searchRejudgeLog - 额外分支', () => {
+    it('showRestricted=false 时应添加 restricted/closed 过滤', async () => {
+      const qb = makeQb({ getRawMany: jest.fn().mockResolvedValue([]), getCount: jest.fn().mockResolvedValue(0) })
+      rejudgeLogRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.searchRejudgeLog(false, {}, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('problem.restricted = false')
+      expect(qb.andWhere).toHaveBeenCalledWith('problem.closed = false')
+    })
+
+    it('name 过滤应使用 username/certifiedName LIKE', async () => {
+      const qb = makeQb({ getRawMany: jest.fn().mockResolvedValue([]), getCount: jest.fn().mockResolvedValue(0) })
+      rejudgeLogRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.searchRejudgeLog(true, { name: 'bob' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('user.username LIKE'),
+        expect.any(Object),
+      )
+    })
+
+    it('title 过滤应使用 title LIKE', async () => {
+      const qb = makeQb({ getRawMany: jest.fn().mockResolvedValue([]), getCount: jest.fn().mockResolvedValue(0) })
+      rejudgeLogRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.searchRejudgeLog(true, { title: 'sum' }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('problem.title LIKE'),
+        expect.any(Object),
+      )
+    })
+
+    it('language 和 status 过滤', async () => {
+      const qb = makeQb({ getRawMany: jest.fn().mockResolvedValue([]), getCount: jest.fn().mockResolvedValue(0) })
+      rejudgeLogRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.searchRejudgeLog(true, { language: 1, status: Status.AC }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.language = :language', { language: 1 })
+      expect(qb.andWhere).toHaveBeenCalledWith('s.status = :status', { status: Status.AC })
+    })
+
+    it('userId 过滤应使用 userId', async () => {
+      const qb = makeQb({ getRawMany: jest.fn().mockResolvedValue([]), getCount: jest.fn().mockResolvedValue(0) })
+      rejudgeLogRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.searchRejudgeLog(true, { userId: 5 }, 1)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.userId = :userId', { userId: 5 })
+    })
+  })
+
+  // =========================================================================
+  // batchRejudge - 过滤分支（lines 377-402）
+  // =========================================================================
+
+  describe('batchRejudge - 各种过滤分支', () => {
+    function makeBatchQb() {
+      return makeQb({
+        getCount: jest.fn().mockResolvedValue(0),
+        getRawMany: jest.fn().mockResolvedValue([]),
+        select: jest.fn().mockReturnThis(),
+      })
+    }
+
+    it('contestId=-1 时应过滤 contestId IS NULL', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ contestId: -1 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.contestId IS NULL')
+    })
+
+    it('contestId=5（非-1非undefined）时应过滤 contestId=5', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ contestId: 5 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.contestId = :contestId', { contestId: 5 })
+    })
+
+    it('courseId=-1 时应过滤 courseId IS NULL', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ courseId: -1 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.courseId IS NULL')
+    })
+
+    it('courseId=3 时应过滤 courseId=3', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ courseId: 3 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.courseId = :courseId', { courseId: 3 })
+    })
+
+    it('userId 过滤', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ userId: 10 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.userId = :userId', { userId: 10 })
+    })
+
+    it('problemId 过滤', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ problemId: 42 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.problemId = :problemId', { problemId: 42 })
+    })
+
+    it('status 过滤', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ status: Status.WA }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.status = :status', { status: Status.WA })
+    })
+
+    it('idStart/idEnd 范围过滤', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      await service.batchRejudge({ idStart: 100, idEnd: 200 }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.id >= :idStart', { idStart: 100 })
+      expect(qb.andWhere).toHaveBeenCalledWith('s.id <= :idEnd', { idEnd: 200 })
+    })
+
+    it('dateStart/dateEnd 范围过滤', async () => {
+      const qb = makeBatchQb()
+      submissionRepo.createQueryBuilder.mockReturnValue(qb)
+      const dateStart = new Date('2024-01-01')
+      const dateEnd = new Date('2024-12-31')
+      await service.batchRejudge({ dateStart, dateEnd }, true)
+      expect(qb.andWhere).toHaveBeenCalledWith('s.createdAt >= :dateStart', { dateStart })
+      expect(qb.andWhere).toHaveBeenCalledWith('s.createdAt <= :dateEnd', { dateEnd })
+    })
+  })
 })
