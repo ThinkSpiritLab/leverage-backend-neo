@@ -2,13 +2,14 @@ import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { College } from '../../database/entities/college.entity'
 import { Profession } from '../../database/entities/profession.entity'
+import { User } from '../../database/entities/user.entity'
 import { AuthModule } from '../auth/auth.module'
 import { ProfessionCollegeController } from './profession-college.controller'
 import { ProfessionCollegeService } from './profession-college.service'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([College, Profession]),
+    TypeOrmModule.forFeature([College, Profession, User]),
     AuthModule,
   ],
   controllers: [ProfessionCollegeController],

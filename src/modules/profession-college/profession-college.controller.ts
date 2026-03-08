@@ -19,6 +19,8 @@ import { CreateCollegeDto } from './dto/create-college.dto'
 import { UpdateCollegeDto } from './dto/update-college.dto'
 import { CreateProfessionDto } from './dto/create-profession.dto'
 import { UpdateProfessionDto } from './dto/update-profession.dto'
+import { MergeCollegeDto } from './dto/merge-college.dto'
+import { MergeProfessionDto } from './dto/merge-profession.dto'
 
 @ApiTags('profession-college')
 @ApiBearerAuth()
@@ -58,6 +60,14 @@ export class ProfessionCollegeController {
     return this.service.removeCollege(id)
   }
 
+  @Post('colleges/merge')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '合并学院（将多个学院合并到目标学院）' })
+  mergeCollege(@Body() dto: MergeCollegeDto) {
+    return this.service.mergeCollege(dto.from, dto.to)
+  }
+
   // ─── Profession ──────────────────────────────────────────────────────────────
 
   @Get('professions')
@@ -88,5 +98,13 @@ export class ProfessionCollegeController {
   @ApiOperation({ summary: '删除专业' })
   removeProfession(@Param('id', ParseIntPipe) id: number) {
     return this.service.removeProfession(id)
+  }
+
+  @Post('professions/merge')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '合并专业（将多个专业合并到目标专业）' })
+  mergeProfession(@Body() dto: MergeProfessionDto) {
+    return this.service.mergeProfession(dto.from, dto.to)
   }
 }
