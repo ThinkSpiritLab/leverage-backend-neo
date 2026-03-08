@@ -155,11 +155,10 @@ export class AppModule implements NestModule {
       .forRoutes({ path: 'metrics', method: RequestMethod.GET });
 
     // Protect Bull Board UI — requires valid admin JWT (?token=xxx or Authorization: Bearer xxx)
-    // Note: path-to-regexp v8 doesn't support bare glob; use 'admin/queues'
-    // The middleware also checks the prefix internally for sub-paths
+    // Apply to all routes; middleware internally checks req.path.startsWith('/admin/queues')
     consumer
       .apply(BullBoardAuthMiddleware)
-      .forRoutes('admin/queues');
+      .forRoutes('*');
 
     consumer
       .apply(CorrelationIdMiddleware)

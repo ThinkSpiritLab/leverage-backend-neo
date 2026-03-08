@@ -12,6 +12,11 @@ const jwt = require('jsonwebtoken');
 @Injectable()
 export class BullBoardAuthMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
+    // Only protect /admin/queues and all sub-paths
+    if (!req.path.startsWith('/admin/queues')) {
+      return next();
+    }
+
     const authHeader = req.headers['authorization'];
     const queryToken = req.query['token'] as string | undefined;
 
