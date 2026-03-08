@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { Contest } from '../../database/entities/contest.entity';
 import { ContestProblem } from '../../database/entities/contest-problem.entity';
 import { ContestUser } from '../../database/entities/contest-user.entity';
@@ -98,6 +99,7 @@ describe('ContestService', () => {
         },
         { provide: getRepositoryToken(User), useFactory: mockRepo },
         { provide: RedisService, useFactory: mockRedisService },
+        { provide: DataSource, useValue: { query: jest.fn() } },
       ],
     }).compile();
 
@@ -448,6 +450,7 @@ describe('ContestService', () => {
 
     it('新建用户（首次导入）', async () => {
       contestRepo.findOne.mockResolvedValue({ id: 1 });
+      userRepo.findOne.mockResolvedValue({ id: 10, username: 'u10' });
       contestUserRepo.findOne.mockResolvedValue(null);
       contestUserRepo.create.mockReturnValue({ contestId: 1, userId: 10 });
       contestUserRepo.save.mockResolvedValue({ contestId: 1, userId: 10 });
@@ -456,12 +459,14 @@ describe('ContestService', () => {
         { userId: 10, password: 'abc123' } as any,
       ]);
 
-      expect(result).toHaveLength(1);
+      expect(result.users).toHaveLength(1);
+      expect(result.credentials).toHaveLength(1);
       expect(contestUserRepo.save).toHaveBeenCalledTimes(1);
     });
 
     it('已存在用户则更新信息', async () => {
       contestRepo.findOne.mockResolvedValue({ id: 1 });
+      userRepo.findOne.mockResolvedValue({ id: 10, username: 'u10' });
       const existing = {
         contestId: 1,
         userId: 10,
@@ -478,7 +483,7 @@ describe('ContestService', () => {
         { userId: 10, seat: 'B2', password: 'newpass' } as any,
       ]);
 
-      expect(result).toHaveLength(1);
+      expect(result.users).toHaveLength(1);
       expect(contestUserRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({ seat: 'B2' }),
       );
@@ -486,6 +491,7 @@ describe('ContestService', () => {
 
     it('自动生成密码（未提供 password）', async () => {
       contestRepo.findOne.mockResolvedValue({ id: 1 });
+      userRepo.findOne.mockResolvedValue({ id: 10, username: 'u10' });
       contestUserRepo.findOne.mockResolvedValue(null);
       contestUserRepo.create.mockImplementation((data: any) => data);
       contestUserRepo.save.mockImplementation((data: any) =>
@@ -502,6 +508,9 @@ describe('ContestService', () => {
 
     it('出错时跳过并继续处理其他用户', async () => {
       contestRepo.findOne.mockResolvedValue({ id: 1 });
+      userRepo.findOne
+        .mockResolvedValueOnce({ id: 10, username: 'u10' })
+        .mockResolvedValueOnce({ id: 20, username: 'u20' });
       contestUserRepo.findOne
         .mockRejectedValueOnce(new Error('DB error'))
         .mockResolvedValueOnce(null);
@@ -514,7 +523,7 @@ describe('ContestService', () => {
       ]);
 
       // 第一个出错被跳过，第二个成功
-      expect(result).toHaveLength(1);
+      expect(result.users).toHaveLength(1);
     });
   });
 

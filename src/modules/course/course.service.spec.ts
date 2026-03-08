@@ -19,9 +19,12 @@ const makeQb = (overrides: Record<string, any> = {}) => {
     andWhere: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     leftJoinAndSelect: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
     getMany: jest.fn().mockResolvedValue([]),
+    getRawAndEntities: jest.fn().mockResolvedValue({ raw: [], entities: [] }),
     ...overrides,
   };
   return qb;
@@ -172,6 +175,9 @@ describe('CourseService', () => {
     courseProblemRepo = module.get(getRepositoryToken(CourseProblem));
     submissionRepo = module.get(getRepositoryToken(Submission));
     userRepo = module.get(getRepositoryToken(User));
+
+    // findOne/update/remove 等路径会查询课程题目联表
+    courseProblemRepo.createQueryBuilder.mockReturnValue(makeQb());
   });
 
   it('service should be defined', () => {
@@ -399,7 +405,9 @@ describe('CourseService', () => {
 
       await service.remove(1);
 
-      expect(courseRepo.remove).toHaveBeenCalledWith(courseFixture);
+      expect(courseRepo.remove).toHaveBeenCalledWith(
+        expect.objectContaining({ id: courseFixture.id, name: courseFixture.name }),
+      );
     });
 
     it('课程不存在时抛 NotFoundException', async () => {
