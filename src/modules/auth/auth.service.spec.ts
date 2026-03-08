@@ -9,6 +9,8 @@ import { Contest } from '../../database/entities/contest.entity';
 import { User } from '../../database/entities/user.entity';
 import { hashPassword } from '../../common/utils/crypto.util';
 import { AuthService } from './auth.service';
+import { getToken } from '@willsoto/nestjs-prometheus';
+import { LOGIN_TOTAL_COUNTER } from '../metrics/metrics.module';
 
 const mockUserRepository = () => ({
   findOne: jest.fn(),
@@ -62,6 +64,10 @@ describe('AuthService', () => {
         },
         { provide: JwtService, useFactory: mockJwtService },
         { provide: ConfigService, useFactory: mockConfigService },
+        {
+          provide: getToken(LOGIN_TOTAL_COUNTER),
+          useValue: { labels: jest.fn().mockReturnValue({ inc: jest.fn() }) },
+        },
       ],
     }).compile();
 

@@ -8,7 +8,9 @@ import {
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bull';
+import { getToken } from '@willsoto/nestjs-prometheus';
 import { SubmissionService, UserProblemStatus } from './submission.service';
+import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { Submission } from '../../database/entities/submission.entity';
 import { SubmissionMisc } from '../../database/entities/submission-misc.entity';
 import { Problem } from '../../database/entities/problem.entity';
@@ -186,6 +188,10 @@ describe('SubmissionService', () => {
         { provide: RedisService, useValue: redisService },
         { provide: ConfigService, useValue: configService },
         { provide: getQueueToken(JUDGE_TX_QUEUE), useValue: judgeTxQueue },
+        {
+          provide: getToken(SUBMISSION_TOTAL_COUNTER),
+          useValue: { labels: jest.fn().mockReturnValue({ inc: jest.fn() }) },
+        },
       ],
     }).compile();
 

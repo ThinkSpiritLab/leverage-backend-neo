@@ -32,9 +32,7 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
         return {
           secret: configService.get<string>('jwt.accessSecret'),
           signOptions: {
-            // cast to any to bypass StringValue narrow type issue
-
-            expiresIn: expiresIn as any,
+            expiresIn,
           },
         };
       },

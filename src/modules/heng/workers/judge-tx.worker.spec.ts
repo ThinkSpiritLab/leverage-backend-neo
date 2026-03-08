@@ -1,9 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bull';
 import type { Job } from 'bull';
+import { getToken } from '@willsoto/nestjs-prometheus';
 import { JudgeTxWorker } from './judge-tx.worker';
 import { HengClientService } from '../heng-client.service';
 import { RedisService } from '../../redis/redis.service';
+import { JUDGE_TX_QUEUE } from '../../queue/queue.constants';
+import {
+  JUDGE_QUEUE_ACTIVE_GAUGE,
+  JUDGE_QUEUE_WAITING_GAUGE,
+} from '../../metrics/metrics.module';
 import {
   HengJudgeType,
   HengTestPolicy,
@@ -33,6 +40,14 @@ const mockRedisService = {
   sadd: jest.fn(),
   srem: jest.fn(),
 };
+
+const mockQueue = {
+  close: jest.fn().mockResolvedValue(undefined),
+  getWaitingCount: jest.fn().mockResolvedValue(0),
+  getActiveCount: jest.fn().mockResolvedValue(0),
+};
+
+const mockGauge = { set: jest.fn() };
 
 const mockConfigService = {
   get: jest.fn().mockImplementation((key: string, defaultVal: any) => {
@@ -111,6 +126,9 @@ describe('JudgeTxWorker', () => {
         { provide: HengClientService, useValue: mockHengClient },
         { provide: RedisService, useValue: mockRedisService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: getQueueToken(JUDGE_TX_QUEUE), useValue: mockQueue },
+        { provide: getToken(JUDGE_QUEUE_WAITING_GAUGE), useValue: mockGauge },
+        { provide: getToken(JUDGE_QUEUE_ACTIVE_GAUGE), useValue: mockGauge },
       ],
     }).compile();
 
@@ -185,6 +203,9 @@ describe('JudgeTxWorker', () => {
           { provide: HengClientService, useValue: mockHengClient },
           { provide: RedisService, useValue: mockRedisService },
           { provide: ConfigService, useValue: configWithDefault },
+          { provide: getQueueToken(JUDGE_TX_QUEUE), useValue: mockQueue },
+          { provide: getToken(JUDGE_QUEUE_WAITING_GAUGE), useValue: mockGauge },
+          { provide: getToken(JUDGE_QUEUE_ACTIVE_GAUGE), useValue: mockGauge },
         ],
       }).compile();
 
