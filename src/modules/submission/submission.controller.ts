@@ -35,6 +35,7 @@ import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { SubmissionQueryDto } from './dto/submission-query.dto';
 import { SearchSubmissionDto } from './dto/search-submission.dto';
 import { RejudgeDto } from './dto/rejudge.dto';
+import { RequireLog } from '../log/log.decorator';
 
 @ApiTags('submissions')
 @Controller('submissions')
@@ -207,6 +208,7 @@ export class SubmissionController {
   @Post('batch-rejudge')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('submission', 'batch-rejudge', true)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '批量重判（需 admin+）' })

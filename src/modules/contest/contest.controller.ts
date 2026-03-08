@@ -23,6 +23,7 @@ import { ContestQueryDto } from './dto/contest-query.dto';
 import { ContestUserDto, RegisterContestUserDto } from './dto/contest-user.dto';
 import { CreateSubmissionDto } from '../submission/dto/create-submission.dto';
 import { SubmissionService } from '../submission/submission.service';
+import { RequireLog } from '../log/log.decorator';
 
 @ApiTags('contests')
 @ApiBearerAuth()
@@ -49,6 +50,7 @@ export class ContestController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('contest', 'create', true)
   @ApiOperation({ summary: '创建竞赛' })
   create(@Body() dto: CreateContestDto) {
     return this.contestService.create(dto);
@@ -70,6 +72,7 @@ export class ContestController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('contest', 'update', true)
   @ApiOperation({ summary: '更新竞赛' })
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateContestDto) {
     return this.contestService.update(id, dto);
@@ -81,6 +84,7 @@ export class ContestController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('contest', 'delete', true)
   @ApiOperation({ summary: '删除竞赛' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.contestService.remove(id);
@@ -115,6 +119,7 @@ export class ContestController {
   @Post(':id/users/import')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('contest', 'batch-add-users', true)
   @ApiOperation({ summary: '批量导入参赛用户（生成随机密码）' })
   importContestUsers(
     @Param('id', ParseIntPipe) contestId: number,

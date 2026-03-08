@@ -26,12 +26,13 @@ export class LogService {
   /**
    * 创建操作日志
    */
-  async create(userId: number, action: string, detail: string): Promise<void> {
+  async create(userId: number | null, action: string, detail: string): Promise<void> {
+    const [field, ...rest] = action.split('.');
     await this.logRepo.save({
-      callerId: userId,
-      action,
-      payload: detail,
-      field: action.split('.')[0] ?? null,
+      callerId: userId ?? null,
+      field: field ?? null,
+      action: rest.join('.') || action,
+      payload: detail || null,
     });
   }
 

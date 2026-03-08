@@ -23,6 +23,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { ImportUsersDto } from './dto/import-users.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { RequireLog } from '../log/log.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -69,6 +70,7 @@ export class UserController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('user', 'create', true)
   @ApiOperation({ summary: '创建用户' })
   create(@Body() dto: CreateUserDto) {
     return this.userService.create(dto);
@@ -80,6 +82,7 @@ export class UserController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('user', 'update', true)
   @ApiOperation({ summary: '更新用户（权限校验）' })
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -95,6 +98,7 @@ export class UserController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('user', 'delete', true)
   @ApiOperation({ summary: '删除用户' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.userService.remove(id);

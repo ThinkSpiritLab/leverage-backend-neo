@@ -38,6 +38,7 @@ import { ProblemQueryDto } from './dto/problem-query.dto';
 import { ZipHashDto } from './dto/zip-hash.dto';
 import { AddTagDto } from './dto/add-tag.dto';
 import { SimpExtraDto } from './dto/simp-extra.dto';
+import { RequireLog } from '../log/log.decorator';
 
 @ApiTags('problems')
 @Controller('problems')
@@ -305,6 +306,7 @@ export class ProblemController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('problem', 'create', true)
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建题目（需要 admin 权限）' })
   async create(@Body() dto: CreateProblemDto) {
@@ -334,6 +336,7 @@ export class ProblemController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('problem', 'update', true)
   @ApiBearerAuth()
   @ApiOperation({ summary: '更新题目（需要 admin 权限）' })
   @ApiParam({ name: 'id', description: '题目 ID' })
@@ -351,6 +354,7 @@ export class ProblemController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('problem', 'delete', true)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '删除题目（需要 admin 权限）' })
@@ -452,6 +456,7 @@ export class ProblemController {
   @Post(':id/test-data')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('test-cases', 'upload', true)
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')

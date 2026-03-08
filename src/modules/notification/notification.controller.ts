@@ -19,6 +19,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
 import { NotificationService } from './notification.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { RequireLog } from '../log/log.decorator';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -57,6 +58,7 @@ export class NotificationController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
+  @RequireLog('notification', 'create', true)
   @ApiBearerAuth()
   @ApiOperation({ summary: '创建通知（admin+）' })
   create(@Body() dto: CreateNotificationDto) {

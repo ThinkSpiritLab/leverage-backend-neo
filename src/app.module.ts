@@ -4,7 +4,9 @@ import {
   NestModule,
   RequestMethod,
 } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
+import { LogInterceptor } from './modules/log/log.interceptor';
+import { LogService } from './modules/log/log.service';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { MetricsAuthMiddleware } from './common/middleware/metrics-auth.middleware';
 import { BullBoardAuthMiddleware } from './common/middleware/bull-board-auth.middleware';
@@ -144,6 +146,12 @@ import { MessageModule } from './modules/message/message.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useFactory: (reflector: Reflector, logService: LogService) =>
+        new LogInterceptor(reflector, logService),
+      inject: [Reflector, LogService],
     },
   ],
 })
