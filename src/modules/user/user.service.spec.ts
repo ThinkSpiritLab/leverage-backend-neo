@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { User } from '../../database/entities/user.entity';
 import { RedisService } from '../redis/redis.service';
 import { hashPassword, verifyPassword } from '../../common/utils/crypto.util';
@@ -36,6 +36,10 @@ describe('UserService', () => {
         UserService,
         { provide: getRepositoryToken(User), useFactory: mockUserRepo },
         { provide: RedisService, useFactory: mockRedisService },
+        {
+          provide: DataSource,
+          useValue: { query: jest.fn().mockResolvedValue([]) },
+        },
       ],
     }).compile();
 
