@@ -241,6 +241,11 @@ export class ContestService {
     );
   }
 
+  async isUserRegistered(contestId: number, userId: number): Promise<boolean> {
+    const count = await this.contestUserRepo.count({ where: { contestId, userId } });
+    return count > 0;
+  }
+
   async getContestUsers(contestId: number): Promise<User[]> {
     const contest = await this.contestRepo.findOne({ where: { id: contestId } });
     if (!contest) throw new NotFoundException(`竞赛 ${contestId} 不存在`);

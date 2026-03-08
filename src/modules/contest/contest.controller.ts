@@ -69,6 +69,20 @@ export class ContestController {
   }
 
   /**
+   * GET /contests/:id/me — 查询当前用户是否已注册该竞赛
+   */
+  @Get(':id/me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '当前用户注册状态' })
+  async getMyStatus(
+    @Param('id', ParseIntPipe) contestId: number,
+    @CurrentUser() currentUser: JwtPayload,
+  ) {
+    const registered = await this.contestService.isUserRegistered(contestId, currentUser.sub);
+    return { registered };
+  }
+
+  /**
    * PATCH /contests/:id — 更新（admin+）
    */
   @Patch(':id')
