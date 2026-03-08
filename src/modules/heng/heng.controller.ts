@@ -49,8 +49,8 @@ export class HengController {
   async receiveUpdate(
     @Param('submissionId', ParseIntPipe) submissionId: number,
     @Param('judgeId') judgeId: string,
-    @Headers('x-heng-token') token?: string,
     @Body() body: { state: JudgeState },
+    @Headers('x-heng-token') token?: string,
   ): Promise<void> {
     this.assertCallbackAuthorized(token);
     this.logger.debug(
@@ -80,8 +80,8 @@ export class HengController {
   async receiveFinish(
     @Param('submissionId', ParseIntPipe) submissionId: number,
     @Param('judgeId') judgeId: string,
-    @Headers('x-heng-token') token?: string,
     @Body() body: Record<string, unknown>,
+    @Headers('x-heng-token') token?: string,
   ): Promise<void> {
     this.assertCallbackAuthorized(token);
     const result = body as unknown as JudgeResult;
