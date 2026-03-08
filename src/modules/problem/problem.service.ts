@@ -222,6 +222,42 @@ export class ProblemService {
   }
 
   /**
+   * Fork 题目：复制指定题目，自动分配同 prefix 下最小未使用的 logicId
+   */
+  async fork(id: number): Promise<Problem> {
+    const src = await this.problemRepo.findOne({ where: { id }, relations: ['tags'] });
+    if (!src) throw new NotFoundException(`题目 #${id} 不存在`);
+
+    // 找到同 prefix 下最大 logicId，+1 作为新 logicId
+    const maxRow = await this.problemRepo
+      .createQueryBuilder('p')
+      .where('p.prefix = :prefix', { prefix: src.prefix })
+      .select('MAX(p.logicId)', 'maxId')
+      .getRawOne<{ maxId: number | null }>();
+    const newLogicId = (maxRow?.maxId ?? 0) + 1;
+
+    const newProblem = this.problemRepo.create({
+      prefix: src.prefix,
+      logicId: newLogicId,
+      title: `${src.title} (Fork)`,
+      content: src.content,
+      source: src.source,
+      timeLimit: src.timeLimit,
+      memoryLimit: src.memoryLimit,
+      spjId: src.spjId,
+      cases: src.cases,
+      multiCases: src.multiCases,
+      difficulty: src.difficulty,
+      hidden: true,          // fork 默认隐藏，需手动开放
+      closed: src.closed,
+      restricted: src.restricted,
+      tags: src.tags,
+    });
+
+    return this.problemRepo.save(newProblem);
+  }
+
+  /**
    * 上传测试数据（校验必须是 zip）
    */
   async uploadTestData(id: number, file: Express.Multer.File): Promise<void> {

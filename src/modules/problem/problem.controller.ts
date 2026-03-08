@@ -450,6 +450,21 @@ export class ProblemController {
   }
 
   /**
+   * POST /problems/:id/fork
+   * 复制题目，自动分配下一个可用 logicId，admin+
+   */
+  @Post(':id/fork')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @RequireLog('problem', 'fork', true)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '复制题目（Fork），自动分配未使用的 logicId' })
+  @ApiParam({ name: 'id', description: '源题目 ID' })
+  async fork(@Param('id', ParseIntPipe) id: number) {
+    return this.problemService.fork(id);
+  }
+
+  /**
    * POST /problems/:id/test-data
    * 上传测试数据（需要 admin，必须 zip）
    */
