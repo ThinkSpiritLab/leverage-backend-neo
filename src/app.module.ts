@@ -18,6 +18,14 @@ import { UserModule } from './modules/user/user.module'
 import { ContestModule } from './modules/contest/contest.module'
 import { CourseModule } from './modules/course/course.module'
 import { ProfessionCollegeModule } from './modules/profession-college/profession-college.module'
+import { SettingModule } from './modules/setting/setting.module'
+import { LogModule } from './modules/log/log.module'
+import { NotificationModule } from './modules/notification/notification.module'
+import { MediaModule } from './modules/media/media.module'
+import { SuspicionModule } from './modules/suspicion/suspicion.module'
+import { StatisticsModule } from './modules/statistics/statistics.module'
+import { InitModule } from './modules/init/init.module'
+import { CompeteModule } from './modules/compete/compete.module'
 
 @Module({
   imports: [
@@ -76,6 +84,30 @@ import { ProfessionCollegeModule } from './modules/profession-college/profession
 
     // 课程模块
     CourseModule,
+
+    // 系统设置模块
+    SettingModule,
+
+    // 操作日志模块
+    LogModule,
+
+    // 通知模块
+    NotificationModule,
+
+    // 媒体文件模块
+    MediaModule,
+
+    // 防作弊模块
+    SuspicionModule,
+
+    // 统计模块
+    StatisticsModule,
+
+    // 首次启动初始化
+    InitModule,
+
+    // Bot 对战模块
+    CompeteModule,
   ],
 })
 export class AppModule {}
