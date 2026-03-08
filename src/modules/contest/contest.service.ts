@@ -51,6 +51,16 @@ export interface RankItem {
   submits: number;
 }
 
+export interface ContestImportCredential {
+  username: string;
+  password: string;
+}
+
+export interface ContestImportResult {
+  users: ContestUser[];
+  credentials: ContestImportCredential[];
+}
+
 @Injectable()
 export class ContestService {
   private readonly logger = new Logger(ContestService.name);
@@ -236,19 +246,28 @@ export class ContestService {
   async importContestUsers(
     contestId: number,
     users: ContestUserDto[],
-  ): Promise<ContestUser[]> {
+  ): Promise<ContestImportResult> {
     const contest = await this.contestRepo.findOne({
       where: { id: contestId },
     });
     if (!contest) throw new NotFoundException(`竞赛 ${contestId} 不存在`);
 
     const result: ContestUser[] = [];
+    const credentials: ContestImportCredential[] = [];
 
     for (const u of users) {
       try {
         const existing = await this.contestUserRepo.findOne({
           where: { contestId, userId: u.userId },
         });
+
+        const user = await this.userRepo.findOne({ where: { id: u.userId } });
+        if (!user) {
+          this.logger.warn(`importContestUsers skipped missing userId ${u.userId}`);
+          continue;
+        }
+
+        const password = u.password ?? randomBytes(4).toString('hex');
 
         if (existing) {
           // 更新信息
@@ -257,14 +276,11 @@ export class ContestService {
             room: u.room ?? existing.room,
             wildcard: u.wildcard ?? existing.wildcard,
             female: u.female ?? existing.female,
+            passwordHash: hashPassword(password),
           });
-          if (u.password) {
-            existing.passwordHash = hashPassword(u.password);
-          }
           result.push(await this.contestUserRepo.save(existing));
         } else {
           // 新建
-          const password = u.password ?? randomBytes(4).toString('hex');
           const contestUser = this.contestUserRepo.create({
             contestId,
             userId: u.userId,
@@ -276,6 +292,8 @@ export class ContestService {
           });
           result.push(await this.contestUserRepo.save(contestUser));
         }
+
+        credentials.push({ username: user.username, password });
       } catch (err) {
         this.logger.warn(
           `importContestUsers error for userId ${u.userId}: ${err.message}`,
@@ -283,7 +301,7 @@ export class ContestService {
       }
     }
 
-    return result;
+    return { users: result, credentials };
   }
 
   /**

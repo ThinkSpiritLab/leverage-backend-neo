@@ -130,6 +130,20 @@ export class ContestController {
     return this.contestService.importContestUsers(contestId, body.users);
   }
 
+  @Get(':id/users/export')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiOperation({ summary: '导出参赛用户名单 CSV（用户名、姓名、座位、房间）' })
+  async exportContestUsers(
+    @Param('id', ParseIntPipe) contestId: number,
+    @Res() res: Response,
+  ) {
+    const csv = await this.contestService.exportContestUsersCsv(contestId);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="contest-${contestId}-users.csv"`);
+    res.send(csv);
+  }
+
   /**
    * GET /contests/:id/icpc-ranking — ICPC 式榜单
    */
