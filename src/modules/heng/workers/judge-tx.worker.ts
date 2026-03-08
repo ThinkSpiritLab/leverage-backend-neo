@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common'
 import { Process, Processor } from '@nestjs/bull'
-import { Job } from 'bull'
+import type { Job } from 'bull'
 import { randomBytes } from 'crypto'
 import { ConfigService } from '@nestjs/config'
 import { JUDGE_TX_QUEUE } from '../../queue/queue.constants'

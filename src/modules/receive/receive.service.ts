@@ -142,12 +142,12 @@ export class ReceiveService {
         )
 
         // 10. 竞赛提交
-        if (submission.contestId) {
+        if (submission.contestId != null) {
           await this.handleContestResult(manager, submission, finalStatus)
         }
 
         // 11. 课程提交
-        if (submission.courseId) {
+        if (submission.courseId != null) {
           await this.handleCourseResult(manager, submission, finalStatus)
         }
       })
@@ -218,7 +218,8 @@ export class ReceiveService {
     submission: Submission,
     finalStatus: Status,
   ): Promise<void> {
-    const { contestId, userId, problemId } = submission
+    const { userId, problemId } = submission
+    const contestId = submission.contestId as number // 调用方已确保 contestId != null
 
     // 跳过 CE/SE（与原始代码一致）
     if (finalStatus === Status.CE || finalStatus === Status.SE) return
@@ -243,7 +244,7 @@ export class ReceiveService {
     }
 
     // 更新 Redis 排行榜
-    await this.refreshContestRank(manager, contestId!, userId)
+    await this.refreshContestRank(manager, contestId, userId)
   }
 
   /**
@@ -276,7 +277,8 @@ export class ReceiveService {
     submission: Submission,
     finalStatus: Status,
   ): Promise<void> {
-    const { courseId, userId, problemId } = submission
+    const { userId, problemId } = submission
+    const courseId = submission.courseId as number // 调用方已确保 courseId != null
 
     // 跳过 CE/SE
     if (finalStatus === Status.CE || finalStatus === Status.SE) return
@@ -290,7 +292,7 @@ export class ReceiveService {
         where: {
           userId,
           problemId,
-          courseId,
+          courseId: courseId as number | undefined,
           status: Status.AC,
           id: Not(submission.id),
         },

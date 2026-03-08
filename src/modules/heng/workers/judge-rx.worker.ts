@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common'
 import { Process, Processor } from '@nestjs/bull'
-import { Job } from 'bull'
+import type { Job } from 'bull'
 import { JUDGE_RX_QUEUE } from '../../queue/queue.constants'
 import { RedisService } from '../../redis/redis.service'
 import { ReceiveService } from '../../receive/receive.service'

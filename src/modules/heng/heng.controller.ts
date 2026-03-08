@@ -1,9 +1,10 @@
 import { Body, Controller, HttpCode, Logger, Param, ParseIntPipe, Post } from '@nestjs/common'
 import { InjectQueue } from '@nestjs/bull'
-import { Queue } from 'bull'
+import type { Queue } from 'bull'
 import { ApiOperation, ApiTags } from '@nestjs/swagger'
 import { JUDGE_RX_QUEUE } from '../queue/queue.constants'
-import { JudgeResult, JudgeRxPayload, JudgeState, JudgeStateUpdate } from './heng.types'
+import type { JudgeResult, JudgeRxPayload, JudgeStateUpdate } from './heng.types'
+import { JudgeState } from './heng.types'
 
 /**
  * HengController
@@ -60,15 +61,16 @@ export class HengController {
   async receiveFinish(
     @Param('submissionId', ParseIntPipe) submissionId: number,
     @Param('judgeId') judgeId: string,
-    @Body() body: JudgeResult,
+    @Body() body: Record<string, unknown>,
   ): Promise<void> {
-    this.logger.log(`Finish callback: submissionId=${submissionId}, cases=${body.cases?.length}`)
+    const result = body as unknown as JudgeResult
+    this.logger.log(`Finish callback: submissionId=${submissionId}, cases=${result.cases?.length}`)
 
     const payload: JudgeRxPayload = {
       submissionId,
       judgeId,
       type: 'finish',
-      data: body,
+      data: result,
     }
 
     await this.judgeRxQueue.add(payload, {
