@@ -24,15 +24,17 @@ async function bootstrap() {
   // Global exception filter
   app.useGlobalFilters(new HttpExceptionFilter())
 
-  // Swagger docs
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Leverage API')
-    .setDescription('Leverage Online Judge Backend API')
-    .setVersion('2.0')
-    .addBearerAuth()
-    .build()
-  const document = SwaggerModule.createDocument(app, swaggerConfig)
-  SwaggerModule.setup('api/docs', app, document)
+  // Swagger docs (disabled in production)
+  if (process.env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Leverage API')
+      .setDescription('Leverage Online Judge Backend API')
+      .setVersion('2.0')
+      .addBearerAuth()
+      .build()
+    const document = SwaggerModule.createDocument(app, swaggerConfig)
+    SwaggerModule.setup('api/docs', app, document)
+  }
 
   const configService = app.get(ConfigService)
   const port = configService.get<number>('port', 3000)
