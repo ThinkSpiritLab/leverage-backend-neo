@@ -82,16 +82,25 @@ export class ContestService {
   /**
    * 竞赛详情（含题目列表）
    */
-  async findOne(id: number): Promise<Contest & { problems: ContestProblem[] }> {
+  async findOne(id: number): Promise<Contest & { problems: (ContestProblem & { title?: string; logicId?: string })[] }> {
     const contest = await this.contestRepo.findOne({ where: { id } });
     if (!contest) throw new NotFoundException(`竞赛 ${id} 不存在`);
 
-    const problems = await this.contestProblemRepo.find({
-      where: { contestId: id },
-      order: { label: 'ASC' },
-    });
+    const problems = await this.contestProblemRepo
+      .createQueryBuilder('cp')
+      .leftJoin('problem', 'p', 'p.id = cp.problemId')
+      .addSelect(['p.title', 'p.logicId'])
+      .where('cp.contestId = :id', { id })
+      .orderBy('cp.label', 'ASC')
+      .getRawAndEntities();
 
-    return { ...contest, problems };
+    const enriched = problems.entities.map((cp, i) => ({
+      ...cp,
+      title: problems.raw[i]?.p_title ?? undefined,
+      logicId: problems.raw[i]?.p_logicId ?? undefined,
+    }));
+
+    return { ...contest, problems: enriched };
   }
 
   /**
