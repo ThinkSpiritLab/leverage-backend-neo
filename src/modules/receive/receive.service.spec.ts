@@ -293,5 +293,274 @@ describe('ReceiveService', () => {
         )
       })
     })
+
+    // ─── 竞赛提交 WA/CE/SE 场景 ─────────────────────────────────────────────
+
+    describe('竞赛提交 - 非 AC 状态', () => {
+      beforeEach(() => {
+        ;(mockManager.findOneOrFail as jest.Mock).mockResolvedValue({
+          id: 1,
+          userId: 10,
+          problemId: 20,
+          contestId: 100,
+          courseId: null,
+        })
+        ;(mockManager.findOne as jest.Mock).mockImplementation((entity: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { ContestUser } = require('../../database/entities/contest-user.entity')
+          if (entity === ContestUser) {
+            return Promise.resolve({ contestId: 100, userId: 10, accepts: 0, submits: 1 })
+          }
+          return Promise.resolve(null)
+        })
+      })
+
+      it('竞赛 WA 时应增加 ContestUser.submits，不增加 accepts', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { ContestUser } = require('../../database/entities/contest-user.entity')
+        const submitsCalls = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === ContestUser && field === 'submits',
+        )
+        expect(submitsCalls.length).toBeGreaterThan(0)
+
+        const acceptsCalls = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === ContestUser && field === 'accepts',
+        )
+        expect(acceptsCalls).toHaveLength(0)
+      })
+
+      it('竞赛 WA 时仍应调用 rankService.updateContestRank', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        expect(mockRankService.updateContestRank).toHaveBeenCalledWith(
+          100, 10, expect.any(Number), expect.any(Number),
+        )
+      })
+
+      it('竞赛 CE 时应跳过全部 ContestUser 更新和排行榜', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.CompileError))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { ContestUser } = require('../../database/entities/contest-user.entity')
+        const contestCalls = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity]: [any]) => entity === ContestUser,
+        )
+        expect(contestCalls).toHaveLength(0)
+        expect(mockRankService.updateContestRank).not.toHaveBeenCalled()
+      })
+
+      it('竞赛 SE 时应跳过全部 ContestUser 更新和排行榜', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.SystemError))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { ContestUser } = require('../../database/entities/contest-user.entity')
+        const contestCalls = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity]: [any]) => entity === ContestUser,
+        )
+        expect(contestCalls).toHaveLength(0)
+        expect(mockRankService.updateContestRank).not.toHaveBeenCalled()
+      })
+
+      it('ContestUser 不存在时不调用 rankService.updateContestRank', async () => {
+        ;(mockManager.findOne as jest.Mock).mockResolvedValue(null)
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        expect(mockRankService.updateContestRank).not.toHaveBeenCalled()
+      })
+    })
+
+    // ─── 课程提交 ─────────────────────────────────────────────────────────────
+
+    describe('课程提交', () => {
+      beforeEach(() => {
+        ;(mockManager.findOneOrFail as jest.Mock).mockResolvedValue({
+          id: 1,
+          userId: 10,
+          problemId: 20,
+          contestId: null,
+          courseId: 50,
+        })
+        ;(mockManager.findOne as jest.Mock).mockImplementation((entity: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { CourseUser } = require('../../database/entities/course-user.entity')
+          if (entity === CourseUser) {
+            return Promise.resolve({ courseId: 50, userId: 10, accepts: 0, submits: 1 })
+          }
+          return Promise.resolve(null)
+        })
+      })
+
+      it('课程 WA 时应增加 CourseUser.submits 和 CourseProblem.submits', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseUser } = require('../../database/entities/course-user.entity')
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseProblem } = require('../../database/entities/course-problem.entity')
+        const cuSubmits = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === CourseUser && field === 'submits',
+        )
+        expect(cuSubmits.length).toBeGreaterThan(0)
+        const cpSubmits = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === CourseProblem && field === 'submits',
+        )
+        expect(cpSubmits.length).toBeGreaterThan(0)
+      })
+
+      it('课程 WA 时不应增加 CourseUser.accepts', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseUser } = require('../../database/entities/course-user.entity')
+        const acceptsCalls = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === CourseUser && field === 'accepts',
+        )
+        expect(acceptsCalls).toHaveLength(0)
+      })
+
+      it('课程首次 AC 时应增加 CourseUser.accepts 和 CourseProblem.accepts', async () => {
+        ;(mockManager.findOne as jest.Mock).mockImplementation((entity: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { CourseUser } = require('../../database/entities/course-user.entity')
+          if (entity === CourseUser) {
+            return Promise.resolve({ courseId: 50, userId: 10, accepts: 0, submits: 1 })
+          }
+          // No prev AC submission
+          return Promise.resolve(null)
+        })
+        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseUser } = require('../../database/entities/course-user.entity')
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseProblem } = require('../../database/entities/course-problem.entity')
+        const cuAccepts = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === CourseUser && field === 'accepts',
+        )
+        expect(cuAccepts.length).toBeGreaterThan(0)
+        const cpAccepts = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === CourseProblem && field === 'accepts',
+        )
+        expect(cpAccepts.length).toBeGreaterThan(0)
+      })
+
+      it('课程重复 AC 时不应再增加 accepts', async () => {
+        ;(mockManager.findOne as jest.Mock).mockImplementation((entity: any, opts: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { CourseUser } = require('../../database/entities/course-user.entity')
+          if (entity === CourseUser) {
+            return Promise.resolve({ courseId: 50, userId: 10, accepts: 1, submits: 2 })
+          }
+          // Prev AC submission exists
+          if (opts?.where?.status === Status.AC) {
+            return Promise.resolve({ id: 999, status: Status.AC })
+          }
+          return Promise.resolve(null)
+        })
+        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseUser } = require('../../database/entities/course-user.entity')
+        const cuAccepts = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity, , field]: [any, any, string]) => entity === CourseUser && field === 'accepts',
+        )
+        expect(cuAccepts).toHaveLength(0)
+      })
+
+      it('课程 CE 时应跳过全部 CourseUser 更新', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.CompileError))
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { CourseUser } = require('../../database/entities/course-user.entity')
+        const courseCalls = (mockManager.increment as jest.Mock).mock.calls.filter(
+          ([entity]: [any]) => entity === CourseUser,
+        )
+        expect(courseCalls).toHaveLength(0)
+        expect(mockRankService.updateCourseRank).not.toHaveBeenCalled()
+      })
+
+      it('课程 WA 时应调用 rankService.updateCourseRank', async () => {
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        expect(mockRankService.updateCourseRank).toHaveBeenCalledWith(
+          50, 10, expect.any(Number), expect.any(Number),
+        )
+      })
+
+      it('CourseUser 不存在时不调用 rankService.updateCourseRank', async () => {
+        ;(mockManager.findOne as jest.Mock).mockResolvedValue(null)
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        expect(mockRankService.updateCourseRank).not.toHaveBeenCalled()
+      })
+    })
+
+    // ─── updateUserProblemStatus 条件更新 ──────────────────────────────────
+
+    describe('updateUserProblemStatus - 条件写入', () => {
+      it('当前无记录（值=0）时，任何结果都应写入 Redis', async () => {
+        ;(mockRedisService.hget as jest.Mock).mockResolvedValue(null) // current = 0
+        await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer))
+        // newVal=2 > 0 → hset should be called
+        expect(mockRedisService.hset).toHaveBeenCalledWith(
+          expect.stringContaining('ups:'),
+          expect.any(String),
+          2,
+        )
+      })
+
+      it('已有记录（值=2）时，AC（newVal=1 不大于 2）不应再写入 Redis', async () => {
+        ;(mockRedisService.hget as jest.Mock).mockResolvedValue('2') // current = 2 (non-AC)
+        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted))
+        // newVal=1, 1 > 2 is false → hset NOT called
+        expect(mockRedisService.hset).not.toHaveBeenCalled()
+      })
+    })
+
+    // ─── saveSuspicion ─────────────────────────────────────────────────────
+
+    describe('saveSuspicion', () => {
+      it('SubmissionMisc 有 code 时应保存 Suspicion', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SubmissionMisc: SM } = require('../../database/entities/submission-misc.entity')
+        ;(mockManager.findOne as jest.Mock).mockImplementation((entity: any) => {
+          if (entity === SM) {
+            return Promise.resolve({ submissionId: 1, code: 'int main() { return 0; }' })
+          }
+          return Promise.resolve(null)
+        })
+        await service.receiveResult(1, buildResult())
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { Suspicion: Sus } = require('../../database/entities/suspicion.entity')
+        const saveCalls = (mockManager.save as jest.Mock).mock.calls.filter(
+          ([entity]: [any]) => entity === Sus,
+        )
+        expect(saveCalls.length).toBeGreaterThan(0)
+      })
+
+      it('saveSuspicion save 失败时主流程不应抛出', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SubmissionMisc: SM } = require('../../database/entities/submission-misc.entity')
+        ;(mockManager.findOne as jest.Mock).mockImplementation((entity: any) => {
+          if (entity === SM) {
+            return Promise.resolve({ submissionId: 1, code: 'int main() {}' })
+          }
+          return Promise.resolve(null)
+        })
+        ;(mockManager.save as jest.Mock).mockRejectedValue(new Error('DB write failed'))
+        // Should NOT throw - saveSuspicion has its own try-catch
+        await expect(service.receiveResult(1, buildResult())).resolves.toBeUndefined()
+      })
+    })
+
+    // ─── receiveResult 事务失败回滚 ────────────────────────────────────────
+
+    describe('receiveResult - 事务失败', () => {
+      it('事务抛出时应将 Submission 标记为 SE 并重新抛出错误', async () => {
+        const transactionError = new Error('transaction failed')
+        ;(mockDataSource.transaction as jest.Mock).mockRejectedValue(transactionError)
+
+        const mockExecute = jest.fn().mockResolvedValue({})
+        ;(mockDataSource.createQueryBuilder as jest.Mock).mockReturnValue({
+          update: jest.fn().mockReturnThis(),
+          set: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+          execute: mockExecute,
+        })
+
+        await expect(service.receiveResult(1, buildResult())).rejects.toThrow('transaction failed')
+        expect(mockExecute).toHaveBeenCalled()
+      })
+    })
   })
 })
