@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 export default () => ({
   port: parseInt(process.env.PORT ?? '3000', 10) || 3000,
+  baseUrl: process.env.BASE_URL ?? 'http://localhost:3000',
   skipInit: process.env.SKIP_INIT === 'true',
   database: {
     host: process.env.DB_HOST ?? 'localhost',
