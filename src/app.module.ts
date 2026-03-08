@@ -26,6 +26,7 @@ import { SuspicionModule } from './modules/suspicion/suspicion.module'
 import { StatisticsModule } from './modules/statistics/statistics.module'
 import { InitModule } from './modules/init/init.module'
 import { CompeteModule } from './modules/compete/compete.module'
+import { TransmitModule } from './modules/transmit/transmit.module'
 
 @Module({
   imports: [
@@ -108,6 +109,9 @@ import { CompeteModule } from './modules/compete/compete.module'
 
     // Bot 对战模块
     CompeteModule,
+
+    // 运维工具模块
+    TransmitModule,
   ],
 })
 export class AppModule {}

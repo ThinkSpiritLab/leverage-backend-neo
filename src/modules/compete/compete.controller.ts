@@ -9,6 +9,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
@@ -27,6 +28,9 @@ import { UpdateGameDto } from './dto/update-game.dto'
 import { CreateGamerDto } from './dto/create-gamer.dto'
 import { UpdateGamerDto } from './dto/update-gamer.dto'
 import { LaunchMatchDto } from './dto/launch-match.dto'
+import { CreateRoomDto } from './dto/create-room.dto'
+import { SubmitGamerDto } from './dto/submit-gamer.dto'
+import { ModifyPlayerDto } from './dto/modify-player.dto'
 
 @ApiTags('compete')
 @Controller('compete')
@@ -214,5 +218,149 @@ export class CompeteController {
   @ApiOperation({ summary: '对局详情' })
   findOneMatch(@Param('id', ParseIntPipe) id: number) {
     return this.competeService.findOneMatch(id)
+  }
+
+  /**
+   * POST /compete/matches/:id/inspect
+   * 查看对局代码详情（需要登录）
+   */
+  @Post('matches/:id/inspect')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '查看对局代码详情（含 gamer 代码）' })
+  inspectMatch(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.inspectMatch(id, user.sub)
+  }
+
+  // ─── Rooms ───────────────────────────────────────────────────────────────────
+
+  /**
+   * POST /compete/rooms
+   * 创建房间（需要登录）
+   */
+  @Post('rooms')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '创建对战房间' })
+  createRoom(
+    @Body() dto: CreateRoomDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const isAdmin = user.role === 'admin' || user.role === 'sa'
+    return this.competeService.createRoom(dto, user.sub, isAdmin)
+  }
+
+  /**
+   * GET /compete/rooms
+   * 列出开放中的房间（公开）
+   */
+  @Get('rooms')
+  @ApiOperation({ summary: '列出开放中的房间' })
+  listOpenRooms() {
+    return this.competeService.listOpenRooms()
+  }
+
+  /**
+   * GET /compete/rooms/cooldown
+   * 查询冷却时间（需要登录）
+   */
+  @Get('rooms/cooldown')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '查询创建房间冷却时间' })
+  getRoomCooldown(@CurrentUser() user: JwtPayload) {
+    return this.competeService.getRoomCooldown(user.sub)
+  }
+
+  /**
+   * GET /compete/rooms/:id
+   * 获取房间详情（公开）
+   */
+  @Get('rooms/:id')
+  @ApiOperation({ summary: '获取房间详情' })
+  getRoomOverview(@Param('id', ParseIntPipe) id: number) {
+    return this.competeService.getRoomOverview(id)
+  }
+
+  /**
+   * POST /compete/rooms/:id/submit
+   * 在房间中提交 Bot（需要登录）
+   */
+  @Post('rooms/:id/submit')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '在房间中提交 Bot 选手' })
+  @HttpCode(HttpStatus.OK)
+  submitGamer(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SubmitGamerDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.submitGamer(id, dto, user.sub)
+  }
+
+  /**
+   * POST /compete/rooms/:id/start
+   * 开始对局（需要登录）
+   */
+  @Post('rooms/:id/start')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '开始对局' })
+  startRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const isAdmin = user.role === 'admin' || user.role === 'sa'
+    return this.competeService.startRoom(id, user.sub, isAdmin)
+  }
+
+  /**
+   * PUT /compete/rooms/:id/open
+   * 开放房间（需要登录）
+   */
+  @Put('rooms/:id/open')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '开放房间（允许其他人加入）' })
+  openRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.openRoom(id, user.sub)
+  }
+
+  /**
+   * PUT /compete/rooms/:id/close
+   * 关闭房间（需要登录）
+   */
+  @Put('rooms/:id/close')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '关闭房间（停止接受新加入）' })
+  closeRoom(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.closeRoom(id, user.sub)
+  }
+
+  /**
+   * PUT /compete/rooms/:id/player
+   * 更新玩家（需要登录）
+   */
+  @Put('rooms/:id/player')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '设置房间位置的玩家' })
+  modifyPlayer(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ModifyPlayerDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.modifyPlayer(id, dto, user.sub)
   }
 }

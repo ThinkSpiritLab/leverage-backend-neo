@@ -267,4 +267,46 @@ export class CompeteService {
       winRate: r.total > 0 ? Number(r.wins) / Number(r.total) : 0,
     }))
   }
+  // ─── Room stubs (TODO: implement) ────────────────────────────────────────────
+
+  async inspectMatch(matchId: number, _userId: number): Promise<any> {
+    return this.findOneMatch(matchId)
+  }
+
+  async createRoom(_dto: any, _userId: number, _isAdmin: boolean): Promise<any> {
+    throw new BadRequestException('未实现')
+  }
+
+  async listOpenRooms(): Promise<any[]> {
+    return []
+  }
+
+  async getRoomCooldown(_userId: number): Promise<{ cooldown: number }> {
+    return { cooldown: 0 }
+  }
+
+  async getRoomOverview(_roomId: number): Promise<any> {
+    throw new NotFoundException('未实现')
+  }
+
+  async submitGamer(_roomId: number, _dto: any, _userId: number): Promise<any> {
+    throw new BadRequestException('未实现')
+  }
+
+  async startRoom(_roomId: number, _userId: number, _isAdmin: boolean): Promise<any> {
+    throw new BadRequestException('未实现')
+  }
+
+  async openRoom(_roomId: number, _userId: number): Promise<any> {
+    throw new BadRequestException('未实现')
+  }
+
+  async closeRoom(_roomId: number, _userId: number): Promise<any> {
+    throw new BadRequestException('未实现')
+  }
+
+  async modifyPlayer(_roomId: number, _dto: any, _userId: number): Promise<any> {
+    throw new BadRequestException('未实现')
+  }
+
 }
