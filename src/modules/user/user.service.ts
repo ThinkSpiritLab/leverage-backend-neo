@@ -164,6 +164,8 @@ export class UserService {
       user.passwordHash = hashPassword(dto.password);
     }
     if (dto.username !== undefined) user.username = dto.username;
+    if (dto.email !== undefined) user.email = dto.email ?? null;
+    if (dto.studentId !== undefined) user.studentId = dto.studentId ?? null;
     if (dto.nickname !== undefined) user.nickname = dto.nickname ?? null;
     if (dto.sex !== undefined) user.sex = dto.sex;
     if (dto.certifiedName !== undefined)
