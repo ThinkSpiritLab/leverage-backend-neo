@@ -1,11 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsBoolean, IsDate, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsBoolean, IsDate, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator'
 
 export class CreateCourseDto {
   @ApiProperty({ description: '课程名称' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(200)
   name: string
 
   @ApiProperty({ description: '开始时间' })
@@ -21,11 +22,13 @@ export class CreateCourseDto {
   @ApiPropertyOptional({ description: '教师', default: '' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   teacher?: string
 
   @ApiPropertyOptional({ description: '通知内容', default: '' })
   @IsOptional()
   @IsString()
+  @MaxLength(4096)
   notification?: string
 
   @ApiPropertyOptional({ description: '课程类型', default: 0 })

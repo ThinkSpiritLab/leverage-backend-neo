@@ -51,7 +51,7 @@ export class ContestService {
    * 竞赛列表（支持 upcoming/ongoing/ended 过滤）
    */
   async findAll(query: ContestQueryDto): Promise<{ items: Contest[]; total: number }> {
-    const { page = 1, perPage = 20, status, fromTime, toTime } = query
+    const { page = 1, perPage = 20, status, fromTime, toTime, type } = query
     const skip = (page - 1) * perPage
     const now = new Date()
 
@@ -71,6 +71,7 @@ export class ContestService {
 
     if (fromTime) qb.andWhere('c.startTime >= :fromTime', { fromTime })
     if (toTime) qb.andWhere('c.startTime <= :toTime', { toTime })
+    if (type) qb.andWhere('c.type = :type', { type })
 
     const [items, total] = await qb.getManyAndCount()
     return { items, total }

@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from 'class-validator'
+import { IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class CreateSubmissionDto {
@@ -10,6 +10,7 @@ export class CreateSubmissionDto {
   @ApiProperty({ description: '提交代码' })
   @IsString()
   @MinLength(1)
+  @MaxLength(65536)
   code: string
 
   @ApiProperty({ description: '编程语言（整数枚举）', example: 1 })

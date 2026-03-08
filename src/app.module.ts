@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
+import { APP_GUARD } from '@nestjs/core'
 import { ConfigModule } from '@nestjs/config'
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import configuration from './config/configuration'
 import { validationSchema } from './config/validation.schema'
 import { DatabaseModule } from './database/database.module'
@@ -38,6 +40,15 @@ import { MessageModule } from './modules/message/message.module'
       validationSchema,
       envFilePath: ['.env'],
     }),
+
+    // Rate limiting (global)
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000,
+        limit: 60,
+      },
+    ]),
 
     // Logger (global pino)
     LoggerModule,
@@ -116,6 +127,12 @@ import { MessageModule } from './modules/message/message.module'
 
     // 站内信模块
     MessageModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

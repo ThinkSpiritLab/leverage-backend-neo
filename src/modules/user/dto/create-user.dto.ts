@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Length, MinLength } from 'class-validator'
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, Length, MaxLength, MinLength } from 'class-validator'
 
 export type UserRole = 'user' | 'admin' | 'superadmin' | 'sa' | 'supervisor' | 'contest-user' | 'guest'
 
@@ -29,6 +29,7 @@ export class CreateUserDto {
   @ApiPropertyOptional({ description: '学号', example: '2021001001' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   studentId?: string
 
   @ApiPropertyOptional({ description: '真实姓名' })
@@ -45,26 +46,30 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ description: '性别', enum: ['male', 'female', 'unknown'] })
   @IsOptional()
-  @IsString()
+  @IsEnum(['male', 'female', 'unknown'])
   sex?: string
 
   @ApiPropertyOptional({ description: '年级' })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   grade?: string
 
   @ApiPropertyOptional({ description: '学院' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   college?: string
 
   @ApiPropertyOptional({ description: '专业' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   profession?: string
 
   @ApiPropertyOptional({ description: '班级' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   class?: string
 }

@@ -1,14 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator'
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator'
 
 export class CreateGameDto {
   @ApiProperty({ description: '游戏名称' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   title: string
 
   @ApiProperty({ description: '游戏描述' })
   @IsString()
+  @MaxLength(4096)
   description: string
 
   @ApiProperty({ description: '时间限制（ms）' })
@@ -28,10 +30,12 @@ export class CreateGameDto {
 
   @ApiProperty({ description: '裁判代码' })
   @IsString()
+  @MaxLength(65536)
   judgerCode: string
 
   @ApiProperty({ description: '裁判代码语言' })
   @IsString()
+  @MaxLength(32)
   judgerLanguage: string
 
   @ApiProperty({ description: '是否禁用', required: false })

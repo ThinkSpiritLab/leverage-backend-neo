@@ -8,13 +8,20 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator'
 
 export class CreateContestDto {
+  @ApiPropertyOptional({ description: '类型：contest | exam', default: 'contest' })
+  @IsOptional()
+  @IsString()
+  type?: string
+
   @ApiProperty({ description: '竞赛名称' })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(200)
   name: string
 
   @ApiProperty({ description: '开始时间' })
@@ -30,11 +37,13 @@ export class CreateContestDto {
   @ApiPropertyOptional({ description: '竞赛描述', default: '' })
   @IsOptional()
   @IsString()
+  @MaxLength(10000)
   description?: string
 
   @ApiPropertyOptional({ description: '通知内容', default: '' })
   @IsOptional()
   @IsString()
+  @MaxLength(4096)
   notification?: string
 
   @ApiPropertyOptional({ description: '是否允许直接登录（用全站密码）', default: true })

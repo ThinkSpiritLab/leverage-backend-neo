@@ -14,15 +14,18 @@ import { Type } from 'class-transformer'
 export class CreateProblemDto {
   @ApiProperty({ description: '题目标题' })
   @IsString()
+  @MaxLength(200)
   title: string
 
   @ApiProperty({ description: '题目内容（Markdown）' })
   @IsString()
+  @MaxLength(65536)
   content: string
 
   @ApiPropertyOptional({ description: '题目来源', default: 'Leverage' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   source?: string
 
   @ApiProperty({ description: '时间限制（ms）', example: 1000 })

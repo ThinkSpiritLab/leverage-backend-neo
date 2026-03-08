@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsDate, IsEnum, IsInt, IsOptional, Min } from 'class-validator'
+import { IsDate, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator'
 
 export type ContestStatus = 'upcoming' | 'ongoing' | 'ended'
 
@@ -26,6 +26,11 @@ export class ContestQueryDto {
   @IsOptional()
   @IsEnum(['upcoming', 'ongoing', 'ended'])
   status?: ContestStatus
+
+  @ApiPropertyOptional({ description: '类型过滤：contest | exam' })
+  @IsOptional()
+  @IsString()
+  type?: string
 
   @ApiPropertyOptional({ description: '开始时间范围 from' })
   @IsOptional()

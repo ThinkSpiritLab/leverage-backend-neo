@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, IsString } from 'class-validator'
+import { IsInt, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 
@@ -7,12 +7,14 @@ export class SearchSubmissionDto {
   @ApiPropertyOptional({ description: '用户名或真实姓名（模糊）' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   name?: string
 
   /** problem title or problemId */
   @ApiPropertyOptional({ description: '题目名称或编号（模糊）' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   title?: string
 
   @ApiPropertyOptional({ description: '语言枚举值' })

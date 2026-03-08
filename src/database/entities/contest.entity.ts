@@ -28,6 +28,9 @@ export class Contest {
   @JoinColumn({ name: 'consultantId' })
   consultant: any
 
+  @Column('varchar', { default: 'contest', comment: '类型：contest | exam' })
+  type: string
+
   @Column('varchar')
   name: string
 

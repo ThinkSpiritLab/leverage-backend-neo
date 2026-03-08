@@ -13,6 +13,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { AuthService } from './auth.service'
@@ -28,6 +29,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({ summary: '普通用户登录', description: '使用用户名/密码登录，返回 access + refresh token' })
   @ApiResponse({ status: 200, description: '登录成功，返回 accessToken 和 refreshToken' })
   @ApiResponse({ status: 401, description: '用户名或密码错误' })
@@ -37,6 +39,7 @@ export class AuthController {
 
   @Post('login/contest')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiOperation({
     summary: '竞赛用户登录',
     description: '使用竞赛 ID + 用户名/密码登录，返回 contest access token',
