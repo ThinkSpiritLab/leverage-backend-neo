@@ -12,6 +12,9 @@ import { DataSource } from 'typeorm';
 import { ProblemService } from '../../src/modules/problem/problem.service';
 import { Problem } from '../../src/database/entities/problem.entity';
 import { Tag } from '../../src/database/entities/tag.entity';
+import { ContestProblem } from '../../src/database/entities/contest-problem.entity';
+import { CourseProblem } from '../../src/database/entities/course-problem.entity';
+import { Submission } from '../../src/database/entities/submission.entity';
 import { CacheService } from '../../src/modules/redis/cache.service';
 import { RedisService } from '../../src/modules/redis/redis.service';
 import { ALL_ENTITIES, patchBoolColumnsForSqlite } from './setup';
@@ -41,7 +44,7 @@ describe('ProblemService (integration)', () => {
           synchronize: true,
           logging: false,
         } as any),
-        TypeOrmModule.forFeature([Problem, Tag]),
+        TypeOrmModule.forFeature([Problem, Tag, ContestProblem, CourseProblem, Submission]),
       ],
       providers: [
         ProblemService,

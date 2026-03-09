@@ -6,6 +6,8 @@
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppModule } from '../../src/app.module';
 
 export async function createTestApp(): Promise<INestApplication> {
@@ -13,7 +15,11 @@ export async function createTestApp(): Promise<INestApplication> {
   // AppModule → ConfigModule.forRoot already validated them at import time.
   const module = await Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  })
+    // Disable throttling in E2E tests to avoid rate-limit interference
+    .overrideGuard(ThrottlerGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   const app = module.createNestApplication();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

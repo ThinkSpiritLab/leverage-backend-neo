@@ -12,12 +12,15 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 
+import { getToken } from '@willsoto/nestjs-prometheus';
 import { AuthService } from '../../src/modules/auth/auth.service';
 import { User } from '../../src/database/entities/user.entity';
 import { Contest } from '../../src/database/entities/contest.entity';
 import { ContestUser } from '../../src/database/entities/contest-user.entity';
+import { Setting } from '../../src/database/entities/setting.entity';
 import { hashPassword } from '../../src/common/utils/crypto.util';
 import { ALL_ENTITIES, patchBoolColumnsForSqlite } from './setup';
+import { LOGIN_TOTAL_COUNTER } from '../../src/modules/metrics/metrics.module';
 
 // Patch 'bool' → 'integer' for SQLite compatibility (must run before module compilation)
 patchBoolColumnsForSqlite();
@@ -61,7 +64,7 @@ describe('AuthService (integration)', () => {
           synchronize: true,
           logging: false,
         } as any),
-        TypeOrmModule.forFeature([User, ContestUser, Contest]),
+        TypeOrmModule.forFeature([User, ContestUser, Contest, Setting]),
         JwtModule.registerAsync({
           imports: [ConfigModule],
           useFactory: (configService: ConfigService) => ({
@@ -71,7 +74,13 @@ describe('AuthService (integration)', () => {
           inject: [ConfigService],
         }),
       ],
-      providers: [AuthService],
+      providers: [
+        AuthService,
+        {
+          provide: getToken(LOGIN_TOTAL_COUNTER),
+          useValue: { labels: jest.fn().mockReturnValue({ inc: jest.fn() }), inc: jest.fn() },
+        },
+      ],
     }).compile();
 
     authService = module.get<AuthService>(AuthService);

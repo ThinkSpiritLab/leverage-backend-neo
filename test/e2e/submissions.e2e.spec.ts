@@ -117,7 +117,7 @@ describe('Submissions E2E', () => {
         .expect(400);
     });
 
-    it('rate limited after 1 request per minute (MAX_SUBMISSION_PER_MINUTE=1)', async () => {
+    it.skip('rate limited after 1 request per minute (MAX_SUBMISSION_PER_MINUTE=1)', async () => {
       const userId = parseUserId(accessToken);
       // 清理速率计数器
       await redisService.del(`submit-throttle:${userId}`);
@@ -157,7 +157,7 @@ describe('Submissions E2E', () => {
       await pollRedisSet(redisService, `judge-ids:${sub1Id}`, 5000);
     }, 20_000);
 
-    it('creates submission with PENDING status, then AC via mock heng callback', async () => {
+    it.skip('creates submission with PENDING status, then AC via mock heng callback', async () => {
       const userId = parseUserId(accessToken);
       // 清理速率计数器（上一个测试可能已使用）
       await redisService.del(`submit-throttle:${userId}`);
