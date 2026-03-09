@@ -39,6 +39,7 @@ const mockRepo = () => ({
   remove: jest.fn(),
   delete: jest.fn(),
   createQueryBuilder: jest.fn(),
+  manager: { query: jest.fn().mockResolvedValue([]) },
 });
 
 const courseFixture = {

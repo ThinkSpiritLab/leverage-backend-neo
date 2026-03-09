@@ -46,6 +46,7 @@ const mockRepo = () => ({
   delete: jest.fn(),
   update: jest.fn(),
   createQueryBuilder: jest.fn(),
+  manager: { query: jest.fn().mockResolvedValue([]) },
 });
 
 const mockRedisService = () => ({
