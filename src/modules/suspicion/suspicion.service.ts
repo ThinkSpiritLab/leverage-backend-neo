@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Suspicion } from '../../database/entities/suspicion.entity';
 
 export interface SuspicionQuery {
@@ -15,6 +15,7 @@ export class SuspicionService {
   constructor(
     @InjectRepository(Suspicion)
     private readonly suspicionRepo: Repository<Suspicion>,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -64,6 +65,45 @@ export class SuspicionService {
 
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
+  }
+
+  /**
+   * 按课程聚合每个用户的涉嫌抄袭统计
+   * 返回：userId, username, certifiedName, college, profession, class, studentId,
+   *       detectedCount, accepts, detectedRate, status, statusEndsAt
+   */
+  async getUserStats(courseId: number): Promise<any[]> {
+    const rows = await this.dataSource.query(
+      `
+      SELECT
+        u.id          AS userId,
+        u.username,
+        u.certifiedName,
+        u.college,
+        u.profession,
+        u.class,
+        u.studentId,
+        u.status,
+        u.statusEndsAt,
+        COUNT(DISTINCT sus.submissionId)                          AS detectedCount,
+        (SELECT COUNT(*) FROM submission s2
+          WHERE s2.userId = u.id AND s2.courseId = ? AND s2.status = 0) AS accepts
+      FROM suspicion sus
+      JOIN submission sub ON sub.id = sus.submissionId
+      JOIN user u ON u.id = sub.userId
+      WHERE sub.courseId = ?
+      GROUP BY u.id
+      ORDER BY detectedCount DESC
+      `,
+      [courseId, courseId],
+    );
+
+    return rows.map((r: any) => ({
+      ...r,
+      detectedCount: Number(r.detectedCount),
+      accepts: Number(r.accepts),
+      detectedRate: r.accepts > 0 ? Number(r.detectedCount) / Number(r.accepts) : 0,
+    }));
   }
 
   /**

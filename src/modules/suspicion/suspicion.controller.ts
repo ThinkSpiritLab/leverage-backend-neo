@@ -45,6 +45,16 @@ export class SuspicionController {
   }
 
   /**
+   * GET /suspicion/course/:courseId/user-stats
+   * 按课程聚合每个用户的抄袭统计（supervisor+）
+   */
+  @Get('course/:courseId/user-stats')
+  @ApiOperation({ summary: '按课程聚合用户抄袭统计（supervisor+）' })
+  getUserStats(@Param('courseId', ParseIntPipe) courseId: number) {
+    return this.suspicionService.getUserStats(courseId);
+  }
+
+  /**
    * GET /suspicion/hash/:hashsum
    * 按哈希查关联提交
    */
