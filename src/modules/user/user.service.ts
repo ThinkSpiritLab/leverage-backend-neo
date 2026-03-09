@@ -58,6 +58,7 @@ export class UserService {
       grade,
       sort,
       order,
+      status,
     } = query;
     const skip = (page - 1) * perPage;
 
@@ -88,6 +89,9 @@ export class UserService {
       const authority = role === 'sa' ? 'superadmin' : role;
       qb.andWhere('u.authority = :authority', { authority });
     }
+
+    if (status !== undefined)
+      qb.andWhere('u.status = :status', { status });
 
     if (college) qb.andWhere('u.college = :college', { college });
     if (profession) qb.andWhere('u.profession = :profession', { profession });

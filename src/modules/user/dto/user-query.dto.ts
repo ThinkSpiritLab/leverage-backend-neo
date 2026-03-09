@@ -63,6 +63,12 @@ export class UserQueryDto {
   @IsString()
   grade?: string;
 
+  @ApiPropertyOptional({ description: '用户状态过滤（0=正常, 1=封禁等）' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  status?: number;
+
   @ApiPropertyOptional({ description: '排序字段', enum: ['id', 'accepts', 'submits', 'username'] })
   @IsOptional()
   @IsString()
