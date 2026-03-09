@@ -99,7 +99,7 @@ describe('ContestService', () => {
         },
         { provide: getRepositoryToken(User), useFactory: mockRepo },
         { provide: RedisService, useFactory: mockRedisService },
-        { provide: DataSource, useValue: { query: jest.fn() } },
+        { provide: DataSource, useValue: { query: jest.fn().mockResolvedValue([]) } },
       ],
     }).compile();
 

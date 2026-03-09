@@ -6,6 +6,7 @@ import { CourseUser } from '../../database/entities/course-user.entity';
 import { CourseProblem } from '../../database/entities/course-problem.entity';
 import { Submission } from '../../database/entities/submission.entity';
 import { User } from '../../database/entities/user.entity';
+import { DataSource } from 'typeorm';
 import { CourseService, parseFilters } from './course.service';
 
 // ─── Mock helpers ────────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ describe('CourseService', () => {
         { provide: getRepositoryToken(CourseProblem), useFactory: mockRepo },
         { provide: getRepositoryToken(Submission), useFactory: mockRepo },
         { provide: getRepositoryToken(User), useFactory: mockRepo },
+        { provide: DataSource, useValue: { query: jest.fn().mockResolvedValue([]) } },
       ],
     }).compile();
 

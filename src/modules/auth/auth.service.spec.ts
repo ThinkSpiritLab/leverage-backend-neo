@@ -6,6 +6,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ContestUser } from '../../database/entities/contest-user.entity';
 import { Contest } from '../../database/entities/contest.entity';
+import { Setting } from '../../database/entities/setting.entity';
 import { User } from '../../database/entities/user.entity';
 import { hashPassword } from '../../common/utils/crypto.util';
 import { AuthService } from './auth.service';
@@ -61,6 +62,10 @@ describe('AuthService', () => {
         {
           provide: getRepositoryToken(Contest),
           useFactory: mockContestRepository,
+        },
+        {
+          provide: getRepositoryToken(Setting),
+          useValue: { findOne: jest.fn().mockResolvedValue(null) },
         },
         { provide: JwtService, useFactory: mockJwtService },
         { provide: ConfigService, useFactory: mockConfigService },
