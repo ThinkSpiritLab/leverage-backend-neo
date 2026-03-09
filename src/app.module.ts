@@ -58,7 +58,7 @@ import { MessageModule } from './modules/message/message.module';
       {
         name: 'default',
         ttl: 60000,
-        limit: 60,
+        limit: 200,
       },
     ]),
 

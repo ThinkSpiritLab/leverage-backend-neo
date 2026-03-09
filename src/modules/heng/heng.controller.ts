@@ -14,6 +14,7 @@ import type { Request } from 'express';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { JUDGE_RX_QUEUE } from '../queue/queue.constants';
 import type {
   JudgeResult,
@@ -31,6 +32,7 @@ import { JudgeState } from './heng.types';
  * POST /heng/finish/:submissionId/:judgeId — 最终结果回调
  */
 @ApiTags('heng')
+@SkipThrottle()
 @Controller('heng')
 export class HengController {
   private readonly logger = new Logger(HengController.name);
