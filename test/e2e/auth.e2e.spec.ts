@@ -13,9 +13,20 @@ import { createTestApp } from './test-app';
 
 describe('Auth E2E', () => {
   let app: INestApplication;
+  // Login once in top-level beforeAll to avoid hitting per-route throttle limit
+  let sharedAccessToken: string;
+  let sharedRefreshToken: string;
 
   beforeAll(async () => {
     app = await createTestApp();
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ username: 'admin', password: 'Admin@123456' })
+      .expect(200);
+
+    sharedAccessToken = res.body.accessToken;
+    sharedRefreshToken = res.body.refreshToken;
   }, 60_000);
 
   afterAll(async () => {
@@ -59,19 +70,10 @@ describe('Auth E2E', () => {
   });
 
   describe('POST /auth/refresh', () => {
-    let validRefreshToken: string;
-
-    beforeAll(async () => {
-      const res = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ username: 'admin', password: 'Admin@123456' });
-      validRefreshToken = res.body.refreshToken;
-    });
-
     it('should issue a new access token with a valid refresh token', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/refresh')
-        .send({ refreshToken: validRefreshToken })
+        .send({ refreshToken: sharedRefreshToken })
         .expect(200);
 
       expect(res.body).toHaveProperty('accessToken');
@@ -94,15 +96,6 @@ describe('Auth E2E', () => {
   });
 
   describe('GET /auth/profile', () => {
-    let accessToken: string;
-
-    beforeAll(async () => {
-      const res = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ username: 'admin', password: 'Admin@123456' });
-      accessToken = res.body.accessToken;
-    });
-
     it('should return 401 without token', async () => {
       await request(app.getHttpServer()).get('/auth/profile').expect(401);
     });
@@ -110,7 +103,7 @@ describe('Auth E2E', () => {
     it('should return profile with valid token', async () => {
       const res = await request(app.getHttpServer())
         .get('/auth/profile')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Authorization', `Bearer ${sharedAccessToken}`)
         .expect(200);
 
       expect(res.body).toHaveProperty('sub');
