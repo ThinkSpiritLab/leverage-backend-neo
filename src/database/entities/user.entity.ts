@@ -47,8 +47,8 @@ export class User {
   @Column('datetime', { nullable: true })
   statusEndsAt: Date;
 
-  @Column('varchar', { default: null })
-  remarks: string;
+  @Column('varchar', { default: null, nullable: true })
+  remarks: string | null;
 
   @Column('int', { default: 0 })
   accepts: number;
@@ -74,6 +74,12 @@ export class User {
 
   @Column('varchar', { nullable: true, length: 32 })
   class: string | null;
+
+  @Column('varchar', { nullable: true, length: 100 })
+  email: string | null;
+
+  @Column('varchar', { nullable: true, length: 32 })
+  studentId: string | null;
 
   /** 180 天未提交: 1, 360 天未提交: 2 */
   @Column('int', { default: 0, select: false })
