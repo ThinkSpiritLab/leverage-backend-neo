@@ -24,7 +24,7 @@ import { MergeProfessionDto } from './dto/merge-profession.dto';
 
 @ApiTags('profession-college')
 @ApiBearerAuth()
-@Controller()
+@Controller('profession-college')
 export class ProfessionCollegeController {
   constructor(private readonly service: ProfessionCollegeService) {}
 
