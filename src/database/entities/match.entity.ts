@@ -40,6 +40,9 @@ export class Match {
   })
   links: any[];
 
+  @Column({ type: 'tinyint', default: 0, comment: '测试对局不计ELO' })
+  isTest: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

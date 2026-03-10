@@ -45,6 +45,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { SubmitGamerDto } from './dto/submit-gamer.dto';
 import { ModifyPlayerDto } from './dto/modify-player.dto';
 import { MatchCallbackDto } from './dto/match-callback.dto';
+import { PlaygroundDto } from './dto/playground.dto';
 
 @ApiTags('compete')
 @Controller('compete')
@@ -272,16 +273,18 @@ export class CompeteController {
    * 对局列表（公开）
    */
   @Get('matches')
-  @ApiOperation({ summary: '对局列表' })
+  @ApiOperation({ summary: '对局列表（isTest=true 可查看测试对局）' })
   findAllMatches(
     @Query('gameId') gameId?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
+    @Query('isTest') isTest?: string,
   ) {
     return this.competeService.findAllMatches({
       gameId: gameId ? parseInt(gameId, 10) : undefined,
       page: page ? parseInt(page, 10) : 1,
       perPage: perPage ? parseInt(perPage, 10) : 20,
+      isTest: isTest === 'true' ? true : undefined,
     });
   }
 
@@ -517,6 +520,24 @@ export class CompeteController {
     @Query('topN') topN?: string,
   ) {
     return this.competeService.triggerAutoMatch(gameId, topN ? Number(topN) : 8);
+  }
+
+  // ─── Playground ──────────────────────────────────────────────────────────
+
+  /**
+   * POST /compete/games/:id/playground
+   * 运行测试对局（不计 ELO，不出现在普通对局列表中）
+   */
+  @Post('games/:id/playground')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '测试对局（不计 ELO 和排行榜）' })
+  runPlayground(
+    @Param('id', ParseIntPipe) gameId: number,
+    @Body() dto: PlaygroundDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.runPlayground(gameId, user.sub, dto);
   }
 
   // ─── Human / External Bot Endpoints ──────────────────────────────────────

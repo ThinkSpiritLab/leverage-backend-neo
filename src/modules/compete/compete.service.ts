@@ -66,6 +66,7 @@ export interface MatchQuery {
   gamerId?: number;
   page?: number;
   perPage?: number;
+  isTest?: boolean;
 }
 
 // ─── Room 类型声明 ────────────────────────────────────────────────────────────
@@ -445,6 +446,13 @@ export class CompeteService {
       qb.andWhere('match.gameId = :gameId', { gameId: query.gameId });
     }
 
+    // Filter test matches unless explicitly requested
+    if (query.isTest === true) {
+      qb.andWhere('match.isTest = 1');
+    } else {
+      qb.andWhere('match.isTest = 0');
+    }
+
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
   }
@@ -554,11 +562,6 @@ export class CompeteService {
     // Update ELO scores and win flags for all participating gamers
     if (state === 'finished' && result?.finalResult) {
       const finalResult = result.finalResult;
-      // Detect match type: inner if all gamers are 'code' type
-      const participantIds = Object.keys(finalResult).map(Number).filter(Boolean);
-      const participants = participantIds.length > 0 ? await this.gamerRepo.findBy({ id: In(participantIds) }) : [];
-      const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-      await this.updateElo(finalResult, matchType);
 
       // Set won=1/0 on match_gamer_link
       const maxScore = Math.max(...Object.values(finalResult));
@@ -570,6 +573,16 @@ export class CompeteService {
           { won: score === maxScore ? 1 : 0 },
         );
       }
+
+      // Skip ELO update for test matches
+      if (!match.isTest) {
+        // Detect match type: inner if all gamers are 'code' type
+        const participantIds = Object.keys(finalResult).map(Number).filter(Boolean);
+        const participants = participantIds.length > 0 ? await this.gamerRepo.findBy({ id: In(participantIds) }) : [];
+        const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
+        await this.updateElo(finalResult, matchType);
+      }
+
       // Push game-over SSE so browser doesn't wait for the 3s poll
       this.humanTurnService.notifyGameOver(match.id, finalResult);
     }
@@ -642,11 +655,6 @@ export class CompeteService {
     });
 
     if (Object.keys(gamerIdScores).length >= 2) {
-      const participantIds = Object.keys(gamerIdScores).map(Number).filter(Boolean);
-      const participants = await this.gamerRepo.findBy({ id: In(participantIds) });
-      const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-      await this.updateElo(gamerIdScores, matchType);
-
       // Set won=1/0 on match_gamer_link
       const maxScore = Math.max(...Object.values(gamerIdScores));
       for (const [gamerIdStr, score] of Object.entries(gamerIdScores)) {
@@ -657,6 +665,15 @@ export class CompeteService {
           { won: score === maxScore ? 1 : 0 },
         );
       }
+
+      // Skip ELO update for test matches
+      if (!match.isTest) {
+        const participantIds = Object.keys(gamerIdScores).map(Number).filter(Boolean);
+        const participants = await this.gamerRepo.findBy({ id: In(participantIds) });
+        const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
+        await this.updateElo(gamerIdScores, matchType);
+      }
+
       // Push game-over SSE so browser doesn't wait for the 3s poll
       this.humanTurnService.notifyGameOver(matchId, gamerIdScores);
     }
@@ -1111,6 +1128,97 @@ export class CompeteService {
       return results[1][1] as Record<string, any>;
     }
     throw new InternalServerErrorException();
+  }
+
+  /**
+   * 运行测试对局（沙盒对局，不计入 ELO 和排行榜）
+   * 临时创建一个 test gamer，发起对局，isTest=true。
+   */
+  async runPlayground(
+    gameId: number,
+    userId: number,
+    dto: { language: string; code: string; opponentGamerId: number },
+  ): Promise<{ matchId: number; testGamerId: number }> {
+    // 1. 验证游戏存在
+    await this.findOneGame(gameId);
+
+    // 2. 验证对手 gamer（必须属于此游戏，类型 code，未禁用），并加载代码
+    const opponent = await this.gamerRepo
+      .createQueryBuilder('g')
+      .addSelect('g.code')
+      .where('g.id = :id', { id: dto.opponentGamerId })
+      .andWhere('g.gameId = :gameId', { gameId })
+      .andWhere("g.type = 'code'")
+      .andWhere('g.disabled = 0')
+      .getOne();
+    if (!opponent) {
+      throw new NotFoundException(`对手 #${dto.opponentGamerId} 不存在或不可用`);
+    }
+
+    // 3. 创建临时 test gamer（每次创建新记录，不复用）
+    const testGamer = this.gamerRepo.create({
+      userId,
+      gameId,
+      title: `[测试] 用户#${userId}`,
+      type: 'code',
+      language: dto.language,
+      code: dto.code,
+      opensource: false,
+    });
+    const savedTestGamer = await this.gamerRepo.save(testGamer);
+
+    // 4. 创建 Match 记录（isTest=true）
+    const match = await this.matchRepo.save({
+      gameId,
+      status: MatchStatus.PENDING,
+      isTest: true,
+    });
+
+    // 5. 创建 MatchGamerLink（test gamer = position 0，对手 = position 1）
+    await this.matchGamerLinkRepo.save([
+      { matchId: match.id, gamerId: savedTestGamer.id, index: 0 },
+      { matchId: match.id, gamerId: opponent.id, index: 1 },
+    ]);
+
+    // 6. 加载 game 的 judger 信息并推入评测队列
+    const game = await this.gameRepo
+      .createQueryBuilder('g')
+      .addSelect('g.judgerCode')
+      .addSelect('g.judgerLanguage')
+      .where('g.id = :id', { id: gameId })
+      .getOne();
+
+    await this.judgeTxQueue.add('compete', {
+      matchId: match.id,
+      positionToGamerId: { 0: savedTestGamer.id, 1: opponent.id },
+      game: {
+        judgerCode: game!.judgerCode,
+        judgerLanguage: game!.judgerLanguage,
+        timeLimit: game!.timeLimit,
+        memoryLimit: game!.memoryLimit,
+      },
+      gamers: [
+        {
+          id: savedTestGamer.id,
+          code: dto.code,
+          language: dto.language,
+          position: 0,
+          type: 'code',
+        },
+        {
+          id: opponent.id,
+          code: opponent.code,
+          language: opponent.language,
+          position: 1,
+          type: opponent.type,
+          webhookUrl: opponent.webhookUrl ?? undefined,
+          webhookSecret: opponent.webhookSecret ?? undefined,
+        },
+      ],
+    });
+
+    // 7. 返回 matchId 和 testGamerId
+    return { matchId: match.id, testGamerId: savedTestGamer.id };
   }
 
   /**
