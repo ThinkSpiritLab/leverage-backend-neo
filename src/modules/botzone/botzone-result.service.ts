@@ -67,12 +67,17 @@ export class BotzoneResultService {
     try {
       await this.dataSource.transaction(async (manager) => {
         // 1. Update Submission
-        await manager.update(Submission, submissionId, {
+        const submissionUpdate: Partial<Submission> = {
           status: finalStatus,
           time: result.time ?? undefined,
           memory: result.memory ?? undefined,
           judger: 'botzone',
-        });
+        };
+        // Merge providerMeta if present (e.g. gameLog for botzone matches)
+        if (result.providerMeta && Object.keys(result.providerMeta).length > 0) {
+          submissionUpdate.providerMeta = JSON.stringify(result.providerMeta);
+        }
+        await manager.update(Submission, submissionId, submissionUpdate);
 
         // 2. Update SubmissionMisc
         await manager.update(

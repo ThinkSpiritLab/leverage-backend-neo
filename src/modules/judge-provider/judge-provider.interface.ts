@@ -36,8 +36,14 @@ export interface PollResult {
   status?: number;
   time?: number;
   memory?: number;
+  /** JSON-serialized judge result for SubmissionMisc.judgeResult */
   judgeResult?: string;
   compileErrorMsg?: string;
+  /**
+   * Extra provider-specific metadata to persist in Submission.providerMeta.
+   * For botzone game matches this contains `{ gameLog: { rounds, finalResult } }`.
+   */
+  providerMeta?: Record<string, unknown>;
 }
 
 /**

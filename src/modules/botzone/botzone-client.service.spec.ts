@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { BotzoneClientService } from './botzone-client.service';
 import { JudgeProviderName } from '../judge-provider/judge-provider.interface';
-import { BotzoneJobStatus } from './botzone.types';
 import { Status } from '../heng/heng.types';
 
 // ─── Mock axios ──────────────────────────────────────────────────────────────
@@ -139,51 +138,110 @@ describe('BotzoneClientService', () => {
   // ─── poll ─────────────────────────────────────────────────────────────────
 
   describe('poll', () => {
-    it('returns done=false for Running status', async () => {
+    it('returns done=false for running state', async () => {
       mockAxiosInstance.get.mockResolvedValue({
-        data: { jobId: 'bz-1', status: BotzoneJobStatus.Running },
+        data: { jobId: 'bz-1', state: 'running', type: 'oj' },
       });
       const result = await service.poll(1, 'bz-1');
       expect(result.done).toBe(false);
       expect(result.status).toBe(Status.JUDGING);
     });
 
-    it('returns done=false for Pending status', async () => {
+    it('returns done=false for pending state', async () => {
       mockAxiosInstance.get.mockResolvedValue({
-        data: { jobId: 'bz-1', status: BotzoneJobStatus.Pending },
+        data: { jobId: 'bz-1', state: 'pending', type: 'oj' },
       });
       const result = await service.poll(1, 'bz-1');
       expect(result.done).toBe(false);
+      expect(result.status).toBe(Status.PENDING);
     });
 
-    it('returns done=true with AC for Accepted status', async () => {
+    it('returns done=false for compiling state', async () => {
       mockAxiosInstance.get.mockResolvedValue({
-        data: { jobId: 'bz-1', status: BotzoneJobStatus.Accepted, time: 123, memory: 65536 },
+        data: { jobId: 'bz-1', state: 'compiling', type: 'oj' },
+      });
+      const result = await service.poll(1, 'bz-1');
+      expect(result.done).toBe(false);
+      expect(result.status).toBe(Status.COMPILING);
+    });
+
+    it('returns done=true with AC for finished OJ result with Accepted verdict', async () => {
+      mockAxiosInstance.get.mockResolvedValue({
+        data: {
+          jobId: 'bz-1',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'Accepted',
+            testcases: [
+              { id: 1, verdict: 'Accepted', timeMs: 100, memoryKb: 2048 },
+              { id: 2, verdict: 'Accepted', timeMs: 150, memoryKb: 3000 },
+            ],
+          },
+        },
       });
       const result = await service.poll(1, 'bz-1');
       expect(result.done).toBe(true);
       expect(result.status).toBe(Status.AC);
-      expect(result.time).toBe(123);
-      expect(result.memory).toBe(65536);
+      expect(result.time).toBe(150); // max timeMs
+      expect(result.memory).toBe(3000); // max memoryKb
     });
 
-    it('returns done=true with CE for CompileError', async () => {
+    it('maps OJ testcases to judgeResult JSON', async () => {
       mockAxiosInstance.get.mockResolvedValue({
         data: {
           jobId: 'bz-2',
-          status: BotzoneJobStatus.CompileError,
-          compileErrorMsg: 'error: undeclared identifier',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'WrongAnswer',
+            testcases: [
+              { id: 1, verdict: 'Accepted', timeMs: 50, memoryKb: 1024, actualOutput: 'ok' },
+              { id: 2, verdict: 'WrongAnswer', timeMs: 60, memoryKb: 1200, actualOutput: 'bad', message: 'expected 1' },
+            ],
+          },
         },
       });
       const result = await service.poll(2, 'bz-2');
       expect(result.done).toBe(true);
+      expect(result.status).toBe(Status.WA);
+      const jr = JSON.parse(result.judgeResult!);
+      expect(jr.testcases).toHaveLength(2);
+      expect(jr.testcases[0]).toMatchObject({ id: 1, verdict: 'Accepted', time: 50, memory: 1024, actualOutput: 'ok' });
+      expect(jr.testcases[1]).toMatchObject({ id: 2, verdict: 'WrongAnswer', time: 60, memory: 1200, actualOutput: 'bad', message: 'expected 1' });
+    });
+
+    it('returns done=true with CE and compileErrorMsg for CompileError', async () => {
+      mockAxiosInstance.get.mockResolvedValue({
+        data: {
+          jobId: 'bz-3',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'CompileError',
+            testcases: [],
+            compile: { verdict: 'Error', message: 'undeclared identifier x' },
+          },
+        },
+      });
+      const result = await service.poll(3, 'bz-3');
+      expect(result.done).toBe(true);
       expect(result.status).toBe(Status.CE);
-      expect(result.compileErrorMsg).toBe('error: undeclared identifier');
+      expect(result.compileErrorMsg).toBe('undeclared identifier x');
+    });
+
+    it('returns done=true with SE for failed state', async () => {
+      mockAxiosInstance.get.mockResolvedValue({
+        data: { jobId: 'bz-4', state: 'failed', type: 'oj', failedReason: 'internal error' },
+      });
+      const result = await service.poll(4, 'bz-4');
+      expect(result.done).toBe(true);
+      expect(result.status).toBe(Status.SE);
     });
 
     it('calls GET /api/judger/submission/:jobId', async () => {
       mockAxiosInstance.get.mockResolvedValue({
-        data: { jobId: 'bz-x', status: BotzoneJobStatus.Running },
+        data: { jobId: 'bz-x', state: 'running', type: 'oj' },
       });
       await service.poll(99, 'bz-x');
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
@@ -195,48 +253,210 @@ describe('BotzoneClientService', () => {
   // ─── mapCallback ──────────────────────────────────────────────────────────
 
   describe('mapCallback', () => {
-    it('maps Accepted callback to done=true, status=AC', () => {
+    // ─── OJ callbacks ──────────────────────────────────────────────────────
+
+    describe('OJ type', () => {
+      it('maps finished/Accepted callback to done=true, status=AC', () => {
+        const result = service.mapCallback({
+          jobId: 'j1',
+          correlationId: '10',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'Accepted',
+            testcases: [
+              { id: 1, verdict: 'Accepted', timeMs: 500, memoryKb: 4096 },
+            ],
+          },
+        });
+        expect(result.done).toBe(true);
+        expect(result.status).toBe(Status.AC);
+        expect(result.time).toBe(500);
+        expect(result.memory).toBe(4096);
+      });
+
+      it('maps running callback to done=false', () => {
+        const result = service.mapCallback({
+          jobId: 'j2',
+          correlationId: '11',
+          state: 'running',
+          type: 'oj',
+        });
+        expect(result.done).toBe(false);
+        expect(result.status).toBe(Status.JUDGING);
+      });
+
+      it('maps finished/WrongAnswer to done=true, status=WA', () => {
+        const result = service.mapCallback({
+          jobId: 'j3',
+          correlationId: '12',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'WrongAnswer',
+            testcases: [
+              { id: 1, verdict: 'Accepted', timeMs: 10, memoryKb: 256 },
+              { id: 2, verdict: 'WrongAnswer', timeMs: 20, memoryKb: 512, actualOutput: 'wrong' },
+            ],
+          },
+        });
+        expect(result.done).toBe(true);
+        expect(result.status).toBe(Status.WA);
+      });
+
+      it('builds correct judgeResult JSON for OJ testcases', () => {
+        const result = service.mapCallback({
+          jobId: 'j4',
+          correlationId: '13',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'Accepted',
+            testcases: [
+              { id: 1, verdict: 'Accepted', timeMs: 100, memoryKb: 1024, actualOutput: 'hello', message: undefined },
+              { id: 2, verdict: 'Accepted', timeMs: 200, memoryKb: 2048 },
+            ],
+          },
+        });
+        expect(result.judgeResult).toBeDefined();
+        const jr = JSON.parse(result.judgeResult!);
+        expect(jr.testcases).toHaveLength(2);
+        expect(jr.testcases[0]).toMatchObject({ id: 1, verdict: 'Accepted', time: 100, memory: 1024, actualOutput: 'hello' });
+        expect(jr.testcases[1]).toMatchObject({ id: 2, verdict: 'Accepted', time: 200, memory: 2048 });
+      });
+
+      it('sets compileErrorMsg when verdict is CompileError', () => {
+        const result = service.mapCallback({
+          jobId: 'j5',
+          correlationId: '14',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'CompileError',
+            testcases: [],
+            compile: { verdict: 'Error', message: 'syntax error at line 3' },
+          },
+        });
+        expect(result.done).toBe(true);
+        expect(result.status).toBe(Status.CE);
+        expect(result.compileErrorMsg).toBe('syntax error at line 3');
+      });
+
+      it('does not set compileErrorMsg when verdict is not CE', () => {
+        const result = service.mapCallback({
+          jobId: 'j6',
+          correlationId: '15',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'Accepted',
+            testcases: [{ id: 1, verdict: 'Accepted', timeMs: 10, memoryKb: 256 }],
+          },
+        });
+        expect(result.compileErrorMsg).toBeUndefined();
+      });
+    });
+
+    // ─── Botzone game callbacks ────────────────────────────────────────────
+
+    describe('botzone game type', () => {
+      const gameResult = {
+        verdict: 'Accepted',
+        rounds: [{ round: 1, moves: ['a1', 'b2'] }, { round: 2, moves: ['c3'] }],
+        finalResult: { bot1: 10, bot2: 5 },
+      };
+
+      it('maps finished game callback to done=true, status=AC', () => {
+        const result = service.mapCallback({
+          jobId: 'g1',
+          correlationId: '20',
+          state: 'finished',
+          type: 'botzone',
+          result: gameResult,
+        });
+        expect(result.done).toBe(true);
+        expect(result.status).toBe(Status.AC);
+      });
+
+      it('stores verdict+finalResult in judgeResult JSON', () => {
+        const result = service.mapCallback({
+          jobId: 'g1',
+          correlationId: '20',
+          state: 'finished',
+          type: 'botzone',
+          result: gameResult,
+        });
+        const jr = JSON.parse(result.judgeResult!);
+        expect(jr.verdict).toBe('Accepted');
+        expect(jr.finalResult).toEqual({ bot1: 10, bot2: 5 });
+      });
+
+      it('stores rounds+finalResult in providerMeta.gameLog', () => {
+        const result = service.mapCallback({
+          jobId: 'g1',
+          correlationId: '20',
+          state: 'finished',
+          type: 'botzone',
+          result: gameResult,
+        });
+        expect(result.providerMeta).toBeDefined();
+        const gameLog = (result.providerMeta as any).gameLog;
+        expect(gameLog.rounds).toEqual(gameResult.rounds);
+        expect(gameLog.finalResult).toEqual({ bot1: 10, bot2: 5 });
+      });
+
+      it('handles missing rounds gracefully (empty array)', () => {
+        const result = service.mapCallback({
+          jobId: 'g2',
+          correlationId: '21',
+          state: 'finished',
+          type: 'botzone',
+          result: { verdict: 'WrongAnswer', finalResult: { bot1: 0, bot2: 10 } },
+        });
+        const gameLog = (result.providerMeta as any).gameLog;
+        expect(gameLog.rounds).toEqual([]);
+      });
+
+      it('handles missing finalResult gracefully (empty object)', () => {
+        const result = service.mapCallback({
+          jobId: 'g3',
+          correlationId: '22',
+          state: 'finished',
+          type: 'botzone',
+          result: { verdict: 'Accepted', rounds: [] },
+        });
+        const gameLog = (result.providerMeta as any).gameLog;
+        expect(gameLog.finalResult).toEqual({});
+        const jr = JSON.parse(result.judgeResult!);
+        expect(jr.finalResult).toEqual({});
+      });
+
+      it('OJ result has no providerMeta', () => {
+        const result = service.mapCallback({
+          jobId: 'j7',
+          correlationId: '30',
+          state: 'finished',
+          type: 'oj',
+          result: {
+            verdict: 'Accepted',
+            testcases: [{ id: 1, verdict: 'Accepted', timeMs: 10, memoryKb: 256 }],
+          },
+        });
+        expect(result.providerMeta).toBeUndefined();
+      });
+    });
+
+    // ─── Failed state ──────────────────────────────────────────────────────
+
+    it('maps failed state to done=true, status=SE', () => {
       const result = service.mapCallback({
-        jobId: 'j1',
-        correlationId: '10',
-        status: BotzoneJobStatus.Accepted,
-        time: 500,
-        memory: 131072,
+        jobId: 'f1',
+        correlationId: '99',
+        state: 'failed',
+        type: 'oj',
       });
       expect(result.done).toBe(true);
-      expect(result.status).toBe(Status.AC);
-      expect(result.time).toBe(500);
-      expect(result.memory).toBe(131072);
-    });
-
-    it('maps Running callback to done=false', () => {
-      const result = service.mapCallback({
-        jobId: 'j2',
-        correlationId: '11',
-        status: BotzoneJobStatus.Running,
-      });
-      expect(result.done).toBe(false);
-    });
-
-    it('maps WrongAnswer to done=true, status=WA', () => {
-      const result = service.mapCallback({
-        jobId: 'j3',
-        correlationId: '12',
-        status: BotzoneJobStatus.WrongAnswer,
-      });
-      expect(result.done).toBe(true);
-      expect(result.status).toBe(Status.WA);
-    });
-
-    it('includes judgeResult when present', () => {
-      const jr = JSON.stringify([{ kind: 'Accepted' }]);
-      const result = service.mapCallback({
-        jobId: 'j4',
-        correlationId: '13',
-        status: BotzoneJobStatus.Accepted,
-        judgeResult: jr,
-      });
-      expect(result.judgeResult).toBe(jr);
+      expect(result.status).toBe(Status.SE);
     });
   });
 });

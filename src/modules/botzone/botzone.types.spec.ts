@@ -1,135 +1,156 @@
 import {
-  BOTZONE_STATUS_TO_LEVERAGE,
-  BOTZONE_TERMINAL_STATUSES,
-  BotzoneJobStatus,
+  BOTZONE_VERDICT_TO_LEVERAGE,
+  BOTZONE_STATE_TO_LEVERAGE,
+  BOTZONE_TERMINAL_STATES,
+  BotzoneVerdict,
+  BotzoneJobState,
   LEVERAGE_LANG_TO_BOTZONE,
+  botzoneStateToStatus,
 } from './botzone.types';
 import { Status } from '../heng/heng.types';
 
 describe('botzone.types', () => {
-  // ─── Status mapping coverage ───────────────────────────────────────────────
+  // ─── Verdict → Status mapping ─────────────────────────────────────────────
 
-  describe('BOTZONE_STATUS_TO_LEVERAGE', () => {
-    it('maps all BotzoneJobStatus values without gaps', () => {
-      const allStatuses = Object.values(BotzoneJobStatus);
-      for (const s of allStatuses) {
-        expect(BOTZONE_STATUS_TO_LEVERAGE[s]).toBeDefined();
+  describe('BOTZONE_VERDICT_TO_LEVERAGE', () => {
+    it('maps all BotzoneVerdict values without gaps', () => {
+      const allVerdicts: BotzoneVerdict[] = [
+        'Accepted',
+        'WrongAnswer',
+        'TimeLimitExceeded',
+        'MemoryLimitExceeded',
+        'RuntimeError',
+        'CompileError',
+        'SystemError',
+        'OutputLimitExceeded',
+        'PresentationError',
+      ];
+      for (const v of allVerdicts) {
+        expect(BOTZONE_VERDICT_TO_LEVERAGE[v]).toBeDefined();
       }
     });
 
-    it('Accepted → Status.AC (0)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.Accepted]).toBe(
-        Status.AC,
-      );
+    it('Accepted → Status.AC', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['Accepted']).toBe(Status.AC);
     });
 
-    it('WrongAnswer → Status.WA (1)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.WrongAnswer]).toBe(
-        Status.WA,
-      );
+    it('WrongAnswer → Status.WA', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['WrongAnswer']).toBe(Status.WA);
     });
 
-    it('TimeLimitExceeded → Status.TLE (2)', () => {
-      expect(
-        BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.TimeLimitExceeded],
-      ).toBe(Status.TLE);
+    it('TimeLimitExceeded → Status.TLE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['TimeLimitExceeded']).toBe(Status.TLE);
     });
 
-    it('MemoryLimitExceeded → Status.MLE (3)', () => {
-      expect(
-        BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.MemoryLimitExceeded],
-      ).toBe(Status.MLE);
+    it('MemoryLimitExceeded → Status.MLE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['MemoryLimitExceeded']).toBe(Status.MLE);
     });
 
-    it('CompileError → Status.CE (4)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.CompileError]).toBe(
-        Status.CE,
-      );
+    it('CompileError → Status.CE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['CompileError']).toBe(Status.CE);
     });
 
-    it('SystemError → Status.SE (5)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.SystemError]).toBe(
-        Status.SE,
-      );
+    it('SystemError → Status.SE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['SystemError']).toBe(Status.SE);
     });
 
-    it('RuntimeError → Status.RE (6)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.RuntimeError]).toBe(
-        Status.RE,
-      );
+    it('RuntimeError → Status.RE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['RuntimeError']).toBe(Status.RE);
     });
 
-    it('PresentationError → Status.PE (7)', () => {
-      expect(
-        BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.PresentationError],
-      ).toBe(Status.PE);
+    it('PresentationError → Status.PE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['PresentationError']).toBe(Status.PE);
     });
 
-    it('OutputLimitExceeded → Status.OLE (12)', () => {
-      expect(
-        BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.OutputLimitExceeded],
-      ).toBe(Status.OLE);
-    });
-
-    it('Pending → Status.PENDING (9)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.Pending]).toBe(
-        Status.PENDING,
-      );
-    });
-
-    it('Queued → Status.PENDING (9)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.Queued]).toBe(
-        Status.PENDING,
-      );
-    });
-
-    it('Compiling → Status.COMPILING (11)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.Compiling]).toBe(
-        Status.COMPILING,
-      );
-    });
-
-    it('Running → Status.JUDGING (10)', () => {
-      expect(BOTZONE_STATUS_TO_LEVERAGE[BotzoneJobStatus.Running]).toBe(
-        Status.JUDGING,
-      );
+    it('OutputLimitExceeded → Status.OLE', () => {
+      expect(BOTZONE_VERDICT_TO_LEVERAGE['OutputLimitExceeded']).toBe(Status.OLE);
     });
   });
 
-  // ─── Terminal status set ───────────────────────────────────────────────────
+  // ─── State → Status mapping ───────────────────────────────────────────────
 
-  describe('BOTZONE_TERMINAL_STATUSES', () => {
-    it('includes all final result statuses', () => {
-      const expectedTerminal = [
-        BotzoneJobStatus.Accepted,
-        BotzoneJobStatus.WrongAnswer,
-        BotzoneJobStatus.TimeLimitExceeded,
-        BotzoneJobStatus.MemoryLimitExceeded,
-        BotzoneJobStatus.RuntimeError,
-        BotzoneJobStatus.CompileError,
-        BotzoneJobStatus.SystemError,
-        BotzoneJobStatus.OutputLimitExceeded,
-        BotzoneJobStatus.PresentationError,
-      ];
-      for (const s of expectedTerminal) {
-        expect(BOTZONE_TERMINAL_STATUSES.has(s)).toBe(true);
+  describe('BOTZONE_STATE_TO_LEVERAGE', () => {
+    it('pending → Status.PENDING', () => {
+      expect(BOTZONE_STATE_TO_LEVERAGE['pending']).toBe(Status.PENDING);
+    });
+
+    it('queued → Status.PENDING', () => {
+      expect(BOTZONE_STATE_TO_LEVERAGE['queued']).toBe(Status.PENDING);
+    });
+
+    it('compiling → Status.COMPILING', () => {
+      expect(BOTZONE_STATE_TO_LEVERAGE['compiling']).toBe(Status.COMPILING);
+    });
+
+    it('running → Status.JUDGING', () => {
+      expect(BOTZONE_STATE_TO_LEVERAGE['running']).toBe(Status.JUDGING);
+    });
+
+    it('failed → Status.SE', () => {
+      expect(BOTZONE_STATE_TO_LEVERAGE['failed']).toBe(Status.SE);
+    });
+  });
+
+  // ─── Terminal state set ───────────────────────────────────────────────────
+
+  describe('BOTZONE_TERMINAL_STATES', () => {
+    it('includes finished and failed', () => {
+      expect(BOTZONE_TERMINAL_STATES.has('finished')).toBe(true);
+      expect(BOTZONE_TERMINAL_STATES.has('failed')).toBe(true);
+    });
+
+    it('does NOT include in-progress states', () => {
+      const inProgress: BotzoneJobState[] = ['pending', 'queued', 'compiling', 'running'];
+      for (const s of inProgress) {
+        expect(BOTZONE_TERMINAL_STATES.has(s)).toBe(false);
       }
     });
 
-    it('does NOT include transient statuses', () => {
-      const transient = [
-        BotzoneJobStatus.Pending,
-        BotzoneJobStatus.Queued,
-        BotzoneJobStatus.Compiling,
-        BotzoneJobStatus.Running,
-      ];
-      for (const s of transient) {
-        expect(BOTZONE_TERMINAL_STATUSES.has(s)).toBe(false);
-      }
+    it('terminal set has exactly 2 entries', () => {
+      expect(BOTZONE_TERMINAL_STATES.size).toBe(2);
+    });
+  });
+
+  // ─── botzoneStateToStatus helper ──────────────────────────────────────────
+
+  describe('botzoneStateToStatus', () => {
+    it('failed → SE (no result)', () => {
+      expect(botzoneStateToStatus('failed')).toBe(Status.SE);
     });
 
-    it('terminal set covers exactly 9 statuses', () => {
-      expect(BOTZONE_TERMINAL_STATUSES.size).toBe(9);
+    it('failed → SE (with result)', () => {
+      expect(botzoneStateToStatus('failed', { verdict: 'Accepted', testcases: [] } as any)).toBe(Status.SE);
+    });
+
+    it('finished with no result → SE', () => {
+      expect(botzoneStateToStatus('finished')).toBe(Status.SE);
+    });
+
+    it('finished with Accepted verdict → AC', () => {
+      const result = { verdict: 'Accepted', testcases: [] } as any;
+      expect(botzoneStateToStatus('finished', result)).toBe(Status.AC);
+    });
+
+    it('finished with WrongAnswer verdict → WA', () => {
+      const result = { verdict: 'WrongAnswer', testcases: [] } as any;
+      expect(botzoneStateToStatus('finished', result)).toBe(Status.WA);
+    });
+
+    it('finished with CompileError verdict → CE', () => {
+      const result = { verdict: 'CompileError', testcases: [] } as any;
+      expect(botzoneStateToStatus('finished', result)).toBe(Status.CE);
+    });
+
+    it('running → JUDGING', () => {
+      expect(botzoneStateToStatus('running')).toBe(Status.JUDGING);
+    });
+
+    it('pending → PENDING', () => {
+      expect(botzoneStateToStatus('pending')).toBe(Status.PENDING);
+    });
+
+    it('compiling → COMPILING', () => {
+      expect(botzoneStateToStatus('compiling')).toBe(Status.COMPILING);
     });
   });
 

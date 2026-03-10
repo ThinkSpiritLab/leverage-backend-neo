@@ -12,7 +12,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { BotzoneClientService } from './botzone-client.service';
 import { BotzoneResultService } from './botzone-result.service';
-import { BOTZONE_TERMINAL_STATUSES } from './botzone.types';
+import { BOTZONE_TERMINAL_STATES } from './botzone.types';
 import type { BotzoneCallbackBody } from './botzone.types';
 
 /**
@@ -60,7 +60,7 @@ export class BotzoneCallbackController {
   ): Promise<{ ok: boolean }> {
     this.assertToken(authHeader);
 
-    const { correlationId, jobId, status } = body;
+    const { correlationId, jobId, state } = body;
     const submissionId = parseInt(correlationId, 10);
 
     if (isNaN(submissionId)) {
@@ -71,11 +71,11 @@ export class BotzoneCallbackController {
     }
 
     this.logger.log(
-      `Botzone callback: submissionId=${submissionId}, jobId=${jobId}, status=${status}`,
+      `Botzone callback: submissionId=${submissionId}, jobId=${jobId}, state=${state}`,
     );
 
-    // Only finalize on terminal status; intermediate statuses are update-only
-    const isTerminal = BOTZONE_TERMINAL_STATUSES.has(status);
+    // Only finalize on terminal state; intermediate states are update-only
+    const isTerminal = BOTZONE_TERMINAL_STATES.has(state);
 
     if (isTerminal) {
       const pollResult = this.botzoneClient.mapCallback(body);
@@ -84,7 +84,7 @@ export class BotzoneCallbackController {
     } else {
       // Intermediate state: no DB write needed, just log
       this.logger.debug(
-        `Botzone intermediate status for submissionId=${submissionId}: ${status}`,
+        `Botzone intermediate state for submissionId=${submissionId}: ${state}`,
       );
     }
 

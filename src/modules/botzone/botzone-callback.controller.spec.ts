@@ -4,7 +4,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { BotzoneCallbackController } from './botzone-callback.controller';
 import { BotzoneClientService } from './botzone-client.service';
 import { BotzoneResultService } from './botzone-result.service';
-import { BotzoneJobStatus } from './botzone.types';
+import type { BotzoneCallbackBody } from './botzone.types';
 import { Status } from '../heng/heng.types';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -26,17 +26,31 @@ const mockBotzoneResultService = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildBody(overrides: Partial<{
-  jobId: string;
-  correlationId: string;
-  status: BotzoneJobStatus;
-  time?: number;
-  memory?: number;
-}> = {}) {
+function buildOJBody(overrides: Partial<BotzoneCallbackBody> = {}): BotzoneCallbackBody {
   return {
     jobId: 'bz-job-42',
     correlationId: '42',
-    status: BotzoneJobStatus.Accepted,
+    state: 'finished',
+    type: 'oj',
+    result: {
+      verdict: 'Accepted',
+      testcases: [{ id: 1, verdict: 'Accepted', timeMs: 100, memoryKb: 2048 }],
+    },
+    ...overrides,
+  };
+}
+
+function buildGameBody(overrides: Partial<BotzoneCallbackBody> = {}): BotzoneCallbackBody {
+  return {
+    jobId: 'bz-game-10',
+    correlationId: '10',
+    state: 'finished',
+    type: 'botzone',
+    result: {
+      verdict: 'Accepted',
+      rounds: [{ r: 1 }],
+      finalResult: { bot1: 5, bot2: 3 },
+    },
     ...overrides,
   };
 }
@@ -76,35 +90,34 @@ describe('BotzoneCallbackController', () => {
 
   describe('token authentication', () => {
     it('accepts correct Bearer token', async () => {
-      const body = buildBody();
+      const body = buildOJBody();
       await expect(
         controller.receiveCallback('Bearer secret-callback-token', body),
       ).resolves.toEqual({ ok: true });
     });
 
     it('rejects wrong token', async () => {
-      const body = buildBody();
+      const body = buildOJBody();
       await expect(
         controller.receiveCallback('Bearer wrong-token', body),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it('rejects missing token', async () => {
-      const body = buildBody();
+      const body = buildOJBody();
       await expect(
         controller.receiveCallback(undefined, body),
       ).rejects.toThrow(UnauthorizedException);
     });
 
     it('accepts token without Bearer prefix', async () => {
-      const body = buildBody();
+      const body = buildOJBody();
       await expect(
         controller.receiveCallback('secret-callback-token', body),
       ).resolves.toEqual({ ok: true });
     });
 
     it('allows through when no token configured (dev mode)', async () => {
-      // Reconfigure: no callback token
       const noTokenConfig = {
         get: jest.fn((key: string, def?: unknown) => {
           if (key === 'botzone.callbackToken') return '';
@@ -123,27 +136,32 @@ describe('BotzoneCallbackController', () => {
       const ctrl2 = module2.get<BotzoneCallbackController>(
         BotzoneCallbackController,
       );
-      const body = buildBody();
+      const body = buildOJBody();
       await expect(
         ctrl2.receiveCallback(undefined, body),
       ).resolves.toEqual({ ok: true });
     });
   });
 
-  // ─── Terminal status handling ─────────────────────────────────────────────
+  // ─── Terminal state → finalize ────────────────────────────────────────────
 
-  describe('terminal status → finalize', () => {
+  describe('terminal state → finalize', () => {
     const AUTH = 'Bearer secret-callback-token';
 
-    it('calls finalize for Accepted', async () => {
-      const body = buildBody({ status: BotzoneJobStatus.Accepted });
+    it('calls finalize for finished/Accepted OJ result', async () => {
+      const body = buildOJBody();
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(42, expect.any(Object));
     });
 
-    it('calls finalize for WrongAnswer', async () => {
+    it('calls finalize for finished/WrongAnswer', async () => {
       mockBotzoneClient.mapCallback.mockReturnValue({ done: true, status: Status.WA });
-      const body = buildBody({ status: BotzoneJobStatus.WrongAnswer });
+      const body = buildOJBody({
+        result: {
+          verdict: 'WrongAnswer',
+          testcases: [{ id: 1, verdict: 'WrongAnswer', timeMs: 10, memoryKb: 256 }],
+        },
+      });
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(
         42,
@@ -151,47 +169,72 @@ describe('BotzoneCallbackController', () => {
       );
     });
 
-    it('calls finalize for CompileError', async () => {
+    it('calls finalize for finished/CompileError with CE status', async () => {
       mockBotzoneClient.mapCallback.mockReturnValue({
         done: true,
         status: Status.CE,
         compileErrorMsg: 'error: x',
       });
-      const body = buildBody({
-        status: BotzoneJobStatus.CompileError,
+      const body = buildOJBody({
         correlationId: '77',
+        result: {
+          verdict: 'CompileError',
+          testcases: [],
+          compile: { verdict: 'Error', message: 'error: x' },
+        },
       });
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(77, expect.any(Object));
     });
 
-    it('calls finalize for SystemError', async () => {
+    it('calls finalize for failed state (SE)', async () => {
       mockBotzoneClient.mapCallback.mockReturnValue({ done: true, status: Status.SE });
-      const body = buildBody({ status: BotzoneJobStatus.SystemError });
+      const body = buildOJBody({ state: 'failed', result: undefined });
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledTimes(1);
     });
+
+    it('calls finalize for finished botzone game result', async () => {
+      mockBotzoneClient.mapCallback.mockReturnValue({
+        done: true,
+        status: Status.AC,
+        judgeResult: JSON.stringify({ verdict: 'Accepted', finalResult: { bot1: 5 } }),
+        providerMeta: { gameLog: { rounds: [], finalResult: { bot1: 5 } } },
+      });
+      const body = buildGameBody();
+      await controller.receiveCallback(AUTH, body);
+      expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({ done: true, status: Status.AC }),
+      );
+    });
   });
 
-  // ─── Intermediate status handling ─────────────────────────────────────────
+  // ─── Intermediate state → no finalize ────────────────────────────────────
 
-  describe('intermediate status → no finalize', () => {
+  describe('intermediate state → no finalize', () => {
     const AUTH = 'Bearer secret-callback-token';
 
-    it('does NOT call finalize for Pending', async () => {
-      const body = buildBody({ status: BotzoneJobStatus.Pending });
+    it('does NOT call finalize for pending state', async () => {
+      const body = buildOJBody({ state: 'pending', result: undefined });
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
     });
 
-    it('does NOT call finalize for Running', async () => {
-      const body = buildBody({ status: BotzoneJobStatus.Running });
+    it('does NOT call finalize for running state', async () => {
+      const body = buildOJBody({ state: 'running', result: undefined });
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
     });
 
-    it('does NOT call finalize for Compiling', async () => {
-      const body = buildBody({ status: BotzoneJobStatus.Compiling });
+    it('does NOT call finalize for compiling state', async () => {
+      const body = buildOJBody({ state: 'compiling', result: undefined });
+      await controller.receiveCallback(AUTH, body);
+      expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call finalize for queued state', async () => {
+      const body = buildOJBody({ state: 'queued', result: undefined });
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
     });
@@ -203,7 +246,7 @@ describe('BotzoneCallbackController', () => {
     const AUTH = 'Bearer secret-callback-token';
 
     it('returns ok=false for non-numeric correlationId', async () => {
-      const body = buildBody({ correlationId: 'not-a-number' });
+      const body = buildOJBody({ correlationId: 'not-a-number' });
       const result = await controller.receiveCallback(AUTH, body);
       expect(result).toEqual({ ok: false });
       expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
@@ -215,7 +258,7 @@ describe('BotzoneCallbackController', () => {
   describe('idempotency', () => {
     it('can call finalize twice without error (service is idempotent)', async () => {
       const AUTH = 'Bearer secret-callback-token';
-      const body = buildBody();
+      const body = buildOJBody();
       await controller.receiveCallback(AUTH, body);
       await controller.receiveCallback(AUTH, body);
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledTimes(2);
