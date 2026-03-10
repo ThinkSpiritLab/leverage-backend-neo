@@ -81,6 +81,12 @@ export class CompeteController {
    * GET /compete/games/:id/leaderboard
    * 排行榜（公开）
    */
+  @Get('games/:id')
+  @ApiOperation({ summary: '游戏详情' })
+  findOneGame(@Param('id', ParseIntPipe) id: number) {
+    return this.competeService.findOneGame(id);
+  }
+
   @Get('games/:id/leaderboard')
   @ApiOperation({ summary: '游戏排行榜（胜率）' })
   getLeaderboard(@Param('id', ParseIntPipe) id: number) {
