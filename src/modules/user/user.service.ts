@@ -330,4 +330,95 @@ export class UserService {
     );
     return { items: rows };
   }
+
+  /**
+   * 获取用户竞技统计（Bot 数量、对局胜负、常玩游戏、最高 ELO 等）
+   */
+  async getUserStats(userId: number): Promise<object> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`用户 #${userId} 不存在`);
+
+    // Bot 总数与活跃数（非测试、code 类型）
+    const [botStats] = await this.dataSource.query<
+      { totalBots: string; activeBots: string }[]
+    >(
+      `SELECT
+         COUNT(*) AS totalBots,
+         SUM(CASE WHEN disabled = 0 THEN 1 ELSE 0 END) AS activeBots
+       FROM gamer
+       WHERE userId = ? AND isTest = 0 AND type = 'code'`,
+      [userId],
+    );
+
+    // 总对局数与总胜场（已完成的非测试对局）
+    const [matchStats] = await this.dataSource.query<
+      { totalMatches: string; totalWins: string }[]
+    >(
+      `SELECT
+         COUNT(*) AS totalMatches,
+         SUM(CASE WHEN mgl.won = 1 THEN 1 ELSE 0 END) AS totalWins
+       FROM match_gamer_link mgl
+       INNER JOIN gamer g ON g.id = mgl.gamerId AND g.userId = ?
+       INNER JOIN \`match\` m ON m.id = mgl.matchId AND m.status = 2 AND m.isTest = 0`,
+      [userId],
+    );
+
+    // 最常玩游戏（Bot 数最多的游戏）
+    const [favoriteGame] = await this.dataSource.query<
+      { id: number; title: string; botCount: string }[]
+    >(
+      `SELECT g.gameId AS id, game.title, COUNT(*) AS botCount
+       FROM gamer g
+       INNER JOIN game ON game.id = g.gameId
+       WHERE g.userId = ? AND g.isTest = 0 AND g.type = 'code'
+       GROUP BY g.gameId, game.title
+       ORDER BY botCount DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    // 最高 ELO 的 Bot
+    const [highestEloBot] = await this.dataSource.query<
+      { id: number; title: string; gameId: number; elo: number }[]
+    >(
+      `SELECT id, title, gameId, elo
+       FROM gamer
+       WHERE userId = ? AND isTest = 0 AND type = 'code' AND disabled = 0
+       ORDER BY elo DESC
+       LIMIT 1`,
+      [userId],
+    );
+
+    const totalBots = Number(botStats?.totalBots ?? 0);
+    const activeBots = Number(botStats?.activeBots ?? 0);
+    const totalMatches = Number(matchStats?.totalMatches ?? 0);
+    const totalWins = Number(matchStats?.totalWins ?? 0);
+
+    return {
+      userId,
+      totalBots,
+      activeBots,
+      totalMatches,
+      totalWins,
+      overallWinRate:
+        totalMatches > 0
+          ? Math.round((totalWins / totalMatches) * 1000) / 1000
+          : 0,
+      favoriteGame: favoriteGame
+        ? {
+            id: Number(favoriteGame.id),
+            title: favoriteGame.title,
+            botCount: Number(favoriteGame.botCount),
+          }
+        : null,
+      highestElo: highestEloBot ? Number(highestEloBot.elo) : null,
+      highestEloBot: highestEloBot
+        ? {
+            id: highestEloBot.id,
+            title: highestEloBot.title,
+            gameId: highestEloBot.gameId,
+          }
+        : null,
+    };
+  }
 }

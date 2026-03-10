@@ -312,18 +312,24 @@ export class CompeteController {
    * 对局列表（公开）
    */
   @Get('matches')
-  @ApiOperation({ summary: '对局列表（isTest=true 可查看测试对局）' })
+  @ApiOperation({ summary: '对局列表（支持 gameId/gamerId/status/isTest/winnerId 过滤）' })
   findAllMatches(
     @Query('gameId') gameId?: string,
+    @Query('gamerId') gamerId?: string,
+    @Query('status') status?: string,
+    @Query('isTest') isTest?: string,
+    @Query('winnerId') winnerId?: string,
     @Query('page') page?: string,
     @Query('perPage') perPage?: string,
-    @Query('isTest') isTest?: string,
   ) {
     return this.competeService.findAllMatches({
       gameId: gameId ? parseInt(gameId, 10) : undefined,
+      gamerId: gamerId ? parseInt(gamerId, 10) : undefined,
+      status: status !== undefined ? parseInt(status, 10) : undefined,
+      isTest: isTest === 'true' ? true : undefined,
+      winnerId: winnerId ? parseInt(winnerId, 10) : undefined,
       page: page ? parseInt(page, 10) : 1,
       perPage: perPage ? parseInt(perPage, 10) : 20,
-      isTest: isTest === 'true' ? true : undefined,
     });
   }
 

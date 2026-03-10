@@ -82,7 +82,7 @@ describe('CompeteController — match-callback', () => {
   describe('Bearer token 认证', () => {
     it('token 正确时：调用 handleMatchCallback 并返回 ok=true', async () => {
       const body = buildCallback();
-      const result = await controller.receiveMatchCallback(
+      const result = await controller.receiveMatchCallbackLegacy(
         'Bearer secret-token',
         body,
       );
@@ -97,7 +97,7 @@ describe('CompeteController — match-callback', () => {
 
     it('token 错误时：抛出 UnauthorizedException', async () => {
       await expect(
-        controller.receiveMatchCallback('Bearer wrong-token', buildCallback()),
+        controller.receiveMatchCallbackLegacy('Bearer wrong-token', buildCallback()),
       ).rejects.toBeInstanceOf(UnauthorizedException);
 
       expect(mockCompeteService.handleMatchCallback).not.toHaveBeenCalled();
@@ -105,7 +105,7 @@ describe('CompeteController — match-callback', () => {
 
     it('无 Authorization 头时：抛出 UnauthorizedException', async () => {
       await expect(
-        controller.receiveMatchCallback(undefined, buildCallback()),
+        controller.receiveMatchCallbackLegacy(undefined, buildCallback()),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
@@ -117,14 +117,14 @@ describe('CompeteController — match-callback', () => {
 
     it('terminal 状态 finished → 正常处理', async () => {
       const body = buildCallback({ state: 'finished' });
-      const result = await controller.receiveMatchCallback(authHeader, body);
+      const result = await controller.receiveMatchCallbackLegacy(authHeader, body);
       expect(result).toEqual({ ok: true });
       expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledTimes(1);
     });
 
     it('terminal 状态 failed → 正常处理', async () => {
       const body = buildCallback({ state: 'failed', result: undefined });
-      await controller.receiveMatchCallback(authHeader, body);
+      await controller.receiveMatchCallbackLegacy(authHeader, body);
       expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledWith(
         body.jobId,
         'failed',
@@ -134,14 +134,14 @@ describe('CompeteController — match-callback', () => {
 
     it('中间状态 running → 也会转发给 service（service 内部处理幂等）', async () => {
       const body = buildCallback({ state: 'running', result: undefined });
-      await controller.receiveMatchCallback(authHeader, body);
+      await controller.receiveMatchCallbackLegacy(authHeader, body);
       expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledTimes(1);
     });
 
     it('service 返回 ok=false → controller 透传', async () => {
       mockCompeteService.handleMatchCallback.mockResolvedValue({ ok: false });
       const body = buildCallback({ jobId: 'unknown-job' });
-      const result = await controller.receiveMatchCallback(authHeader, body);
+      const result = await controller.receiveMatchCallbackLegacy(authHeader, body);
       expect(result).toEqual({ ok: false });
     });
   });

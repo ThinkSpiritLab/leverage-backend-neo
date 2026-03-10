@@ -125,8 +125,8 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     // callback: { update, finish }
     const gameField: Record<string, { language: string; source: string; limit: { time: number; memory: number } }> = {
       judger: {
-        language: game.judgerLanguage,
-        source: game.judgerCode,
+        language: game.judgerLanguage ?? '',
+        source: game.judgerCode ?? '',
         limit: { time: game.timeLimit, memory: game.memoryLimit },
       },
     };

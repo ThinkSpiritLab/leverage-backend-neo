@@ -65,9 +65,11 @@ export interface GamerQuery {
 export interface MatchQuery {
   gameId?: number;
   gamerId?: number;
+  status?: number;
+  isTest?: boolean;
+  winnerId?: number;
   page?: number;
   perPage?: number;
-  isTest?: boolean;
 }
 
 // ─── Room 类型声明 ────────────────────────────────────────────────────────────
@@ -143,15 +145,33 @@ export class CompeteService {
 
   async findAllGames(
     query: GameQuery,
-  ): Promise<{ items: Game[]; total: number }> {
+  ): Promise<{ items: any[]; total: number }> {
     const page = query.page ?? 1;
     const perPage = Math.min(query.perPage ?? 20, 100);
+    const offset = (page - 1) * perPage;
 
-    const [items, total] = await this.gameRepo.findAndCount({
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * perPage,
-      take: perPage,
-    });
+    const total = await this.gameRepo.count();
+
+    const result = await this.gameRepo
+      .createQueryBuilder('g')
+      .addSelect(
+        `(SELECT COUNT(*) FROM gamer gr WHERE gr.gameId = g.id AND gr.disabled = 0 AND gr.isTest = 0 AND gr.type = 'code')`,
+        'g_activeBotCount',
+      )
+      .addSelect(
+        `(SELECT COUNT(*) FROM \`match\` m WHERE m.gameId = g.id AND m.status = 2 AND m.isTest = 0 AND m.createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY))`,
+        'g_recentMatchCount',
+      )
+      .orderBy('g.createdAt', 'DESC')
+      .offset(offset)
+      .limit(perPage)
+      .getRawAndEntities();
+
+    const items = result.entities.map((entity, i) => ({
+      ...entity,
+      activeBotCount: Number(result.raw[i]?.g_activeBotCount ?? 0),
+      recentMatchCount: Number(result.raw[i]?.g_recentMatchCount ?? 0),
+    }));
 
     return { items, total };
   }
@@ -468,11 +488,32 @@ export class CompeteService {
       qb.andWhere('match.gameId = :gameId', { gameId: query.gameId });
     }
 
-    // Filter test matches unless explicitly requested
+    // 按 isTest 过滤，默认排除测试对局
     if (query.isTest === true) {
       qb.andWhere('match.isTest = 1');
     } else {
       qb.andWhere('match.isTest = 0');
+    }
+
+    // 按 status 过滤（0=pending,1=running,2=finished,3=error）
+    if (query.status !== undefined) {
+      qb.andWhere('match.status = :status', { status: query.status });
+    }
+
+    // 按参赛 gamer 过滤（参赛者含该 gamer）
+    if (query.gamerId !== undefined) {
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM match_gamer_link mgl_p WHERE mgl_p.matchId = match.id AND mgl_p.gamerId = :gamerId)',
+        { gamerId: query.gamerId },
+      );
+    }
+
+    // 按获胜者过滤（该 gamer 在对局中 won=1）
+    if (query.winnerId !== undefined) {
+      qb.andWhere(
+        'EXISTS (SELECT 1 FROM match_gamer_link mgl_w WHERE mgl_w.matchId = match.id AND mgl_w.gamerId = :winnerId AND mgl_w.won = 1)',
+        { winnerId: query.winnerId },
+      );
     }
 
     const [items, total] = await qb.getManyAndCount();

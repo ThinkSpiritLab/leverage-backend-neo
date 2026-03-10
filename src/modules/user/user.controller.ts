@@ -150,4 +150,13 @@ export class UserController {
   getAcceptedProblems(@Param('id', ParseIntPipe) id: number) {
     return this.userService.getAcceptedProblems(id);
   }
+
+  /**
+   * GET /users/:id/stats — 用户竞技综合统计
+   */
+  @Get(':id/stats')
+  @ApiOperation({ summary: '用户竞技统计（Bot 数、对局胜率、最高 ELO 等）' })
+  getUserStats(@Param('id', ParseIntPipe) id: number) {
+    return this.userService.getUserStats(id);
+  }
 }
