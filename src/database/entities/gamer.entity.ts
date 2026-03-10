@@ -51,8 +51,11 @@ export class Gamer {
   @Column('text', { select: false })
   code: string;
 
-  @Column('int', { default: 1200, comment: 'ELO rating' })
+  @Column('int', { default: 1200, comment: 'ELO rating（内榜，仅code类型对局）' })
   elo: number;
+
+  @Column('int', { default: 1200, comment: 'ELO rating（外榜，含human/external/webhook）' })
+  eloExternal: number;
 
   @Column({ type: 'enum', enum: ['code', 'webhook', 'human', 'external'], default: 'code' })
   type: 'code' | 'webhook' | 'human' | 'external';

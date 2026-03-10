@@ -91,9 +91,12 @@ export class CompeteController {
   }
 
   @Get('games/:id/leaderboard')
-  @ApiOperation({ summary: '游戏排行榜（胜率）' })
-  getLeaderboard(@Param('id', ParseIntPipe) id: number) {
-    return this.competeService.getLeaderboard(id);
+  @ApiOperation({ summary: '排行榜（board=inner内榜code-only/outer外榜全部含标注，默认inner）' })
+  getLeaderboard(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('board') board?: string,
+  ) {
+    return this.competeService.getLeaderboard(id, board === 'outer' ? 'outer' : 'inner');
   }
 
   /**

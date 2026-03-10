@@ -38,6 +38,10 @@ export enum MatchStatus {
 
 export interface LeaderboardEntry {
   gamerId: number;
+  name?: string;
+  /** gamer 类型：code / human / external / webhook */
+  type?: string;
+  elo?: number;
   wins: number;
   total: number;
   winRate: number;
@@ -479,7 +483,11 @@ export class CompeteService {
 
     // Update ELO scores for all participating gamers
     if (state === 'finished' && result?.finalResult) {
-      await this.updateElo(result.finalResult);
+      // Detect match type: inner if all gamers are 'code' type
+      const participantIds = Object.keys(result.finalResult).map(Number).filter(Boolean);
+      const participants = participantIds.length > 0 ? await this.gamerRepo.findBy({ id: In(participantIds) }) : [];
+      const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
+      await this.updateElo(result.finalResult, matchType);
     }
 
     return { ok: true };
@@ -536,7 +544,10 @@ export class CompeteService {
     });
 
     if (Object.keys(gamerIdScores).length >= 2) {
-      await this.updateElo(gamerIdScores);
+      const participantIds = Object.keys(gamerIdScores).map(Number).filter(Boolean);
+      const participants = await this.gamerRepo.findBy({ id: In(participantIds) });
+      const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
+      await this.updateElo(gamerIdScores, matchType);
     }
 
     return { ok: true };
@@ -544,10 +555,13 @@ export class CompeteService {
 
   /**
    * Pairwise ELO update (K=32) for all gamers in a finished match.
-   * finalResult: { [gamerId string]: score }
+   * matchType:
+   *   'inner' — all code bots; updates both `elo` (内榜) and `eloExternal` (外榜)
+   *   'outer' — any human/external/webhook; updates only `eloExternal` (外榜)
    */
   private async updateElo(
     finalResult: Record<string, number>,
+    matchType: 'inner' | 'outer' = 'outer',
   ): Promise<void> {
     const K = 32;
 
@@ -560,42 +574,64 @@ export class CompeteService {
     const gamers = await this.gamerRepo.findBy({ id: In(gamerIds) });
     if (gamers.length < 2) return;
 
+    // 外榜 ELO map
+    const eloExtMap = new Map<number, number>(gamers.map((g) => [g.id, g.eloExternal ?? g.elo]));
+    // 内榜 ELO map (only used for inner matches)
     const eloMap = new Map<number, number>(gamers.map((g) => [g.id, g.elo]));
-    const deltas = new Map<number, number>(gamerIds.map((id) => [id, 0]));
+
+    const deltasExt = new Map<number, number>(gamerIds.map((id) => [id, 0]));
+    const deltasInner = new Map<number, number>(gamerIds.map((id) => [id, 0]));
 
     // Pairwise update for every unique pair
     for (let i = 0; i < gamerIds.length; i++) {
       for (let j = i + 1; j < gamerIds.length; j++) {
         const idA = gamerIds[i];
         const idB = gamerIds[j];
-        const eloA = eloMap.get(idA);
-        const eloB = eloMap.get(idB);
-        if (eloA === undefined || eloB === undefined) continue;
 
         const scoreA = finalResult[String(idA)] ?? 0;
         const scoreB = finalResult[String(idB)] ?? 0;
-
-        const expectedA = 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
-        const expectedB = 1 - expectedA;
         const actualA = scoreA > scoreB ? 1 : scoreA === scoreB ? 0.5 : 0;
         const actualB = 1 - actualA;
 
-        deltas.set(idA, (deltas.get(idA) ?? 0) + K * (actualA - expectedA));
-        deltas.set(idB, (deltas.get(idB) ?? 0) + K * (actualB - expectedB));
+        // External leaderboard delta
+        const eExtA = eloExtMap.get(idA)!;
+        const eExtB = eloExtMap.get(idB)!;
+        const expExtA = 1 / (1 + Math.pow(10, (eExtB - eExtA) / 400));
+        deltasExt.set(idA, (deltasExt.get(idA) ?? 0) + K * (actualA - expExtA));
+        deltasExt.set(idB, (deltasExt.get(idB) ?? 0) + K * (actualB - (1 - expExtA)));
+
+        // Internal leaderboard delta (only for inner matches)
+        if (matchType === 'inner') {
+          const eA = eloMap.get(idA)!;
+          const eB = eloMap.get(idB)!;
+          const expA = 1 / (1 + Math.pow(10, (eB - eA) / 400));
+          deltasInner.set(idA, (deltasInner.get(idA) ?? 0) + K * (actualA - expA));
+          deltasInner.set(idB, (deltasInner.get(idB) ?? 0) + K * (actualB - (1 - expA)));
+        }
       }
     }
 
-    // Apply accumulated deltas (floor at 0) and record history
+    // Apply accumulated deltas and record history
     await Promise.all(
       gamers.map(async (g) => {
-        const delta = deltas.get(g.id) ?? 0;
-        const newElo = Math.max(0, Math.round(g.elo + delta));
-        await this.gamerRepo.update(g.id, { elo: newElo });
-        // Record ELO history
+        const dExt = deltasExt.get(g.id) ?? 0;
+        const newEloExt = Math.max(0, Math.round((g.eloExternal ?? g.elo) + dExt));
+        const updates: Partial<Gamer> = { eloExternal: newEloExt };
+
+        let newEloInner = g.elo;
+        if (matchType === 'inner') {
+          const dInner = deltasInner.get(g.id) ?? 0;
+          newEloInner = Math.max(0, Math.round(g.elo + dInner));
+          updates.elo = newEloInner;
+        }
+
+        await this.gamerRepo.update(g.id, updates);
+
+        // Record ELO history (外榜数据)
         try {
           await this.dataSource.query(
             'INSERT INTO gamer_elo_history (gamerId, matchId, eloBefore, eloAfter, eloDelta) VALUES (?, ?, ?, ?, ?)',
-            [g.id, 0, g.elo, newElo, Math.round(delta)],
+            [g.id, 0, g.eloExternal ?? g.elo, newEloExt, Math.round(dExt)],
           );
         } catch { /* history is best-effort */ }
       }),
@@ -613,32 +649,42 @@ export class CompeteService {
   // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
   /**
-   * 排行榜（胜率，不用 Elo）
+   * 双榜排行榜
+   * board='inner'（默认）: 仅 code 类型 gamer，按 elo 排序
+   * board='outer': 全部 gamer，按 eloExternal 排序，含类型标注
    */
-  async getLeaderboard(gameId: number): Promise<LeaderboardEntry[]> {
-    // 验证游戏存在
+  async getLeaderboard(gameId: number, board: 'inner' | 'outer' = 'inner'): Promise<LeaderboardEntry[]> {
     await this.findOneGame(gameId);
 
-    const results = await this.dataSource
+    const eloCol = board === 'inner' ? 'g.elo' : 'g.eloExternal';
+
+    const qb = this.dataSource
       .createQueryBuilder()
       .select('mgl.gamerId', 'gamerId')
       .addSelect('g.title', 'gamerName')
-      .addSelect('g.elo', 'elo')
+      .addSelect('g.type', 'gamerType')
+      .addSelect(eloCol, 'elo')
       .addSelect('COUNT(*)', 'total')
       .addSelect('SUM(CASE WHEN mgl.`index` = 1 THEN 1 ELSE 0 END)', 'wins')
       .from(MatchGamerLink, 'mgl')
-      .innerJoin(Match, 'm', 'm.id = mgl.matchId AND m.gameId = :gameId', {
-        gameId,
-      })
+      .innerJoin(Match, 'm', 'm.id = mgl.matchId AND m.gameId = :gameId', { gameId })
       .leftJoin(Gamer, 'g', 'g.id = mgl.gamerId')
-      .where('m.status = :status', { status: MatchStatus.FINISHED })
+      .where('m.status = :status', { status: MatchStatus.FINISHED });
+
+    // 内榜只显示 code 类型
+    if (board === 'inner') {
+      qb.andWhere("g.type = 'code'");
+    }
+
+    const results = await qb
       .groupBy('mgl.gamerId')
-      .orderBy('g.elo', 'DESC')
-      .getRawMany<{ gamerId: number; gamerName: string; elo: string; wins: string; total: string }>();
+      .orderBy(eloCol, 'DESC')
+      .getRawMany<{ gamerId: number; gamerName: string; gamerType: string; elo: string; wins: string; total: string }>();
 
     return results.map((r) => ({
       gamerId: r.gamerId,
       name: r.gamerName,
+      type: r.gamerType ?? 'code',
       elo: Number(r.elo ?? 1200),
       wins: Number(r.wins),
       total: Number(r.total),
