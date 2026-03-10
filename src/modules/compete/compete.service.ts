@@ -327,6 +327,8 @@ export class CompeteService {
     const qb = this.matchRepo
       .createQueryBuilder('match')
       .leftJoinAndSelect('match.game', 'game')
+      .leftJoinAndSelect('match.links', 'links')
+      .leftJoinAndSelect('links.gamer', 'gamer')
       .orderBy('match.createdAt', 'DESC')
       .skip((page - 1) * perPage)
       .take(perPage);
