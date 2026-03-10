@@ -1375,7 +1375,7 @@ export class CompeteService {
       throw new NotFoundException(`对手 #${dto.opponentGamerId} 不存在或不可用`);
     }
 
-    // 3. 创建临时 test gamer（每次创建新记录，不复用）
+    // 3. 创建临时 test gamer（每次创建新记录，不复用；isTest=true 确保不计入排行榜和定期清理）
     const testGamer = this.gamerRepo.create({
       userId,
       gameId,
@@ -1384,7 +1384,8 @@ export class CompeteService {
       language: dto.language,
       code: dto.code,
       opensource: false,
-    });
+      isTest: true,
+    } as any);
     const savedTestGamer = await this.gamerRepo.save(testGamer);
 
     // 4. 创建 Match 记录（isTest=true）

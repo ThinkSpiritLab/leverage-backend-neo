@@ -4,8 +4,10 @@ import { UnauthorizedException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { DataSource } from 'typeorm';
+import { JwtService } from '@nestjs/jwt';
 import { CompeteController } from './compete.controller';
 import { CompeteService } from './compete.service';
+import { HumanTurnService } from './human-turn.service';
 import { Game } from '../../database/entities/game.entity';
 import { Gamer } from '../../database/entities/gamer.entity';
 import { Match } from '../../database/entities/match.entity';
@@ -71,6 +73,8 @@ describe('CompeteController — match-callback', () => {
         { provide: DataSource, useValue: {} },
         { provide: RedisService, useValue: {} },
         { provide: SettingService, useValue: {} },
+        { provide: HumanTurnService, useValue: { notifyGameOver: jest.fn(), waitForTurn: jest.fn(), registerSSEClient: jest.fn(), unregisterSSEClient: jest.fn(), replayPendingTurn: jest.fn() } },
+        { provide: JwtService, useValue: { sign: jest.fn(), verify: jest.fn() } },
       ],
     }).compile();
 

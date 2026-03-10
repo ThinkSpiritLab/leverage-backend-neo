@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bull';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import type { Job } from 'bull';
 import { getToken } from '@willsoto/nestjs-prometheus';
 import { JudgeTxWorker } from './judge-tx.worker';
@@ -17,6 +18,7 @@ import {
   JudgeTxPayload,
   CreateJudgeRequest,
 } from '../heng.types';
+import { Match } from '../../../database/entities/match.entity';
 
 // ─── Mock crypto to control judgeId ─────────────────────────────────────────
 
@@ -129,6 +131,7 @@ describe('JudgeTxWorker', () => {
         { provide: getQueueToken(JUDGE_TX_QUEUE), useValue: mockQueue },
         { provide: getToken(JUDGE_QUEUE_WAITING_GAUGE), useValue: mockGauge },
         { provide: getToken(JUDGE_QUEUE_ACTIVE_GAUGE), useValue: mockGauge },
+        { provide: getRepositoryToken(Match), useValue: { update: jest.fn().mockResolvedValue({ affected: 1 }) } },
       ],
     }).compile();
 
@@ -206,6 +209,7 @@ describe('JudgeTxWorker', () => {
           { provide: getQueueToken(JUDGE_TX_QUEUE), useValue: mockQueue },
           { provide: getToken(JUDGE_QUEUE_WAITING_GAUGE), useValue: mockGauge },
           { provide: getToken(JUDGE_QUEUE_ACTIVE_GAUGE), useValue: mockGauge },
+          { provide: getRepositoryToken(Match), useValue: { update: jest.fn().mockResolvedValue({ affected: 1 }) } },
         ],
       }).compile();
 

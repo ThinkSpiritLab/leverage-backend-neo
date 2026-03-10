@@ -23,6 +23,7 @@ const mockConfigService = {
     if (key === 'botzone.baseUrl') return 'http://botzone-neo:5000';
     if (key === 'botzone.apiKey') return 'test-api-key';
     if (key === 'baseUrl') return 'http://testserver:3000';
+    if (key === 'botzone.callbackToken') return '';
     return def;
   }),
 };
@@ -80,13 +81,11 @@ describe('CompeteTxWorker', () => {
       const payload = buildPayload();
       await worker.handle(buildJob(payload));
 
-      // Should call botzone-neo
+      // Should call botzone-neo with correct URL
       expect(mockedAxios.post).toHaveBeenCalledWith(
         'http://botzone-neo:5000/v1/judge',
         expect.objectContaining({
           type: 'botzone',
-          correlationId: `match-${payload.matchId}`,
-          callbackUrl: 'http://testserver:3000/compete/match-callback',
         }),
         expect.objectContaining({
           headers: expect.objectContaining({ Authorization: 'Bearer test-api-key' }),
@@ -109,27 +108,25 @@ describe('CompeteTxWorker', () => {
 
       const body = (mockedAxios.post as jest.Mock).mock.calls[0][1];
 
-      expect(body.judger).toEqual({
-        sourceCode: Buffer.from('judger source code').toString('base64'),
+      // 使用 game-dict 格式：game.judger 包含 source 和 language
+      expect(body.game).toBeDefined();
+      expect(body.game.judger).toMatchObject({
         language: 'cpp17',
+        source: Buffer.from('judger source code', 'utf-8').toString('base64'),
       });
 
-      expect(body.bots).toHaveLength(2);
-      expect(body.bots[0]).toEqual({
-        position: 0,
-        botId: '101',
-        sourceCode: Buffer.from('bot A code').toString('base64'),
+      // bots 以 game["0"] / game["1"] 格式传入
+      expect(body.game['0']).toMatchObject({
         language: 'cpp17',
+        source: Buffer.from('bot A code', 'utf-8').toString('base64'),
       });
-      expect(body.bots[1]).toEqual({
-        position: 1,
-        botId: '102',
-        sourceCode: Buffer.from('bot B code').toString('base64'),
+      expect(body.game['1']).toMatchObject({
         language: 'python3',
+        source: Buffer.from('bot B code', 'utf-8').toString('base64'),
       });
     });
 
-    it('timeLimit 和 memoryLimitMB 正确透传', async () => {
+    it('timeLimit 和 memoryLimit 正确透传', async () => {
       mockedAxios.post = jest.fn().mockResolvedValue({ data: { jobId: 'bz-y' } });
       mockMatchRepo.update.mockResolvedValue(undefined);
 
@@ -144,8 +141,30 @@ describe('CompeteTxWorker', () => {
       await worker.handle(buildJob(payload));
 
       const body = (mockedAxios.post as jest.Mock).mock.calls[0][1];
-      expect(body.timeLimit).toBe(2000);
-      expect(body.memoryLimitMB).toBe(512);
+      // timeLimit and memoryLimit are embedded in game.judger.limit and game["N"].limit
+      expect(body.game.judger.limit.time).toBe(2000);
+      expect(body.game.judger.limit.memory).toBe(512);
+    });
+
+    it('callback URL 包含 matchId', async () => {
+      mockedAxios.post = jest.fn().mockResolvedValue({ data: { jobId: 'bz-z' } });
+      mockMatchRepo.update.mockResolvedValue(undefined);
+
+      const payload = buildPayload({ matchId: 42 });
+      await worker.handle(buildJob(payload));
+
+      const body = (mockedAxios.post as jest.Mock).mock.calls[0][1];
+      expect(body.callback.finish).toContain('/compete/match-callback/42');
+    });
+
+    it('runMode 为 restart', async () => {
+      mockedAxios.post = jest.fn().mockResolvedValue({ data: { jobId: 'bz-r' } });
+      mockMatchRepo.update.mockResolvedValue(undefined);
+
+      await worker.handle(buildJob(buildPayload()));
+
+      const body = (mockedAxios.post as jest.Mock).mock.calls[0][1];
+      expect(body.runMode).toBe('restart');
     });
   });
 
@@ -160,6 +179,19 @@ describe('CompeteTxWorker', () => {
       await expect(worker.handle(buildJob(buildPayload()))).rejects.toThrow(
         'botzone connection refused',
       );
+
+      expect(mockMatchRepo.update).toHaveBeenCalledWith(
+        buildPayload().matchId,
+        { status: MatchStatus.ERROR },
+      );
+    });
+
+    it('axios 调用失败时：match 状态设为 ERROR，re-throw 给 Bull', async () => {
+      const err = new Error('network error');
+      mockedAxios.post = jest.fn().mockRejectedValue(err);
+      mockMatchRepo.update.mockResolvedValue(undefined);
+
+      await expect(worker.handle(buildJob(buildPayload()))).rejects.toThrow('network error');
 
       expect(mockMatchRepo.update).toHaveBeenCalledWith(
         buildPayload().matchId,

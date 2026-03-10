@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { CompeteService, MatchStatus } from './compete.service';
 import { Game } from '../../database/entities/game.entity';
 import { Gamer } from '../../database/entities/gamer.entity';
@@ -13,6 +14,7 @@ import { MatchGamerLink } from '../../database/entities/match-gamer-link.entity'
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
+import { HumanTurnService } from './human-turn.service';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +56,7 @@ const makeRedisClient = () => ({
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const makeGamer = (id: number, elo = 1200): Gamer =>
-  ({ id, userId: id, gameId: 1, title: `Bot${id}`, language: 'cpp17', opensource: false, code: '', elo } as any);
+  ({ id, userId: id, gameId: 1, title: `Bot${id}`, language: 'cpp17', opensource: false, code: '', elo, eloExternal: elo, type: 'code' } as any);
 
 const makeMatch = (overrides: Partial<Match> = {}): Match =>
   ({
@@ -107,6 +109,18 @@ async function buildService() {
       { provide: DataSource, useValue: mockDataSource },
       { provide: RedisService, useValue: mockRedisService },
       { provide: SettingService, useValue: { get: jest.fn() } },
+      { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
+      {
+        provide: HumanTurnService,
+        useValue: {
+          notifyGameOver: jest.fn(),
+          waitForTurn: jest.fn(),
+          submitResponse: jest.fn(),
+          registerSSEClient: jest.fn(),
+          unregisterSSEClient: jest.fn(),
+          replayPendingTurn: jest.fn(),
+        },
+      },
     ],
   }).compile();
 

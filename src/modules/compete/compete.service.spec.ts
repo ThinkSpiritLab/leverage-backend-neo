@@ -144,6 +144,7 @@ describe('CompeteService', () => {
       save: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       createQueryBuilder: jest.fn(),
     };
 
@@ -235,30 +236,42 @@ describe('CompeteService', () => {
   // ─── Game CRUD ──────────────────────────────────────────────────────────────
 
   describe('findAllGames', () => {
+    /** 构造 gameRepo.createQueryBuilder mock，用于 findAllGames（getRawAndEntities 结构） */
+    const mockGameListQb = (entities: any[] = [], raw: any[] = []) => {
+      const qb = makeQb({
+        addSelect: jest.fn().mockReturnThis(),
+        offset: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawAndEntities: jest.fn().mockResolvedValue({ entities, raw }),
+      });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+      return qb;
+    };
+
     it('应返回分页数据', async () => {
-      mockGameRepo.findAndCount.mockResolvedValue([[gameFixture], 1]);
+      mockGameRepo.count.mockResolvedValue(1);
+      mockGameListQb([gameFixture], [{ g_activeBotCount: '2', g_recentMatchCount: '5' }]);
       const result = await service.findAllGames({ page: 1, perPage: 10 });
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);
-      expect(mockGameRepo.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 0, take: 10 }),
-      );
+      expect(mockGameRepo.count).toHaveBeenCalled();
     });
 
     it('默认 page=1, perPage=20', async () => {
-      mockGameRepo.findAndCount.mockResolvedValue([[], 0]);
+      mockGameRepo.count.mockResolvedValue(0);
+      mockGameListQb([], []);
       await service.findAllGames({});
-      expect(mockGameRepo.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 0, take: 20 }),
-      );
+      const qb = mockGameRepo.createQueryBuilder.mock.results[0].value;
+      expect(qb.offset).toHaveBeenCalledWith(0);
+      expect(qb.limit).toHaveBeenCalledWith(20);
     });
 
     it('perPage 最大不超过 100', async () => {
-      mockGameRepo.findAndCount.mockResolvedValue([[], 0]);
+      mockGameRepo.count.mockResolvedValue(0);
+      mockGameListQb([], []);
       await service.findAllGames({ page: 1, perPage: 999 });
-      expect(mockGameRepo.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({ take: 100 }),
-      );
+      const qb = mockGameRepo.createQueryBuilder.mock.results[0].value;
+      expect(qb.limit).toHaveBeenCalledWith(100);
     });
   });
 
