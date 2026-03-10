@@ -487,19 +487,24 @@ export class CompeteService {
     const results = await this.dataSource
       .createQueryBuilder()
       .select('mgl.gamerId', 'gamerId')
+      .addSelect('g.title', 'gamerName')
+      .addSelect('g.elo', 'elo')
       .addSelect('COUNT(*)', 'total')
       .addSelect('SUM(CASE WHEN mgl.`index` = 1 THEN 1 ELSE 0 END)', 'wins')
       .from(MatchGamerLink, 'mgl')
       .innerJoin(Match, 'm', 'm.id = mgl.matchId AND m.gameId = :gameId', {
         gameId,
       })
+      .leftJoin(Gamer, 'g', 'g.id = mgl.gamerId')
       .where('m.status = :status', { status: MatchStatus.FINISHED })
       .groupBy('mgl.gamerId')
-      .orderBy('wins / total', 'DESC')
-      .getRawMany<{ gamerId: number; wins: string; total: string }>();
+      .orderBy('g.elo', 'DESC')
+      .getRawMany<{ gamerId: number; gamerName: string; elo: string; wins: string; total: string }>();
 
     return results.map((r) => ({
       gamerId: r.gamerId,
+      name: r.gamerName,
+      elo: Number(r.elo ?? 1200),
       wins: Number(r.wins),
       total: Number(r.total),
       winRate: Number(r.total) > 0 ? Number(r.wins) / Number(r.total) : 0,
