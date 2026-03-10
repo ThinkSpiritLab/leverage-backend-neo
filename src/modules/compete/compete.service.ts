@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
@@ -126,6 +127,7 @@ export class CompeteService {
     private readonly dataSource: DataSource,
     private readonly redisService: RedisService,
     private readonly settingService: SettingService,
+    private readonly configService: ConfigService,
   ) {}
 
   // ─── Game CRUD ───────────────────────────────────────────────────────────────
@@ -290,7 +292,7 @@ export class CompeteService {
 
     const gamers = await this.gamerRepo.find({
       where: { id: In(gamerIds) },
-      select: ['id', 'code', 'language'],
+      select: ['id', 'code', 'language', 'type', 'webhookUrl', 'webhookSecret'],
     });
     if (gamers.length !== gamerIds.length) {
       throw new NotFoundException('部分参赛者不存在');
@@ -322,14 +324,27 @@ export class CompeteService {
       },
       gamers: gamerIds.map((id, index) => {
         const g = gamers.find(gm => gm.id === id)!;
+        const type = g.type ?? 'code';
+        const baseUrl = this.configService.get<string>('baseUrl', 'http://localhost:3000');
+
+        // human/external gamers use internal long-poll webhook
+        const resolvedWebhookUrl =
+          type === 'human' || type === 'external'
+            ? `${baseUrl}/compete/human-turn-webhook/${match.id}/${g.id}`
+            : g.webhookUrl ?? undefined;
+
+        const webhookTimeoutMs =
+          type === 'human' || type === 'external' ? 300_000 : undefined;
+
         return {
           id: g.id,
           code: g.code,
           language: g.language,
           position: index,
-          type: g.type ?? 'code',
-          webhookUrl: g.webhookUrl ?? undefined,
+          type,
+          webhookUrl: resolvedWebhookUrl,
           webhookSecret: g.webhookSecret ?? undefined,
+          webhookTimeoutMs,
         };
       }),
     });

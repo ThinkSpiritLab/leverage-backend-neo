@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { MulterModule } from '@nestjs/platform-express';
@@ -12,10 +13,12 @@ import { SettingModule } from '../setting/setting.module';
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
 import { CompeteController } from './compete.controller';
 import { CompeteService } from './compete.service';
+import { HumanTurnService } from './human-turn.service';
 // CompeteTxWorker merged into JudgeTxWorker — do not register here
 
 @Module({
   imports: [
+    ConfigModule,
     TypeOrmModule.forFeature([Game, Gamer, Match, MatchGamerLink]),
     BullModule.registerQueue({ name: JUDGE_TX_QUEUE }),
     MulterModule.register({ dest: '/tmp/uploads' }),
@@ -24,7 +27,7 @@ import { CompeteService } from './compete.service';
     SettingModule,
   ],
   controllers: [CompeteController],
-  providers: [CompeteService],
-  exports: [CompeteService],
+  providers: [CompeteService, HumanTurnService],
+  exports: [CompeteService, HumanTurnService],
 })
 export class CompeteModule {}

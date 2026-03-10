@@ -54,8 +54,8 @@ export class Gamer {
   @Column('int', { default: 1200, comment: 'ELO rating' })
   elo: number;
 
-  @Column({ type: 'enum', enum: ['code', 'webhook', 'human'], default: 'code' })
-  type: 'code' | 'webhook' | 'human';
+  @Column({ type: 'enum', enum: ['code', 'webhook', 'human', 'external'], default: 'code' })
+  type: 'code' | 'webhook' | 'human' | 'external';
 
   @Column({ type: 'varchar', length: 512, nullable: true })
   webhookUrl: string | null;

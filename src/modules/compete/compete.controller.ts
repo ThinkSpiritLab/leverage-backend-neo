@@ -13,6 +13,7 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UnauthorizedException,
   UploadedFile,
   UseGuards,
@@ -33,6 +34,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
 import { CompeteService } from './compete.service';
+import { HumanTurnService } from './human-turn.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { CreateGamerDto } from './dto/create-gamer.dto';
@@ -52,6 +54,7 @@ export class CompeteController {
   constructor(
     private readonly competeService: CompeteService,
     private readonly configService: ConfigService,
+    private readonly humanTurnService: HumanTurnService,
   ) {
     this.callbackToken = this.configService.get<string>(
       'botzone.callbackToken',
@@ -449,5 +452,111 @@ export class CompeteController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.competeService.modifyPlayer(id, dto, user.sub);
+  }
+
+  // ─── Human / External Bot Endpoints ──────────────────────────────────────
+
+  /**
+   * POST /compete/human-turn-webhook/:matchId/:gamerId
+   * Called internally by botzone-neo (via WebhookRunner) when it's this gamer's turn.
+   * Blocks until the human/external bot responds or times out (5 min).
+   * Body: BotInput JSON
+   */
+  @Post('human-turn-webhook/:matchId/:gamerId')
+  @SkipThrottle()
+  @ApiOperation({ summary: '内部：botzone-neo 等待人类/外部bot输入（长轮询挂起）' })
+  async humanTurnWebhook(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Param('gamerId', ParseIntPipe) gamerId: number,
+    @Body() gameState: unknown,
+  ) {
+    this.logger.log(`human-turn-webhook: matchId=${matchId} gamerId=${gamerId}`);
+    const response = await this.humanTurnService.waitForResponse(matchId, gamerId, gameState, 300_000);
+    // Return as plain text so botzone-neo's WebhookRunner gets it directly
+    return response;
+  }
+
+  /**
+   * GET /compete/bot-turn
+   * Long-poll: external bot waits for its turn (returns after up to 30s).
+   * Requires JWT auth; resolves the gamer ID from the token owner.
+   * Query param: gamerId (required)
+   */
+  @Get('bot-turn')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @SkipThrottle()
+  @ApiOperation({ summary: '外部bot长轮询——等待轮到自己（最多30s）' })
+  async botTurnPoll(
+    @Query('gamerId', ParseIntPipe) gamerId: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // Verify ownership
+    const gamer = await this.competeService.findOneGamer(gamerId);
+    if (gamer.userId !== user.sub) throw new UnauthorizedException('非你的 Bot');
+
+    const turn = await this.humanTurnService.waitForTurn(gamerId, 30_000);
+    if (!turn) return { waiting: true }; // timeout — client should re-poll
+
+    return {
+      waiting: false,
+      turnToken: turn.turnToken,
+      gameState: turn.gameState,
+      matchId: turn.matchId,
+      gamerId: turn.gamerId,
+    };
+  }
+
+  /**
+   * POST /compete/bot-respond
+   * Human or external bot submits their response.
+   * Body: { turnToken: string, response: string }
+   */
+  @Post('bot-respond')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '提交移动（浏览器人类玩家或外部bot）' })
+  botRespond(
+    @Body() body: { turnToken: string; response: string },
+  ) {
+    const ok = this.humanTurnService.submitResponse(body.turnToken, body.response);
+    if (!ok) return { success: false, message: '找不到对应的 turn，可能已超时' };
+    return { success: true };
+  }
+
+  /**
+   * GET /compete/matches/:id/human-sse
+   * SSE stream: notifies browser when it's the human player's turn.
+   * Requires JWT. Only participants of the match can subscribe.
+   */
+  @Get('matches/:id/human-sse')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @SkipThrottle()
+  @ApiOperation({ summary: '浏览器SSE：接收轮到玩家的推送通知' })
+  humanSse(
+    @Param('id', ParseIntPipe) matchId: number,
+    @CurrentUser() user: JwtPayload,
+    @Res() res: import('express').Response,
+  ) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const writer = (data: string) => {
+      res.write(`data: ${data}\n\n`);
+    };
+    this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
+
+    // Send keep-alive ping every 20s
+    const ping = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch { clearInterval(ping); }
+    }, 20_000);
+
+    res.on('close', () => {
+      clearInterval(ping);
+      this.humanTurnService.unregisterSSEClient(matchId, user.sub);
+    });
   }
 }

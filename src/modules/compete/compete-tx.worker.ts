@@ -26,9 +26,10 @@ export interface CompeteTxPayload {
     code: string;
     language: string;
     position?: number;
-    type?: 'code' | 'webhook' | 'human';
+    type?: 'code' | 'webhook' | 'human' | 'external';
     webhookUrl?: string;
     webhookSecret?: string;
+    webhookTimeoutMs?: number;
   }>;
   /** position index → real gamerId mapping */
   positionToGamerId?: Record<number, number>;
@@ -111,14 +112,15 @@ export class CompeteTxWorker {
         language: game.judgerLanguage,
       },
       bots: gamers.map((gamer, index) => {
-        const isWebhook = gamer.type === 'webhook' && gamer.webhookUrl;
+        const isExternal = (gamer.type === 'webhook' || gamer.type === 'human' || gamer.type === 'external') && gamer.webhookUrl;
         return {
           position: index,
           botId: String(gamer.id),
-          sourceCode: isWebhook ? '' : Buffer.from(gamer.code ?? '', 'utf-8').toString('base64'),
-          language: isWebhook ? 'webhook' : gamer.language,
-          runnerType: isWebhook ? 'webhook' : 'code',
-          externalUrl: isWebhook ? gamer.webhookUrl : undefined,
+          sourceCode: isExternal ? '' : Buffer.from(gamer.code ?? '', 'utf-8').toString('base64'),
+          language: isExternal ? 'webhook' : gamer.language,
+          runnerType: isExternal ? 'webhook' : 'code',
+          externalUrl: isExternal ? gamer.webhookUrl : undefined,
+          webhookTimeoutMs: gamer.webhookTimeoutMs,
         };
       }),
       timeLimit: game.timeLimit,
