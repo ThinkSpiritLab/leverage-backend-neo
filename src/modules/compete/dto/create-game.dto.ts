@@ -50,4 +50,10 @@ export class CreateGameDto {
   @IsOptional()
   @IsBoolean()
   disabled?: boolean;
+
+  @ApiProperty({ description: '自定义 HTML 渲染器（最大 512KB）', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512000)
+  rendererHtml?: string;
 }

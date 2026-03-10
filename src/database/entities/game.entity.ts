@@ -35,6 +35,9 @@ export class Game {
   @Column('varchar', { select: false })
   judgerLanguage: string;
 
+  @Column('text', { nullable: true })
+  rendererHtml?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
