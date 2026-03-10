@@ -1,10 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
 } from 'class-validator';
 
@@ -19,19 +21,39 @@ export class CreateGamerDto {
   @MaxLength(100)
   title: string;
 
-  @ApiProperty({ description: '代码语言' })
+  @ApiProperty({ description: 'Bot 类型', enum: ['code', 'webhook'], default: 'code', required: false })
+  @IsOptional()
+  @IsEnum(['code', 'webhook', 'human'])
+  type?: 'code' | 'webhook' | 'human';
+
+  @ApiProperty({ description: '代码语言（type=code 时必填）', required: false })
+  @IsOptional()
   @IsString()
   @MaxLength(32)
-  language: string;
+  language?: string;
 
-  @ApiProperty({ description: '是否开源' })
+  @ApiProperty({ description: '是否开源', required: false })
+  @IsOptional()
   @IsBoolean()
-  opensource: boolean;
+  opensource?: boolean;
 
-  @ApiProperty({ description: 'Bot 代码' })
+  @ApiProperty({ description: 'Bot 代码（type=code 时必填）', required: false })
+  @IsOptional()
   @IsString()
   @MaxLength(65536)
-  code: string;
+  code?: string;
+
+  @ApiProperty({ description: 'Webhook URL（type=webhook 时必填）', required: false })
+  @IsOptional()
+  @IsUrl()
+  @MaxLength(512)
+  webhookUrl?: string;
+
+  @ApiProperty({ description: 'Webhook 签名密钥', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  webhookSecret?: string;
 
   @ApiProperty({ description: '备注', required: false })
   @IsOptional()

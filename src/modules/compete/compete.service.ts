@@ -228,9 +228,17 @@ export class CompeteService {
     // 验证游戏存在
     await this.findOneGame(dto.gameId);
 
+    const type = dto.type ?? 'code';
     const gamer = this.gamerRepo.create({
-      ...dto,
       userId,
+      gameId: dto.gameId,
+      title: dto.title,
+      type,
+      language: dto.language ?? (type === 'webhook' ? 'webhook' : 'python'),
+      code: dto.code ?? '',
+      opensource: dto.opensource ?? true,
+      webhookUrl: dto.webhookUrl ?? null,
+      webhookSecret: dto.webhookSecret ?? null,
     });
     return this.gamerRepo.save(gamer);
   }
@@ -250,9 +258,12 @@ export class CompeteService {
       userId: original.userId,
       gameId: original.gameId,
       title: dto.title ?? original.title,
+      type: dto.type ?? original.type,
       language: dto.language ?? original.language,
       opensource: dto.opensource ?? original.opensource,
       code: dto.code ?? original.code,
+      webhookUrl: dto.webhookUrl ?? original.webhookUrl,
+      webhookSecret: dto.webhookSecret ?? original.webhookSecret,
     });
     return this.gamerRepo.save(forked);
   }
@@ -311,7 +322,15 @@ export class CompeteService {
       },
       gamers: gamerIds.map((id, index) => {
         const g = gamers.find(gm => gm.id === id)!;
-        return { id: g.id, code: g.code, language: g.language, position: index };
+        return {
+          id: g.id,
+          code: g.code,
+          language: g.language,
+          position: index,
+          type: g.type ?? 'code',
+          webhookUrl: g.webhookUrl ?? undefined,
+          webhookSecret: g.webhookSecret ?? undefined,
+        };
       }),
     });
 

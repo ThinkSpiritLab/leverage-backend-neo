@@ -54,9 +54,19 @@ export class Gamer {
   @Column('int', { default: 1200, comment: 'ELO rating' })
   elo: number;
 
+  @Column({ type: 'enum', enum: ['code', 'webhook', 'human'], default: 'code' })
+  type: 'code' | 'webhook' | 'human';
+
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  webhookUrl: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  webhookSecret: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
   @UpdateDateColumn()
   updatedAt: Date;
 }
+// Note: appended by webhook-gamer patch

@@ -26,6 +26,9 @@ export interface CompeteTxPayload {
     code: string;
     language: string;
     position?: number;
+    type?: 'code' | 'webhook' | 'human';
+    webhookUrl?: string;
+    webhookSecret?: string;
   }>;
   /** position index → real gamerId mapping */
   positionToGamerId?: Record<number, number>;
@@ -107,12 +110,17 @@ export class CompeteTxWorker {
         sourceCode: Buffer.from(game.judgerCode, 'utf-8').toString('base64'),
         language: game.judgerLanguage,
       },
-      bots: gamers.map((gamer, index) => ({
-        position: index,
-        botId: String(gamer.id),
-        sourceCode: Buffer.from(gamer.code, 'utf-8').toString('base64'),
-        language: gamer.language,
-      })),
+      bots: gamers.map((gamer, index) => {
+        const isWebhook = gamer.type === 'webhook' && gamer.webhookUrl;
+        return {
+          position: index,
+          botId: String(gamer.id),
+          sourceCode: isWebhook ? '' : Buffer.from(gamer.code ?? '', 'utf-8').toString('base64'),
+          language: isWebhook ? 'webhook' : gamer.language,
+          runnerType: isWebhook ? 'webhook' : 'code',
+          externalUrl: isWebhook ? gamer.webhookUrl : undefined,
+        };
+      }),
       timeLimit: game.timeLimit,
       memoryLimitMB: Math.round(game.memoryLimit),
       callbackUrl,
