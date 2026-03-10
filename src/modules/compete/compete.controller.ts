@@ -200,6 +200,12 @@ export class CompeteController {
     return this.competeService.findOneGamer(id);
   }
 
+  @Get('gamers/:id/elo-history')
+  @ApiOperation({ summary: 'Bot ELO 历史（最近100条）' })
+  getEloHistory(@Param('id', ParseIntPipe) id: number) {
+    return this.competeService.getEloHistory(id);
+  }
+
   @Patch('gamers/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -452,6 +458,24 @@ export class CompeteController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.competeService.modifyPlayer(id, dto, user.sub);
+  }
+
+  // ─── Auto Match ──────────────────────────────────────────────────────────
+
+  /**
+   * POST /compete/games/:id/trigger-auto-match
+   * Admin: triggers round-robin auto-match among top-N ELO gamers.
+   */
+  @Post('games/:id/trigger-auto-match')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'sa')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理员：触发自动对局（top-N round-robin）' })
+  triggerAutoMatch(
+    @Param('id', ParseIntPipe) gameId: number,
+    @Query('topN') topN?: string,
+  ) {
+    return this.competeService.triggerAutoMatch(gameId, topN ? Number(topN) : 8);
   }
 
   // ─── Human / External Bot Endpoints ──────────────────────────────────────

@@ -585,13 +585,28 @@ export class CompeteService {
       }
     }
 
-    // Apply accumulated deltas (floor at 0)
+    // Apply accumulated deltas (floor at 0) and record history
     await Promise.all(
-      gamers.map((g) => {
+      gamers.map(async (g) => {
         const delta = deltas.get(g.id) ?? 0;
         const newElo = Math.max(0, Math.round(g.elo + delta));
-        return this.gamerRepo.update(g.id, { elo: newElo });
+        await this.gamerRepo.update(g.id, { elo: newElo });
+        // Record ELO history
+        try {
+          await this.dataSource.query(
+            'INSERT INTO gamer_elo_history (gamerId, matchId, eloBefore, eloAfter, eloDelta) VALUES (?, ?, ?, ?, ?)',
+            [g.id, 0, g.elo, newElo, Math.round(delta)],
+          );
+        } catch { /* history is best-effort */ }
       }),
+    );
+  }
+
+  /** 查询某个 gamer 的 ELO 历史（最近 100 条） */
+  async getEloHistory(gamerId: number): Promise<{ matchId: number; eloBefore: number; eloAfter: number; eloDelta: number; createdAt: Date }[]> {
+    return this.dataSource.query(
+      'SELECT matchId, eloBefore, eloAfter, eloDelta, createdAt FROM gamer_elo_history WHERE gamerId = ? ORDER BY createdAt DESC LIMIT 100',
+      [gamerId],
     );
   }
 
@@ -939,5 +954,42 @@ export class CompeteService {
       return results[1][1] as Record<string, any>;
     }
     throw new InternalServerErrorException();
+  }
+
+  /**
+   * 触发自动对局：从游戏中取 ELO 最高的 N 个非禁用 gamer，
+   * 按 round-robin 生成匹配对，批量创建 match。
+   */
+  async triggerAutoMatch(gameId: number, topN = 8): Promise<{ created: number; matchIds: number[] }> {
+    const game = await this.findOneGame(gameId);
+    if (game.disabled) throw new BadRequestException('游戏已禁用');
+
+    // 取 ELO 最高的 topN 个 gamer
+    const gamers = await this.gamerRepo.find({
+      where: { gameId },
+      order: { elo: 'DESC' },
+      take: topN,
+    });
+
+    const needed = game.gamerQuantity ?? 2;
+    if (gamers.length < needed) {
+      throw new BadRequestException(`参赛者不足（需要至少 ${needed} 个，当前 ${gamers.length} 个）`);
+    }
+
+    // Round-robin 配对（每对只生成一场）
+    const matchIds: number[] = [];
+    for (let i = 0; i < gamers.length; i++) {
+      for (let j = i + 1; j < gamers.length; j += needed - 1) {
+        const pair = gamers.slice(j, j + needed - 1);
+        if (pair.length < needed - 1) break;
+        const ids = [gamers[i].id, ...pair.map(g => g.id)];
+        if (ids.length === needed) {
+          const match = await this.launchMatch(gameId, ids);
+          matchIds.push(match.id);
+        }
+      }
+    }
+
+    return { created: matchIds.length, matchIds };
   }
 }
