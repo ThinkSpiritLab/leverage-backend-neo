@@ -109,6 +109,7 @@ export class CompeteTxWorker {
       },
     };
     gamers.forEach((gamer, index) => {
+
       const isExternal = (gamer.type === 'webhook' || gamer.type === 'human' || gamer.type === 'external') && gamer.webhookUrl;
       gameDict[String(index)] = {
         language: isExternal ? 'webhook' : (gamer.language ?? 'python'),

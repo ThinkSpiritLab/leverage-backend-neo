@@ -131,10 +131,14 @@ export class JudgeTxWorker implements OnApplicationShutdown {
       },
     };
     gamers.forEach((gamer, index) => {
-      gameField[String(index)] = {
-        language: gamer.language,
-        source: gamer.code,
+      const isExternal = (gamer.type === 'webhook' || gamer.type === 'human' || gamer.type === 'external') && gamer.webhookUrl;
+      (gameField as Record<string, unknown>)[String(index)] = {
+        language: isExternal ? 'webhook' : (gamer.language ?? 'python'),
+        source: isExternal ? '' : (gamer.code ?? ''),
         limit: { time: game.timeLimit, memory: game.memoryLimit },
+        runnerType: isExternal ? 'webhook' : 'code',
+        externalUrl: isExternal ? gamer.webhookUrl : undefined,
+        webhookTimeoutMs: isExternal ? gamer.webhookTimeoutMs : undefined,
       };
     });
 
