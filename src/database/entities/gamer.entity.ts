@@ -75,6 +75,9 @@ export class Gamer {
   @Column({ type: 'varchar', length: 128, nullable: true })
   webhookSecret: string | null;
 
+  @Column({ type: 'boolean', default: false, comment: '是否为测试临时 gamer（不计入排行榜）' })
+  isTest: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

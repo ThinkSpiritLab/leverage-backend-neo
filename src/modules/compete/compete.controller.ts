@@ -46,6 +46,7 @@ import { SubmitGamerDto } from './dto/submit-gamer.dto';
 import { ModifyPlayerDto } from './dto/modify-player.dto';
 import { MatchCallbackDto } from './dto/match-callback.dto';
 import { PlaygroundDto } from './dto/playground.dto';
+import { PlaygroundJudgeDto } from './dto/playground-judge.dto';
 
 @ApiTags('compete')
 @Controller('compete')
@@ -551,6 +552,22 @@ export class CompeteController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.competeService.runPlayground(gameId, user.sub, dto);
+  }
+
+  /**
+   * POST /compete/games/:id/playground-judge
+   * 运行带自定义裁判的测试对局（不计 ELO）
+   */
+  @Post('games/:id/playground-judge')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '测试对局（自定义裁判代码 + bot，不计 ELO）' })
+  runPlaygroundJudge(
+    @Param('id', ParseIntPipe) gameId: number,
+    @Body() dto: PlaygroundJudgeDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.runPlaygroundJudge(gameId, user.sub, dto);
   }
 
   // ─── Human / External Bot Endpoints ──────────────────────────────────────

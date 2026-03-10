@@ -1051,4 +1051,180 @@ describe('CompeteService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
   });
+
+  // ─── runPlaygroundJudge ──────────────────────────────────────────────────────
+
+  describe('runPlaygroundJudge', () => {
+    /** 构造 gameRepo.createQueryBuilder mock，返回含 judgerCode 的 game */
+    const mockGameQbWithJudger = (judgerCode = 'game_judge', judgerLanguage = 'python3') => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({
+          ...gameFixture,
+          judgerCode,
+          judgerLanguage,
+        }),
+      });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+      return qb;
+    };
+
+    /** 构造 gamerRepo.createQueryBuilder mock，返回指定 gamer */
+    const mockGamerQbWith = (gamer: Partial<typeof gamerFixture>) => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({ ...gamerFixture, ...gamer }),
+      });
+      mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+      return qb;
+    };
+
+    beforeEach(() => {
+      mockMatchRepo.save.mockResolvedValue({ id: 200, gameId: 1, status: 0, isTest: true });
+      mockMatchGamerLinkRepo.save.mockResolvedValue([]);
+      mockQueue.add.mockResolvedValue({});
+    });
+
+    it('bot0 用 gamerId, bot1 用内联 code，应创建测试对局', async () => {
+      // game QB 只被调用一次（用于加载游戏）；gamer0 QB 用于加载已有 gamer
+      mockGameRepo.createQueryBuilder.mockReturnValue(
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, judgerCode: 'game_judge', judgerLanguage: 'python3' }) }),
+      );
+      // bot0: 通过 gamerId 加载（用 gamerRepo.createQueryBuilder）
+      const gamer0 = { ...gamerFixture, id: 10, code: 'print("hi")', language: 'python3', type: 'code', webhookUrl: null, webhookSecret: null };
+      // bot1: 内联代码 → 临时创建
+      const testGamer1 = { ...gamerFixture, id: 55, code: 'pass', language: 'cpp17', type: 'code', isTest: true, webhookUrl: null, webhookSecret: null };
+
+      // createQueryBuilder 首次返回 game，第二次返回 gamer0
+      // 但因为 Promise.all 同时执行两个 resolveBot，第一个是 gamerId 分支（走 createQueryBuilder），
+      // 第二个是 code 分支（走 create/save）。先设置 game 的 QB，然后 gamer QB。
+      let qbCallCount = 0;
+      mockGameRepo.createQueryBuilder.mockImplementation(() => {
+        return makeQb({
+          getOne: jest.fn().mockResolvedValue({ ...gameFixture, judgerCode: 'game_judge', judgerLanguage: 'python3' }),
+        });
+      });
+      mockGamerRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({ getOne: jest.fn().mockResolvedValue(gamer0) }),
+      );
+      mockGamerRepo.create.mockReturnValue(testGamer1);
+      mockGamerRepo.save.mockResolvedValue(testGamer1);
+
+      const dto = {
+        bot0: { gamerId: 10 },
+        bot1: { code: 'pass', language: 'cpp17' },
+      };
+
+      const result = await service.runPlaygroundJudge(1, 42, dto as any);
+      expect(result.matchId).toBe(200);
+      expect(result.testGamerIds).toContain(55);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'compete',
+        expect.objectContaining({ matchId: 200 }),
+      );
+    });
+
+    it('提供 judgerCode 时覆盖游戏自带裁判', async () => {
+      mockGameRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, judgerCode: 'game_judge', judgerLanguage: 'python3' }) }),
+      );
+      const gamer0 = { ...gamerFixture, id: 10, code: 'a', language: 'python3', type: 'code', webhookUrl: null, webhookSecret: null };
+      const gamer1 = { ...gamerFixture, id: 11, code: 'b', language: 'cpp17', type: 'code', webhookUrl: null, webhookSecret: null };
+      // 两个 bot 都通过 gamerId 提供
+      let gamerQbCallCount = 0;
+      mockGamerRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({
+          getOne: jest.fn().mockImplementation(() =>
+            Promise.resolve(gamerQbCallCount++ === 0 ? gamer0 : gamer1),
+          ),
+        }),
+      );
+
+      const dto = {
+        judgerCode: 'custom_judge_code',
+        judgerLanguage: 'cpp17',
+        bot0: { gamerId: 10 },
+        bot1: { gamerId: 11 },
+      };
+
+      await service.runPlaygroundJudge(1, 42, dto as any);
+
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'compete',
+        expect.objectContaining({
+          game: expect.objectContaining({
+            judgerCode: 'custom_judge_code',
+            judgerLanguage: 'cpp17',
+          }),
+        }),
+      );
+    });
+
+    it('不提供 judgerCode 时使用游戏自带裁判', async () => {
+      mockGameRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, judgerCode: 'game_judge', judgerLanguage: 'python3' }) }),
+      );
+      const gamer0 = { ...gamerFixture, id: 10, code: 'a', language: 'python3', type: 'code', webhookUrl: null, webhookSecret: null };
+      const gamer1 = { ...gamerFixture, id: 11, code: 'b', language: 'cpp17', type: 'code', webhookUrl: null, webhookSecret: null };
+      let gamerQbCallCount = 0;
+      mockGamerRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({
+          getOne: jest.fn().mockImplementation(() =>
+            Promise.resolve(gamerQbCallCount++ === 0 ? gamer0 : gamer1),
+          ),
+        }),
+      );
+
+      const dto = {
+        // judgerCode 未提供
+        bot0: { gamerId: 10 },
+        bot1: { gamerId: 11 },
+      };
+
+      await service.runPlaygroundJudge(1, 42, dto as any);
+
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'compete',
+        expect.objectContaining({
+          game: expect.objectContaining({
+            judgerCode: 'game_judge',
+            judgerLanguage: 'python3',
+          }),
+        }),
+      );
+    });
+
+    it('游戏不存在时抛 NotFoundException', async () => {
+      mockGameRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({ getOne: jest.fn().mockResolvedValue(null) }),
+      );
+      await expect(
+        service.runPlaygroundJudge(999, 42, { bot0: { gamerId: 1 }, bot1: { gamerId: 2 } } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('bot 未提供 gamerId 或 code 时抛 BadRequestException', async () => {
+      mockGameRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, judgerCode: 'j', judgerLanguage: 'py' }) }),
+      );
+      const dto = {
+        bot0: {}, // 两者都没有
+        bot1: { gamerId: 11 },
+      };
+      await expect(
+        service.runPlaygroundJudge(1, 42, dto as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('bot 提供 code 但未提供 language 时抛 BadRequestException', async () => {
+      mockGameRepo.createQueryBuilder.mockImplementation(() =>
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, judgerCode: 'j', judgerLanguage: 'py' }) }),
+      );
+      const dto = {
+        bot0: { code: 'print()', language: 'python3' },
+        bot1: { code: 'print()' }, // 缺 language
+      };
+      await expect(
+        service.runPlaygroundJudge(1, 42, dto as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });

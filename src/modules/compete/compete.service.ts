@@ -27,6 +27,7 @@ import { UpdateGamerDto } from './dto/update-gamer.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { SubmitGamerDto } from './dto/submit-gamer.dto';
 import { ModifyPlayerDto } from './dto/modify-player.dto';
+import { PlaygroundJudgeDto } from './dto/playground-judge.dto';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
 import { HumanTurnService } from './human-turn.service';
@@ -234,6 +235,9 @@ export class CompeteService {
     if (query.userId !== undefined) {
       qb.andWhere('gamer.userId = :userId', { userId: query.userId });
     }
+
+    // 默认排除测试临时 gamer（isTest=true）
+    qb.andWhere('gamer.isTest = :isTest', { isTest: false });
 
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
@@ -1237,6 +1241,126 @@ export class CompeteService {
 
     // 7. 返回 matchId 和 testGamerId
     return { matchId: match.id, testGamerId: savedTestGamer.id };
+  }
+
+  /**
+   * 运行带自定义裁判的测试对局（不计 ELO，不出现在普通对局列表）
+   *
+   * - bot0/bot1 可指定 gamerId（使用现有 gamer）或 code（临时创建 test gamer）
+   * - judgerCode 可覆盖游戏自带裁判代码
+   */
+  async runPlaygroundJudge(
+    gameId: number,
+    userId: number,
+    dto: PlaygroundJudgeDto,
+  ): Promise<{ matchId: number; testGamerIds: number[] }> {
+    // 1. 加载游戏（含 judgerCode）
+    const game = await this.gameRepo
+      .createQueryBuilder('g')
+      .addSelect('g.judgerCode')
+      .addSelect('g.judgerLanguage')
+      .where('g.id = :id', { id: gameId })
+      .getOne();
+    if (!game) throw new NotFoundException(`游戏 #${gameId} 不存在`);
+
+    const testGamerIds: number[] = [];
+
+    // 2. 解析 bot0 / bot1
+    const resolveBot = async (
+      spec: PlaygroundJudgeDto['bot0'],
+      position: 0 | 1,
+    ): Promise<{ gamer: Gamer; isNew: boolean }> => {
+      if (spec.gamerId !== undefined) {
+        // 使用现有 gamer
+        const gamer = await this.gamerRepo
+          .createQueryBuilder('g')
+          .addSelect('g.code')
+          .where('g.id = :id', { id: spec.gamerId })
+          .getOne();
+        if (!gamer) throw new NotFoundException(`Gamer #${spec.gamerId} 不存在`);
+        return { gamer, isNew: false };
+      } else if (spec.code !== undefined) {
+        if (!spec.language) throw new BadRequestException(`bot${position} 提供了 code 但未指定 language`);
+        // 创建临时 test gamer
+        const testGamer = this.gamerRepo.create({
+          userId,
+          gameId,
+          title: `[测试] 用户#${userId}-pos${position}`,
+          type: 'code',
+          language: spec.language,
+          code: spec.code,
+          opensource: false,
+          isTest: true,
+        } as any);
+        const saved = await this.gamerRepo.save(testGamer) as unknown as Gamer;
+        return { gamer: saved, isNew: true };
+      } else {
+        throw new BadRequestException(`bot${position} 必须提供 gamerId 或 code`);
+      }
+    };
+
+    const [{ gamer: gamer0, isNew: isNew0 }, { gamer: gamer1, isNew: isNew1 }] =
+      await Promise.all([
+        resolveBot(dto.bot0, 0),
+        resolveBot(dto.bot1, 1),
+      ]);
+
+    if (isNew0) testGamerIds.push(gamer0.id);
+    if (isNew1) testGamerIds.push(gamer1.id);
+
+    // 3. 创建 Match（isTest=true）
+    const match = await this.matchRepo.save({
+      gameId,
+      status: MatchStatus.PENDING,
+      isTest: true,
+    });
+
+    // 4. 创建 MatchGamerLink
+    await this.matchGamerLinkRepo.save([
+      { matchId: match.id, gamerId: gamer0.id, index: 0 },
+      { matchId: match.id, gamerId: gamer1.id, index: 1 },
+    ]);
+
+    // 5. 决定 judger 规格：dto.judgerCode 优先，否则用游戏自带
+    const effectiveJudgerCode = dto.judgerCode ?? game.judgerCode ?? '';
+    const effectiveJudgerLanguage =
+      dto.judgerCode !== undefined
+        ? (dto.judgerLanguage ?? 'python')
+        : (game.judgerLanguage ?? '');
+
+    // 6. 推入评测队列
+    await this.judgeTxQueue.add('compete', {
+      matchId: match.id,
+      positionToGamerId: { 0: gamer0.id, 1: gamer1.id },
+      game: {
+        judgerCode: effectiveJudgerCode,
+        judgerLanguage: effectiveJudgerLanguage,
+        timeLimit: game.timeLimit,
+        memoryLimit: game.memoryLimit,
+      },
+      gamers: [
+        {
+          id: gamer0.id,
+          code: (gamer0 as any).code ?? dto.bot0.code ?? '',
+          language: gamer0.language,
+          position: 0,
+          type: gamer0.type ?? 'code',
+          webhookUrl: gamer0.webhookUrl ?? undefined,
+          webhookSecret: gamer0.webhookSecret ?? undefined,
+        },
+        {
+          id: gamer1.id,
+          code: (gamer1 as any).code ?? dto.bot1.code ?? '',
+          language: gamer1.language,
+          position: 1,
+          type: gamer1.type ?? 'code',
+          webhookUrl: gamer1.webhookUrl ?? undefined,
+          webhookSecret: gamer1.webhookSecret ?? undefined,
+        },
+      ],
+    });
+
+    return { matchId: match.id, testGamerIds };
   }
 
   /**
