@@ -597,9 +597,16 @@ export class CompeteController {
   async botRespond(
     @Body() body: { turnToken: string; response: string },
     @Headers('x-bot-key') botKey?: string,
-    @CurrentUser() user?: JwtPayload,
+    @Headers('authorization') authHeader?: string,
   ) {
-    // Auth: must have either bot key or JWT
+    // Auth: must have either X-Bot-Key or Bearer JWT
+    let user: JwtPayload | null = null;
+    if (!botKey) {
+      const token = authHeader?.replace(/^Bearer\s+/i, '');
+      if (token) {
+        try { user = this.jwtService.verify<JwtPayload>(token); } catch { /* invalid */ }
+      }
+    }
     if (!botKey && !user) throw new UnauthorizedException('需要认证');
     if (botKey) {
       const gamer = await this.competeService.findGamerByApiKey(botKey);
