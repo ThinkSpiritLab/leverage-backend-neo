@@ -13,7 +13,16 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    bodyParser: false,  // disable default, we set our own limit below
+  });
+
+  // Increase body size limit for Botzone callback payloads (full game logs can be large)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const express = require('express');
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
   // Use nestjs-pino as the logger
   app.useLogger(app.get(Logger));
