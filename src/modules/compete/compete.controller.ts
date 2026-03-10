@@ -633,6 +633,10 @@ export class CompeteController {
     };
     this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
 
+    // Immediately replay any pending turn for this user's gamer in this match
+    // (handles the case where SSE connects after the turn was already issued)
+    this.humanTurnService.replayPendingTurn(matchId, writer);
+
     // Send keep-alive ping every 20s
     const ping = setInterval(() => {
       try { res.write(': ping\n\n'); } catch { clearInterval(ping); }

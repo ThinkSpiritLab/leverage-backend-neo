@@ -143,6 +143,25 @@ export class HumanTurnService {
     this.logger.log(`SSE client registered: matchId=${matchId} userId=${userId}`);
   }
 
+  /**
+   * If there's already a pending turn for this match (e.g. SSE client connected late),
+   * immediately push it to the just-connected client so they don't miss their turn.
+   */
+  replayPendingTurn(matchId: number, writer: (data: string) => void) {
+    for (const [, entry] of this.pending) {
+      if (entry.matchId === matchId) {
+        const payload = JSON.stringify({
+          type: 'your-turn',
+          turnToken: entry.turnToken,
+          gamerId: entry.gamerId,
+          gameState: entry.gameState,
+        });
+        try { writer(payload); } catch { /* ignore */ }
+        return;
+      }
+    }
+  }
+
   unregisterSSEClient(matchId: number, userId: number) {
     this.sseClients.delete(`${matchId}:${userId}`);
   }
