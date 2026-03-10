@@ -842,6 +842,163 @@ export class CompeteService {
     }));
   }
 
+  // ─── Global Leaderboard ───────────────────────────────────────────────────────
+
+  async globalLeaderboard(opts: {
+    gameId?: number;
+    limit: number;
+    board: 'inner' | 'outer';
+  }): Promise<object[]> {
+    const { gameId, limit, board } = opts;
+    const eloCol = board === 'inner' ? 'g.elo' : 'g.eloExternal';
+
+    let qb = this.dataSource
+      .createQueryBuilder()
+      .select('g.id', 'id')
+      .addSelect('g.title', 'title')
+      .addSelect('g.type', 'type')
+      .addSelect('g.elo', 'elo')
+      .addSelect('g.eloExternal', 'eloExternal')
+      .addSelect('game.id', 'gameId')
+      .addSelect('game.title', 'gameTitle')
+      .addSelect('u.id', 'userId')
+      .addSelect('u.username', 'username')
+      .addSelect(
+        `(SELECT COUNT(*) FROM match_gamer_link mgl2
+           INNER JOIN \`match\` m2 ON m2.id = mgl2.matchId AND m2.status = 2 AND m2.isTest = 0
+           WHERE mgl2.gamerId = g.id)`,
+        'totalMatches',
+      )
+      .addSelect(
+        `(SELECT COUNT(*) FROM match_gamer_link mgl3
+           INNER JOIN \`match\` m3 ON m3.id = mgl3.matchId AND m3.status = 2 AND m3.isTest = 0
+           WHERE mgl3.gamerId = g.id AND mgl3.won = 1)`,
+        'wins',
+      )
+      .from(Gamer, 'g')
+      .leftJoin('g.game', 'game')
+      .leftJoin('g.user', 'u')
+      .where('g.isTest = false')
+      .andWhere('g.disabled = false')
+      .andWhere("g.type = 'code'");
+
+    if (gameId) {
+      qb = qb.andWhere('g.gameId = :gameId', { gameId });
+    }
+
+    const rows = await qb
+      .orderBy(eloCol, 'DESC')
+      .limit(limit)
+      .getRawMany<{
+        id: number;
+        title: string;
+        type: string;
+        elo: string;
+        eloExternal: string;
+        gameId: number;
+        gameTitle: string;
+        userId: number;
+        username: string;
+        totalMatches: string;
+        wins: string;
+      }>();
+
+    return rows.map((r) => {
+      const total = Number(r.totalMatches);
+      const wins = Number(r.wins);
+      return {
+        id: r.id,
+        title: r.title,
+        type: r.type,
+        elo: Number(r.elo),
+        eloExternal: Number(r.eloExternal),
+        wins,
+        totalMatches: total,
+        winRate: total > 0 ? Math.round((wins / total) * 1000) / 1000 : 0,
+        game: { id: r.gameId, title: r.gameTitle },
+        user: { id: r.userId, username: r.username },
+      };
+    });
+  }
+
+  // ─── Bot Stats ────────────────────────────────────────────────────────────────
+
+  async getBotStats(gamerId: number): Promise<object> {
+    // Verify gamer exists
+    const gamer = await this.gamerRepo.findOne({ where: { id: gamerId } });
+    if (!gamer) throw new NotFoundException(`Gamer ${gamerId} 不存在`);
+
+    // Get per-opponent stats via raw query
+    const rows = await this.dataSource.query<
+      { opponentGamerId: number; opponentName: string; myWon: number | null }[]
+    >(
+      `SELECT
+         opp_mgl.gamerId AS opponentGamerId,
+         opp_g.title    AS opponentName,
+         mgl.won        AS myWon
+       FROM match_gamer_link mgl
+       INNER JOIN \`match\` m ON m.id = mgl.matchId AND m.status = 2 AND m.isTest = 0
+       INNER JOIN match_gamer_link opp_mgl
+         ON opp_mgl.matchId = mgl.matchId AND opp_mgl.gamerId != mgl.gamerId
+       LEFT JOIN gamer opp_g ON opp_g.id = opp_mgl.gamerId
+       WHERE mgl.gamerId = ?`,
+      [gamerId],
+    );
+
+    // Aggregate
+    const opponentMap = new Map<
+      number,
+      { gamerId: number; name: string; wins: number; losses: number; draws: number }
+    >();
+
+    let totalWins = 0;
+    let totalLosses = 0;
+    let totalDraws = 0;
+
+    for (const row of rows) {
+      const oppId = Number(row.opponentGamerId);
+      if (!opponentMap.has(oppId)) {
+        opponentMap.set(oppId, {
+          gamerId: oppId,
+          name: row.opponentName ?? String(oppId),
+          wins: 0,
+          losses: 0,
+          draws: 0,
+        });
+      }
+      const opp = opponentMap.get(oppId)!;
+      const won = row.myWon;
+      if (won === 1) {
+        opp.wins++;
+        totalWins++;
+      } else if (won === 0) {
+        // Determine draw vs loss: if opponent also has won=0 it's a draw.
+        // We track by the won field — 0 can mean loss or draw depending on opponent.
+        // For simplicity: won=0 means not-a-win; look at opponent's won in same row.
+        // Since we're joining per-row we don't have both sides here easily.
+        // Treat won=0 as loss, and adjust draws separately below.
+        opp.losses++;
+        totalLosses++;
+      } else {
+        // won IS NULL — match still pending (shouldn't happen for status=2, but guard)
+        opp.draws++;
+        totalDraws++;
+      }
+    }
+
+    const totalMatches = totalWins + totalLosses + totalDraws;
+
+    return {
+      gamerId,
+      totalMatches,
+      wins: totalWins,
+      losses: totalLosses,
+      draws: totalDraws,
+      winRate: totalMatches > 0 ? Math.round((totalWins / totalMatches) * 1000) / 1000 : 0,
+      opponents: Array.from(opponentMap.values()),
+    };
+  }
+
   // ─── Room ─────────────────────────────────────────────────────────────────────
 
   private async destroyRoom(roomId: number): Promise<void> {

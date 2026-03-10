@@ -47,6 +47,7 @@ import { ModifyPlayerDto } from './dto/modify-player.dto';
 import { MatchCallbackDto } from './dto/match-callback.dto';
 import { PlaygroundDto } from './dto/playground.dto';
 import { PlaygroundJudgeDto } from './dto/playground-judge.dto';
+import { GlobalLeaderboardDto } from './dto/global-leaderboard.dto';
 
 @ApiTags('compete')
 @Controller('compete')
@@ -101,6 +102,30 @@ export class CompeteController {
     @Query('board') board?: string,
   ) {
     return this.competeService.getLeaderboard(id, board === 'outer' ? 'outer' : 'inner');
+  }
+
+  /**
+   * GET /compete/leaderboard
+   * 全局排行榜（公开，跨游戏）
+   */
+  @Get('leaderboard')
+  @ApiOperation({ summary: '全局排行榜（可按 gameId 过滤，按 ELO 降序，不含测试 Bot）' })
+  globalLeaderboard(@Query() query: GlobalLeaderboardDto) {
+    return this.competeService.globalLeaderboard({
+      gameId: query.gameId,
+      limit: query.limit ?? 20,
+      board: query.board ?? 'outer',
+    });
+  }
+
+  /**
+   * GET /compete/gamers/:id/stats
+   * Bot 对战统计（公开）
+   */
+  @Get('gamers/:id/stats')
+  @ApiOperation({ summary: 'Bot 对战统计（对阵对手胜负详情）' })
+  getBotStats(@Param('id', ParseIntPipe) id: number) {
+    return this.competeService.getBotStats(id);
   }
 
   /**
