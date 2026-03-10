@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { HengClientService } from './heng-client.service';
 import { HengController } from './heng.controller';
 import { JudgeTxWorker } from './workers/judge-tx.worker';
@@ -7,6 +8,7 @@ import { MetricsModule } from '../metrics/metrics.module';
 import { QueueModule } from '../queue/queue.module';
 import { RedisModule } from '../redis/redis.module';
 import { ReceiveModule } from '../receive/receive.module';
+import { Match } from '../../database/entities/match.entity';
 
 /**
  * HengModule
@@ -18,7 +20,7 @@ import { ReceiveModule } from '../receive/receive.module';
  * - JudgeRxWorker：消费 judge-rx 队列，分发给 ReceiveService
  */
 @Module({
-  imports: [MetricsModule, QueueModule, RedisModule, ReceiveModule],
+  imports: [MetricsModule, QueueModule, RedisModule, ReceiveModule, TypeOrmModule.forFeature([Match])],
   controllers: [HengController],
   providers: [HengClientService, JudgeTxWorker, JudgeRxWorker],
   exports: [HengClientService],

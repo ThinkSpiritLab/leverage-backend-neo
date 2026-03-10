@@ -5,6 +5,9 @@ import { randomBytes } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Gauge } from 'prom-client';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import axios from 'axios';
 import { JUDGE_TX_QUEUE } from '../../queue/queue.constants';
 import { HengClientService } from '../heng-client.service';
 import { RedisService } from '../../redis/redis.service';
@@ -13,6 +16,9 @@ import {
   JUDGE_QUEUE_ACTIVE_GAUGE,
   JUDGE_QUEUE_WAITING_GAUGE,
 } from '../../metrics/metrics.module';
+import { Match } from '../../../database/entities/match.entity';
+import { MatchStatus } from '../../compete/compete.service';
+import type { CompeteTxPayload } from '../../compete/compete-tx.worker';
 
 /**
  * JudgeTxWorker
@@ -37,6 +43,8 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     private readonly waitingGauge: Gauge<string>,
     @InjectMetric(JUDGE_QUEUE_ACTIVE_GAUGE)
     private readonly activeGauge: Gauge<string>,
+    @InjectRepository(Match)
+    private readonly matchRepo: Repository<Match>,
   ) {}
 
   async onApplicationShutdown(signal?: string): Promise<void> {
@@ -95,6 +103,66 @@ export class JudgeTxWorker implements OnApplicationShutdown {
       // 提交失败时清理 judgeId，避免孤立 key
       await this.redisService.srem(`judge-ids:${submissionId}`, judgeId);
       throw err; // 让 BullMQ 重试
+    }
+  }
+
+  // ─── Compete job handler ────────────────────────────────────────────────────
+
+  @Process('compete')
+  async handleCompete(job: Job<CompeteTxPayload>): Promise<void> {
+    const { matchId, game, gamers } = job.data;
+    this.logger.log(`Processing compete job: matchId=${matchId}, gamers=${gamers.length}`);
+
+    const baseUrl = this.configService.get<string>('botzone.baseUrl', '');
+    const apiKey = this.configService.get<string>('botzone.apiKey', '');
+    const callbackBase = this.configService.get<string>('baseUrl', 'http://localhost:3000');
+    const callbackUrl = `${callbackBase}/compete/match-callback`;
+
+    // botzone-neo BotzoneTaskDto format:
+    // game: { judger: {language, source, limit}, "0": {...}, "1": {...} }
+    // callback: { update, finish }
+    const gameField: Record<string, { language: string; source: string; limit: { time: number; memory: number } }> = {
+      judger: {
+        language: game.judgerLanguage,
+        source: game.judgerCode,
+        limit: { time: game.timeLimit, memory: game.memoryLimit },
+      },
+    };
+    gamers.forEach((gamer, index) => {
+      gameField[String(index)] = {
+        language: gamer.language,
+        source: gamer.code,
+        limit: { time: game.timeLimit, memory: game.memoryLimit },
+      };
+    });
+
+    const body = {
+      type: 'botzone',
+      game: gameField,
+      callback: {
+        update: `${callbackBase}/compete/match-callback`,
+        finish: `${callbackBase}/compete/match-callback`,
+      },
+    };
+
+    if (!baseUrl) {
+      this.logger.warn(`BOTZONE_BASE_URL not set — marking match ${matchId} as ERROR`);
+      await this.matchRepo.update(matchId, { status: MatchStatus.ERROR });
+      return;
+    }
+
+    try {
+      const res = await axios.post<{ jobId: string }>(`${baseUrl}/v1/judge`, body, {
+        timeout: 10_000,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      });
+      const { jobId } = res.data;
+      this.logger.log(`Compete job accepted by botzone: matchId=${matchId}, jobId=${jobId}`);
+      await this.matchRepo.update(matchId, { externalJobId: jobId, status: MatchStatus.RUNNING });
+    } catch (err: unknown) {
+      this.logger.error(`Failed to submit compete job: matchId=${matchId}`, err);
+      await this.matchRepo.update(matchId, { status: MatchStatus.ERROR });
+      throw err;
     }
   }
 }
