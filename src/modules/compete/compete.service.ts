@@ -240,12 +240,21 @@ export class CompeteService {
     dto: UpdateGamerDto,
     userId: number,
   ): Promise<Gamer> {
-    const gamer = await this.findOneGamer(id);
-    if (gamer.userId !== userId) {
+    const original = await this.findOneGamer(id);
+    if (original.userId !== userId) {
       throw new BadRequestException('只能修改自己的 Bot');
     }
-    await this.gamerRepo.update(id, dto);
-    return this.findOneGamer(id);
+
+    // Fork：创建新版本，保留原记录以维护历史对局完整性
+    const forked = this.gamerRepo.create({
+      userId: original.userId,
+      gameId: original.gameId,
+      title: dto.title ?? original.title,
+      language: dto.language ?? original.language,
+      opensource: dto.opensource ?? original.opensource,
+      code: dto.code ?? original.code,
+    });
+    return this.gamerRepo.save(forked);
   }
 
   // ─── Match ───────────────────────────────────────────────────────────────────
