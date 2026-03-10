@@ -236,7 +236,7 @@ export class CompeteService {
     await this.findOneGame(dto.gameId);
 
     const type = dto.type ?? 'code';
-    const needsApiKey = type === 'external' || type === 'human';
+    const needsApiKey = type === 'external'; // human 用浏览器 JWT，不需要 API Key
     const botApiKey = needsApiKey ? randomBytes(24).toString('hex') : null;
     const botApiKeyExpiresAt = needsApiKey
       ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
@@ -282,8 +282,8 @@ export class CompeteService {
   async refreshBotApiKey(gamerId: number, userId: number): Promise<{ botApiKey: string; expiresAt: Date }> {
     const gamer = await this.findOneGamer(gamerId);
     if (gamer.userId !== userId) throw new UnauthorizedException('非你的 Bot');
-    if (gamer.type !== 'external' && gamer.type !== 'human') {
-      throw new BadRequestException('仅 external/human 类型支持 API Key');
+    if (gamer.type !== 'external') {
+      throw new BadRequestException('仅 external 类型支持 API Key');
     }
     const botApiKey = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
