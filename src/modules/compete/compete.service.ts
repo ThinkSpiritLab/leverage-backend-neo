@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bull';
@@ -13,7 +14,7 @@ import { DataSource, In, Repository } from 'typeorm';
 import type { Queue } from 'bull';
 import * as path from 'path';
 import * as fs from 'fs';
-import { randomInt } from 'crypto';
+import { randomBytes, randomInt } from 'crypto';
 import { Game } from '../../database/entities/game.entity';
 import { Gamer } from '../../database/entities/gamer.entity';
 import { Match } from '../../database/entities/match.entity';
@@ -235,6 +236,12 @@ export class CompeteService {
     await this.findOneGame(dto.gameId);
 
     const type = dto.type ?? 'code';
+    const needsApiKey = type === 'external' || type === 'human';
+    const botApiKey = needsApiKey ? randomBytes(24).toString('hex') : null;
+    const botApiKeyExpiresAt = needsApiKey
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+      : null;
+
     const gamer = this.gamerRepo.create({
       userId,
       gameId: dto.gameId,
@@ -242,11 +249,42 @@ export class CompeteService {
       type,
       language: dto.language ?? (type === 'webhook' ? 'webhook' : 'python'),
       code: dto.code ?? '',
-      opensource: dto.opensource ?? true,
+      opensource: type === 'code' ? (dto.opensource ?? true) : false,
       webhookUrl: dto.webhookUrl ?? null,
       webhookSecret: dto.webhookSecret ?? null,
+      botApiKey: botApiKey ?? undefined,
+      botApiKeyExpiresAt: botApiKeyExpiresAt ?? undefined,
     });
-    return this.gamerRepo.save(gamer);
+    const saved = await this.gamerRepo.save(gamer) as Gamer & { botApiKey?: string };
+    // Return botApiKey in response (only on creation, never again from findOne)
+    if (botApiKey) saved.botApiKey = botApiKey;
+    return saved;
+  }
+
+  /** 生成或刷新 botApiKey（7天有效期） */
+  async refreshBotApiKey(gamerId: number, userId: number): Promise<{ botApiKey: string; expiresAt: Date }> {
+    const gamer = await this.findOneGamer(gamerId);
+    if (gamer.userId !== userId) throw new UnauthorizedException('非你的 Bot');
+    if (gamer.type !== 'external' && gamer.type !== 'human') {
+      throw new BadRequestException('仅 external/human 类型支持 API Key');
+    }
+    const botApiKey = randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.gamerRepo.update(gamerId, { botApiKey, botApiKeyExpiresAt: expiresAt });
+    return { botApiKey, expiresAt };
+  }
+
+  /** 通过 botApiKey 查找 gamer（用于 X-Bot-Key 认证） */
+  async findGamerByApiKey(apiKey: string): Promise<Gamer | null> {
+    const result = await this.gamerRepo
+      .createQueryBuilder('g')
+      .addSelect('g.botApiKey')
+      .addSelect('g.botApiKeyExpiresAt')
+      .where('g.botApiKey = :apiKey', { apiKey })
+      .getOne();
+    if (!result) return null;
+    if (result.botApiKeyExpiresAt && result.botApiKeyExpiresAt < new Date()) return null; // expired
+    return result;
   }
 
   async updateGamer(

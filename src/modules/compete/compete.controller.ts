@@ -209,6 +209,21 @@ export class CompeteController {
     return this.competeService.getEloHistory(id);
   }
 
+  /**
+   * POST /compete/gamers/:id/refresh-api-key
+   * 刷新 external/human gamer 的 Bot API Key（7天有效）
+   */
+  @Post('gamers/:id/refresh-api-key')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '刷新 Bot API Key（external/human 类型）' })
+  refreshBotApiKey(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.refreshBotApiKey(id, user.sub);
+  }
+
   @Patch('gamers/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -510,20 +525,33 @@ export class CompeteController {
    * Query param: gamerId (required)
    */
   @Get('bot-turn')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @SkipThrottle()
-  @ApiOperation({ summary: '外部bot长轮询——等待轮到自己（最多30s）' })
+  @ApiOperation({ summary: '外部bot长轮询（JWT Bearer 或 X-Bot-Key header，最多30s）' })
   async botTurnPoll(
-    @Query('gamerId', ParseIntPipe) gamerId: number,
-    @CurrentUser() user: JwtPayload,
+    @Query('gamerId') gamerIdStr?: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-bot-key') botKey?: string,
+    @CurrentUser() user?: JwtPayload,
   ) {
-    // Verify ownership
-    const gamer = await this.competeService.findOneGamer(gamerId);
-    if (gamer.userId !== user.sub) throw new UnauthorizedException('非你的 Bot');
+    let gamerId: number;
+
+    if (botKey) {
+      // X-Bot-Key auth: look up gamer by api key
+      const gamer = await this.competeService.findGamerByApiKey(botKey);
+      if (!gamer) throw new UnauthorizedException('Bot API Key 无效或已过期');
+      gamerId = gamer.id;
+    } else if (user && gamerIdStr) {
+      // JWT auth
+      gamerId = parseInt(gamerIdStr, 10);
+      if (isNaN(gamerId)) throw new UnauthorizedException('gamerId 无效');
+      const gamer = await this.competeService.findOneGamer(gamerId);
+      if (gamer.userId !== user.sub) throw new UnauthorizedException('非你的 Bot');
+    } else {
+      throw new UnauthorizedException('需要 Bearer token 或 X-Bot-Key');
+    }
 
     const turn = await this.humanTurnService.waitForTurn(gamerId, 30_000);
-    if (!turn) return { waiting: true }; // timeout — client should re-poll
+    if (!turn) return { waiting: true };
 
     return {
       waiting: false,
@@ -538,14 +566,22 @@ export class CompeteController {
    * POST /compete/bot-respond
    * Human or external bot submits their response.
    * Body: { turnToken: string, response: string }
+   * Auth: Bearer JWT or X-Bot-Key header
    */
   @Post('bot-respond')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: '提交移动（浏览器人类玩家或外部bot）' })
-  botRespond(
+  @SkipThrottle()
+  @ApiOperation({ summary: '提交移动（JWT 或 X-Bot-Key）' })
+  async botRespond(
     @Body() body: { turnToken: string; response: string },
+    @Headers('x-bot-key') botKey?: string,
+    @CurrentUser() user?: JwtPayload,
   ) {
+    // Auth: must have either bot key or JWT
+    if (!botKey && !user) throw new UnauthorizedException('需要认证');
+    if (botKey) {
+      const gamer = await this.competeService.findGamerByApiKey(botKey);
+      if (!gamer) throw new UnauthorizedException('Bot API Key 无效或已过期');
+    }
     const ok = this.humanTurnService.submitResponse(body.turnToken, body.response);
     if (!ok) return { success: false, message: '找不到对应的 turn，可能已超时' };
     return { success: true };

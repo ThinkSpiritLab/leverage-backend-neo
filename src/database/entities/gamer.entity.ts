@@ -60,6 +60,12 @@ export class Gamer {
   @Column({ type: 'enum', enum: ['code', 'webhook', 'human', 'external'], default: 'code' })
   type: 'code' | 'webhook' | 'human' | 'external';
 
+  @Column({ type: 'varchar', length: 64, nullable: true, select: false })
+  botApiKey?: string;
+
+  @Column({ type: 'datetime', nullable: true, select: false })
+  botApiKeyExpiresAt?: Date;
+
   @Column({ type: 'varchar', length: 512, nullable: true })
   webhookUrl: string | null;
 
