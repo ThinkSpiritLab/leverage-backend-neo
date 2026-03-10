@@ -645,8 +645,15 @@ export class CompeteController {
     res.flushHeaders();
 
     const writer = (data: string) => {
-      res.write(`data: ${data}\n\n`);
+      const chunk = `data: ${data}\n\n`;
+      this.logger.debug(`SSE write: ${chunk.substring(0, 80)}`);
+      const ok = res.write(chunk);
+      this.logger.debug(`SSE write result: ${ok}`);
     };
+
+    // Test: send an immediate 'connected' event so we know the stream works
+    writer(JSON.stringify({ type: 'connected', matchId }));
+
     this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
 
     // Immediately replay any pending turn for this user's gamer in this match
