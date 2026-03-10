@@ -890,7 +890,10 @@ export class CompeteService {
     limit: number;
     board: 'inner' | 'outer';
   }): Promise<object[]> {
-    const { gameId, limit, board } = opts;
+    const gameId = opts.gameId;
+    // 防御性限流：limit 上限 100，board 若非法值回退到 outer
+    const limit = Math.min(Math.max(1, opts.limit ?? 20), 100);
+    const board: 'inner' | 'outer' = opts.board === 'inner' ? 'inner' : 'outer';
     const eloCol = board === 'inner' ? 'g.elo' : 'g.eloExternal';
 
     let qb = this.dataSource
@@ -1386,7 +1389,7 @@ export class CompeteService {
       opensource: false,
       isTest: true,
     } as any);
-    const savedTestGamer = await this.gamerRepo.save(testGamer);
+    const savedTestGamer = (await this.gamerRepo.save(testGamer)) as unknown as Gamer;
 
     // 4. 创建 Match 记录（isTest=true）
     const match = await this.matchRepo.save({
