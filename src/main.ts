@@ -62,7 +62,13 @@ async function bootstrap() {
   });
 
   // gzip compression for large JSON responses (leaderboard, problem list, etc.)
-  app.use(compression());
+  // Exclude SSE endpoints: compression buffers streamed responses
+  app.use(compression({
+    filter: (req, res) => {
+      if (req.path?.includes('/human-sse')) return false;
+      return compression.filter(req, res);
+    },
+  }));
 
   // Helmet security headers
   app.use(
