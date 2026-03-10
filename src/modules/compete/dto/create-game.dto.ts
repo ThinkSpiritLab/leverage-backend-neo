@@ -56,4 +56,8 @@ export class CreateGameDto {
   @IsString()
   @MaxLength(512000)
   rendererHtml?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  allowHuman?: boolean;
 }

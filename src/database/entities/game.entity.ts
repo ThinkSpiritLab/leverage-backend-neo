@@ -47,6 +47,10 @@ export class Game {
   @Column('text', { nullable: true })
   rendererHtml?: string;
 
+  /** 是否允许真人玩家参与（默认关闭，管理员可开启） */
+  @Column({ type: 'boolean', default: false })
+  allowHuman: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 
