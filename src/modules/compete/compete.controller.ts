@@ -191,6 +191,12 @@ export class CompeteController {
    * PATCH /compete/gamers/:id
    * 更新 Bot（本人）
    */
+  @Get('gamers/:id')
+  @ApiOperation({ summary: 'Bot 详情（含代码）' })
+  findOneGamer(@Param('id', ParseIntPipe) id: number) {
+    return this.competeService.findOneGamer(id);
+  }
+
   @Patch('gamers/:id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

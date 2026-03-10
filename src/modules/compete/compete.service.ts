@@ -212,10 +212,14 @@ export class CompeteService {
   }
 
   async findOneGamer(id: number): Promise<Gamer> {
-    const gamer = await this.gamerRepo.findOne({
-      where: { id },
-      relations: ['user', 'game'],
-    });
+    // Use QueryBuilder to force-load code (select:false column) alongside relations
+    const gamer = await this.gamerRepo
+      .createQueryBuilder('g')
+      .addSelect('g.code') // force include select:false column
+      .leftJoinAndSelect('g.user', 'user')
+      .leftJoinAndSelect('g.game', 'game')
+      .where('g.id = :id', { id })
+      .getOne();
     if (!gamer) throw new NotFoundException(`Bot 选手 #${id} 不存在`);
     return gamer;
   }
