@@ -1,4 +1,5 @@
 import {
+  AfterLoad,
   Column,
   CreateDateColumn,
   Entity,
@@ -13,6 +14,14 @@ export class Game {
 
   @Column('varchar')
   title: string;
+
+  /** 前端兼容别名，响应中 name === title */
+  name?: string;
+
+  @AfterLoad()
+  setName() {
+    this.name = this.title;
+  }
 
   @Column('text')
   description: string;

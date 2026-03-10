@@ -1,4 +1,5 @@
 import {
+  AfterLoad,
   Column,
   CreateDateColumn,
   Entity,
@@ -33,6 +34,13 @@ export class Gamer {
 
   @Column('varchar')
   title: string;
+
+  name?: string;
+
+  @AfterLoad()
+  setName() {
+    this.name = this.title;
+  }
 
   @Column('varchar')
   language: string;
