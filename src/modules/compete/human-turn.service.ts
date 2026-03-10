@@ -148,18 +148,21 @@ export class HumanTurnService {
    * immediately push it to the just-connected client so they don't miss their turn.
    */
   replayPendingTurn(matchId: number, writer: (data: string) => void) {
+    this.logger.log(`replayPendingTurn: matchId=${matchId}, pending keys=[${[...this.pending.keys()].join(',')}]`);
     for (const [, entry] of this.pending) {
       if (entry.matchId === matchId) {
+        this.logger.log(`replayPendingTurn: found pending turn for matchId=${matchId}, gamerId=${entry.gamerId}, replaying`);
         const payload = JSON.stringify({
           type: 'your-turn',
           turnToken: entry.turnToken,
           gamerId: entry.gamerId,
           gameState: entry.gameState,
         });
-        try { writer(payload); } catch { /* ignore */ }
+        try { writer(payload); this.logger.log(`replayPendingTurn: wrote your-turn to SSE`); } catch (e) { this.logger.error(`replayPendingTurn write failed: ${e}`); }
         return;
       }
     }
+    this.logger.warn(`replayPendingTurn: no pending turn found for matchId=${matchId}`);
   }
 
   unregisterSSEClient(matchId: number, userId: number) {
