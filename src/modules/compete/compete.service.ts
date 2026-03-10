@@ -537,13 +537,25 @@ export class CompeteService {
       result: resultData,
     });
 
-    // Update ELO scores for all participating gamers
+    // Update ELO scores and win flags for all participating gamers
     if (state === 'finished' && result?.finalResult) {
+      const finalResult = result.finalResult;
       // Detect match type: inner if all gamers are 'code' type
-      const participantIds = Object.keys(result.finalResult).map(Number).filter(Boolean);
+      const participantIds = Object.keys(finalResult).map(Number).filter(Boolean);
       const participants = participantIds.length > 0 ? await this.gamerRepo.findBy({ id: In(participantIds) }) : [];
       const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-      await this.updateElo(result.finalResult, matchType);
+      await this.updateElo(finalResult, matchType);
+
+      // Set won=1/0 on match_gamer_link
+      const maxScore = Math.max(...Object.values(finalResult));
+      for (const [gamerIdStr, score] of Object.entries(finalResult)) {
+        const gamerId = Number(gamerIdStr);
+        if (!gamerId) continue;
+        await this.matchGamerLinkRepo.update(
+          { matchId: match.id, gamerId },
+          { won: score === maxScore ? 1 : 0 },
+        );
+      }
     }
 
     return { ok: true };
@@ -618,6 +630,17 @@ export class CompeteService {
       const participants = await this.gamerRepo.findBy({ id: In(participantIds) });
       const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
       await this.updateElo(gamerIdScores, matchType);
+
+      // Set won=1/0 on match_gamer_link
+      const maxScore = Math.max(...Object.values(gamerIdScores));
+      for (const [gamerIdStr, score] of Object.entries(gamerIdScores)) {
+        const gamerId = Number(gamerIdStr);
+        if (!gamerId) continue;
+        await this.matchGamerLinkRepo.update(
+          { matchId, gamerId },
+          { won: score === maxScore ? 1 : 0 },
+        );
+      }
     }
 
     return { ok: true };
@@ -735,7 +758,7 @@ export class CompeteService {
       .addSelect('g.type', 'gamerType')
       .addSelect(eloCol, 'elo')
       .addSelect('COUNT(*)', 'total')
-      .addSelect('SUM(CASE WHEN mgl.`index` = 1 THEN 1 ELSE 0 END)', 'wins')
+      .addSelect('SUM(CASE WHEN mgl.won = 1 THEN 1 ELSE 0 END)', 'wins')
       .from(MatchGamerLink, 'mgl')
       .innerJoin(Match, 'm', 'm.id = mgl.matchId AND m.gameId = :gameId', { gameId })
       .leftJoin(Gamer, 'g', 'g.id = mgl.gamerId')

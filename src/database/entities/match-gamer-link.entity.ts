@@ -29,6 +29,9 @@ export class MatchGamerLink {
   @Column('tinyint')
   index: number;
 
+  @Column({ type: 'tinyint', nullable: true, default: null, comment: '1=赢,0=输/平,NULL=未结束' })
+  won: number | null;
+
   @Index()
   @Column()
   gamerId: number;
