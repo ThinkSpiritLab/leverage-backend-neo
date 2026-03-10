@@ -330,7 +330,13 @@ export class CompeteController {
   ): Promise<{ ok: boolean }> {
     this.assertCallbackToken(authHeader, tokenParam);
 
-    this.logger.log(`match-callback: matchId=${matchId} scores=${JSON.stringify(body.scores)}`);
+    const verdict = body.verdict as string | undefined;
+    this.logger.log(`match-callback: matchId=${matchId} verdict=${verdict} scores=${JSON.stringify(body.scores)}`);
+
+    // Forfeit = game void, no ELO update
+    if (verdict === 'forfeit') {
+      return this.competeService.handleMatchForfeit(matchId, body.forfeitedBot as string | undefined);
+    }
 
     // botzone-neo MatchResult: { scores, log, compiles }
     const scores = body.scores as Record<string, number> | undefined;

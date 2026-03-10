@@ -553,6 +553,20 @@ export class CompeteService {
    * botzone-neo MatchResult callback: { scores, log, compiles }
    * scores: { [botId string]: number } — botId is gamer id
    */
+  /** Forfeit: mark match as ERROR, no ELO change */
+  async handleMatchForfeit(matchId: number, forfeitedBotId?: string): Promise<{ ok: boolean }> {
+    const match = await this.matchRepo.findOne({ where: { id: matchId } });
+    if (!match) return { ok: false };
+    if (match.status === MatchStatus.FINISHED || match.status === MatchStatus.ERROR) return { ok: true };
+
+    await this.matchRepo.update(matchId, {
+      status: MatchStatus.ERROR,
+      result: JSON.stringify({ verdict: 'forfeit', forfeitedBot: forfeitedBotId }),
+    });
+    this.logger.warn(`Match ${matchId} marked as forfeit (bot ${forfeitedBotId} no-response)`);
+    return { ok: true };
+  }
+
   async handleMatchCallbackByMatchId(
     matchId: number,
     scores?: Record<string, number>,
