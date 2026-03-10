@@ -1049,8 +1049,9 @@ export class CompeteService {
     if (game.disabled) throw new BadRequestException('游戏已禁用');
 
     // 取 ELO 最高的 topN 个 gamer
+    // 仅取 code 类型 bot（内榜参赛者），human/external/webhook 无法保证随时在线
     const gamers = await this.gamerRepo.find({
-      where: { gameId },
+      where: { gameId, type: 'code' },
       order: { elo: 'DESC' },
       take: topN,
     });
