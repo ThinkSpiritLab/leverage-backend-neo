@@ -42,4 +42,12 @@ export const validationSchema = Joi.object({
 
   // Submission throttle
   MAX_SUBMISSION_PER_MINUTE: Joi.number().default(10),
+
+  // Botzone external judge provider (optional)
+  BOTZONE_ENABLED: Joi.boolean().default(false),
+  BOTZONE_BASE_URL: Joi.string().uri().optional(),
+  BOTZONE_API_KEY: Joi.string().optional(),
+  BOTZONE_CALLBACK_TOKEN: Joi.string().optional(),
+  BOTZONE_DEFAULT_PROBLEM_ID: Joi.string().optional(),
+  BOTZONE_POLL_INTERVAL_MS: Joi.number().default(30000),
 });

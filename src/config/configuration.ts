@@ -29,6 +29,15 @@ export default () => ({
     maxPerMinute:
       parseInt(process.env.MAX_SUBMISSION_PER_MINUTE ?? '10', 10) || 10,
   },
+  botzone: {
+    enabled: process.env.BOTZONE_ENABLED === 'true',
+    baseUrl: process.env.BOTZONE_BASE_URL ?? '',
+    apiKey: process.env.BOTZONE_API_KEY ?? '',
+    callbackToken: process.env.BOTZONE_CALLBACK_TOKEN ?? '',
+    defaultProblemId: process.env.BOTZONE_DEFAULT_PROBLEM_ID ?? '',
+    pollIntervalMs:
+      parseInt(process.env.BOTZONE_POLL_INTERVAL_MS ?? '30000', 10) || 30_000,
+  },
   init: {
     saUsername: process.env.INIT_SA_USERNAME ?? 'admin',
     saPassword: process.env.INIT_SA_PASSWORD ?? 'Admin@123456',

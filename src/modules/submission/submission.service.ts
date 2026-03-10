@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -32,6 +33,8 @@ import { RejudgeDto } from './dto/rejudge.dto';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
+import { BotzoneClientService } from '../botzone/botzone-client.service';
+import { JudgeProviderName } from '../judge-provider/judge-provider.interface';
 
 export enum UserProblemStatus {
   TODO = 0,
@@ -85,6 +88,8 @@ export class SubmissionService {
     private readonly judgeTxQueue: Queue,
     @InjectMetric(SUBMISSION_TOTAL_COUNTER)
     private readonly submissionCounter: Counter<string>,
+    @Optional()
+    private readonly botzoneClient: BotzoneClientService | null,
   ) {}
 
   async create(userId: number, dto: CreateSubmissionDto): Promise<Submission> {
@@ -98,6 +103,16 @@ export class SubmissionService {
       problem,
       dto.language,
     );
+
+    // Determine which judge provider to use
+    const botzoneEnabled = this.configService.get<boolean>(
+      'botzone.enabled',
+      false,
+    );
+    const usesBotzone =
+      botzoneEnabled &&
+      this.botzoneClient !== null;
+
     const submission = await this.submissionRepo.save({
       userId,
       problemId: dto.problemId,
@@ -105,18 +120,25 @@ export class SubmissionService {
       status: Status.PENDING,
       contestId: dto.contestId ?? null,
       courseId: dto.courseId ?? null,
+      provider: usesBotzone ? JudgeProviderName.Botzone : null,
     });
     await this.miscRepo.save({ submissionId: submission.id, code: dto.code });
-    await this.judgeTxQueue.add('judge', {
-      submissionId: submission.id,
-      task: {
-        language: dto.language,
-        code: dto.code,
-        timeLimit,
-        memoryLimit,
-        testDataUrl: this.buildTestDataUrl(problem),
-      },
-    });
+
+    if (usesBotzone) {
+      await this.enqueueToBottzone(submission, problem, dto, timeLimit, memoryLimit);
+    } else {
+      await this.judgeTxQueue.add('judge', {
+        submissionId: submission.id,
+        task: {
+          language: dto.language,
+          code: dto.code,
+          timeLimit,
+          memoryLimit,
+          testDataUrl: this.buildTestDataUrl(problem),
+        },
+      });
+    }
+
     // Increment business metric counter
     const langName = LANGUAGE_EXT_MAP[dto.language] ?? String(dto.language);
     this.submissionCounter
@@ -124,9 +146,51 @@ export class SubmissionService {
       .inc();
 
     this.logger.log(
-      `Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}`,
+      `Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}, provider=${usesBotzone ? 'botzone' : 'heng'}`,
     );
     return submission;
+  }
+
+  /**
+   * Enqueue a submission to botzone-neo and persist the external job ID.
+   */
+  private async enqueueToBottzone(
+    submission: Submission,
+    problem: Problem,
+    dto: CreateSubmissionDto,
+    timeLimit: number,
+    memoryLimit: number,
+  ): Promise<void> {
+    try {
+      const result = await this.botzoneClient!.enqueue({
+        submissionId: submission.id,
+        language: dto.language,
+        code: dto.code,
+        timeLimit,
+        memoryLimit,
+        testDataUrl: this.buildTestDataUrl(problem),
+      });
+
+      // Persist externalJobId + providerMeta
+      await this.submissionRepo.update(submission.id, {
+        externalJobId: result.externalJobId,
+        providerMeta: result.providerMeta
+          ? JSON.stringify(result.providerMeta)
+          : null,
+      });
+
+      this.logger.log(
+        `Botzone enqueue success: submissionId=${submission.id}, externalJobId=${result.externalJobId}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Botzone enqueue failed for submissionId=${submission.id}`,
+        err,
+      );
+      // Mark as SE so it doesn't stay pending indefinitely
+      await this.submissionRepo.update(submission.id, { status: Status.SE });
+      throw err;
+    }
   }
 
   async findAll(

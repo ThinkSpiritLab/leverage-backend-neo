@@ -25,6 +25,7 @@ import { QueueModule } from './modules/queue/queue.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { HengModule } from './modules/heng/heng.module';
 import { ReceiveModule } from './modules/receive/receive.module';
+import { BotzoneModule } from './modules/botzone/botzone.module';
 import { ProblemModule } from './modules/problem/problem.module';
 import { SubmissionModule } from './modules/submission/submission.module';
 import { TagModule } from './modules/tag/tag.module';
@@ -88,6 +89,9 @@ import { MessageModule } from './modules/message/message.module';
 
     // 评测结果接收处理
     ReceiveModule,
+
+    // Botzone 外部评测提供商
+    BotzoneModule,
 
     // 题目模块
     ProblemModule,

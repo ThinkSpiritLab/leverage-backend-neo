@@ -103,6 +103,9 @@ const mockSubmission: Submission = {
   contestId: null,
   contest: null as any,
   rejudgeLogs: [],
+  provider: null,
+  externalJobId: null,
+  providerMeta: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
