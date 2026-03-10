@@ -250,7 +250,10 @@ export class CompeteService {
    * 发起对局
    */
   async launchMatch(gameId: number, gamerIds: number[]): Promise<Match> {
-    const game = await this.gameRepo.findOneOrFail({ where: { id: gameId } });
+    const game = await this.gameRepo.findOneOrFail({
+      where: { id: gameId },
+      select: ['id', 'title', 'gamerQuantity', 'timeLimit', 'memoryLimit', 'judgerCode', 'judgerLanguage'],
+    });
 
     if (gamerIds.length !== game.gamerQuantity) {
       throw new BadRequestException(
@@ -417,6 +420,44 @@ export class CompeteService {
     // Update ELO scores for all participating gamers
     if (state === 'finished' && result?.finalResult) {
       await this.updateElo(result.finalResult);
+    }
+
+    return { ok: true };
+  }
+
+  /**
+   * botzone-neo MatchResult callback: { scores, log, compiles }
+   * scores: { [botId string]: number } — botId is gamer id
+   */
+  async handleMatchCallbackByMatchId(
+    matchId: number,
+    scores?: Record<string, number>,
+    log?: unknown[],
+  ): Promise<{ ok: boolean }> {
+    const match = await this.matchRepo.findOne({ where: { id: matchId } });
+    if (!match) {
+      this.logger.warn(`match-callback: matchId=${matchId} not found`);
+      return { ok: false };
+    }
+
+    if (match.status === MatchStatus.FINISHED || match.status === MatchStatus.ERROR) {
+      return { ok: true }; // idempotent
+    }
+
+    const resultData = JSON.stringify({
+      verdict: 'OK',
+      finalResult: scores ?? {},
+      roundCount: Array.isArray(log) ? log.length : 0,
+      rounds: log ?? [],
+    });
+
+    await this.matchRepo.update(matchId, {
+      status: MatchStatus.FINISHED,
+      result: resultData,
+    });
+
+    if (scores && Object.keys(scores).length >= 2) {
+      await this.updateElo(scores);
     }
 
     return { ok: true };

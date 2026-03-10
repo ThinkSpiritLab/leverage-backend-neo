@@ -116,7 +116,9 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     const baseUrl = this.configService.get<string>('botzone.baseUrl', '');
     const apiKey = this.configService.get<string>('botzone.apiKey', '');
     const callbackBase = this.configService.get<string>('baseUrl', 'http://localhost:3000');
-    const callbackUrl = `${callbackBase}/compete/match-callback`;
+    const callbackToken = this.configService.get<string>('botzone.callbackToken', '');
+    const tokenParam = callbackToken ? `?token=${encodeURIComponent(callbackToken)}` : '';
+    const callbackUrl = `${callbackBase}/compete/match-callback/${matchId}${tokenParam}`;
 
     // botzone-neo BotzoneTaskDto format:
     // game: { judger: {language, source, limit}, "0": {...}, "1": {...} }
@@ -140,8 +142,8 @@ export class JudgeTxWorker implements OnApplicationShutdown {
       type: 'botzone',
       game: gameField,
       callback: {
-        update: `${callbackBase}/compete/match-callback`,
-        finish: `${callbackBase}/compete/match-callback`,
+        update: callbackUrl,
+        finish: callbackUrl,
       },
     };
 
@@ -160,7 +162,11 @@ export class JudgeTxWorker implements OnApplicationShutdown {
       this.logger.log(`Compete job accepted by botzone: matchId=${matchId}, jobId=${jobId}`);
       await this.matchRepo.update(matchId, { externalJobId: jobId, status: MatchStatus.RUNNING });
     } catch (err: unknown) {
-      this.logger.error(`Failed to submit compete job: matchId=${matchId}`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      const axiosErr = err as { response?: { data?: unknown; status?: number } };
+      this.logger.error(
+        `Failed to submit compete job: matchId=${matchId} baseUrl=${baseUrl} err=${msg} status=${axiosErr?.response?.status} data=${JSON.stringify(axiosErr?.response?.data)}`,
+      );
       await this.matchRepo.update(matchId, { status: MatchStatus.ERROR });
       throw err;
     }

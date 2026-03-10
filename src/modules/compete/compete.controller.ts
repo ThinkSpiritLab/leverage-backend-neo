@@ -264,41 +264,56 @@ export class CompeteController {
   // ─── Match Callback ──────────────────────────────────────────────────────────
 
   /**
-   * POST /compete/match-callback
+   * POST /compete/match-callback/:matchId
    * Botzone-neo 对局评测结果回调（仅限 botzone-neo 内部调用）
+   *
+   * Payload from botzone-neo (MatchResult):
+   *   { scores: Record<string,number>, log: unknown[], compiles: CompileSummary[] }
    */
-  @Post('match-callback')
+  @Post('match-callback/:matchId')
   @HttpCode(HttpStatus.OK)
   @SkipThrottle()
   @ApiOperation({ summary: 'botzone-neo 对局评测结果回调' })
   async receiveMatchCallback(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Headers('authorization') authHeader: string | undefined,
+    @Query('token') tokenParam: string | undefined,
+    @Body() body: Record<string, unknown>,
+  ): Promise<{ ok: boolean }> {
+    this.assertCallbackToken(authHeader, tokenParam);
+
+    this.logger.log(`match-callback: matchId=${matchId} scores=${JSON.stringify(body.scores)}`);
+
+    // botzone-neo MatchResult: { scores, log, compiles }
+    const scores = body.scores as Record<string, number> | undefined;
+    const log = body.log as unknown[] | undefined;
+
+    return this.competeService.handleMatchCallbackByMatchId(matchId, scores, log);
+  }
+
+  /**
+   * POST /compete/match-callback (legacy, kept for compatibility)
+   */
+  @Post('match-callback')
+  @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
+  @ApiOperation({ summary: 'botzone-neo 对局评测结果回调（legacy）' })
+  async receiveMatchCallbackLegacy(
     @Headers('authorization') authHeader: string | undefined,
     @Body() body: MatchCallbackDto,
   ): Promise<{ ok: boolean }> {
     this.assertCallbackToken(authHeader);
-
-    this.logger.log(
-      `match-callback: jobId=${body.jobId}, state=${body.state}`,
-    );
-
-    return this.competeService.handleMatchCallback(
-      body.jobId,
-      body.state,
-      body.result,
-    );
+    return this.competeService.handleMatchCallback(body.jobId, body.state, body.result);
   }
 
   /** Validate BOTZONE_CALLBACK_TOKEN bearer auth. */
-  private assertCallbackToken(authHeader: string | undefined): void {
+  private assertCallbackToken(authHeader: string | undefined, queryToken?: string): void {
     if (!this.callbackToken) {
-      this.logger.warn(
-        'BOTZONE_CALLBACK_TOKEN not set — match-callback is unprotected (dev mode)',
-      );
+      this.logger.warn('BOTZONE_CALLBACK_TOKEN not set — match-callback is unprotected (dev mode)');
       return;
     }
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : authHeader;
+    const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const token = headerToken ?? queryToken;
     if (token !== this.callbackToken) {
       throw new UnauthorizedException('Invalid callback token');
     }
