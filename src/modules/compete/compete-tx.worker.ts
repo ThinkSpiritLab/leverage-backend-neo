@@ -35,23 +35,20 @@ export interface CompeteTxPayload {
   positionToGamerId?: Record<number, number>;
 }
 
-/** Shape of the botzone-neo game-submit request body */
+/** Shape of the botzone-neo game-submit request body (game-dict format) */
 interface BotzoneGameSubmitRequest {
   type: 'botzone';
-  judger: {
-    sourceCode: string; // base64
+  game: Record<string, {
     language: string;
-  };
-  bots: Array<{
-    position: number;
-    botId: string;
-    sourceCode: string; // base64
-    language: string;
+    source: string; // base64
+    limit: { time: number; memory: number };
+    runnerType?: 'code' | 'webhook';
+    externalUrl?: string;
+    webhookTimeoutMs?: number;
   }>;
-  timeLimit: number;
-  memoryLimitMB: number;
-  callbackUrl: string;
-  correlationId: string;
+  callback: { update?: string; finish: string };
+  runMode: 'restart' | 'longrun';
+  initdata?: string;
 }
 
 interface BotzoneGameSubmitResponse {
@@ -101,32 +98,35 @@ export class CompeteTxWorker {
       'http://localhost:3000',
     );
 
-    const callbackUrl = `${callbackBase}/compete/match-callback`;
-    const correlationId = `match-${matchId}`;
+    const callbackToken = this.configService.get<string>('botzone.callbackToken', '');
+    const callbackUrl = `${callbackBase}/compete/match-callback/${matchId}${callbackToken ? `?token=${callbackToken}` : ''}`;
+    // Build botzone game-type request (game-dict format expected by botzone-neo)
+    const gameDict: BotzoneGameSubmitRequest['game'] = {
+      judger: {
+        language: game.judgerLanguage,
+        source: Buffer.from(game.judgerCode, 'utf-8').toString('base64'),
+        limit: { time: game.timeLimit, memory: Math.round(game.memoryLimit) },
+      },
+    };
+    gamers.forEach((gamer, index) => {
+      const isExternal = (gamer.type === 'webhook' || gamer.type === 'human' || gamer.type === 'external') && gamer.webhookUrl;
+      gameDict[String(index)] = {
+        language: isExternal ? 'webhook' : (gamer.language ?? 'python'),
+        source: isExternal ? '' : Buffer.from(gamer.code ?? '', 'utf-8').toString('base64'),
+        limit: { time: game.timeLimit, memory: Math.round(game.memoryLimit) },
+        runnerType: isExternal ? 'webhook' : 'code',
+        externalUrl: isExternal ? gamer.webhookUrl : undefined,
+        webhookTimeoutMs: isExternal ? gamer.webhookTimeoutMs : undefined,
+      };
+    });
 
-    // Build botzone game-type request
     const body: BotzoneGameSubmitRequest = {
       type: 'botzone',
-      judger: {
-        sourceCode: Buffer.from(game.judgerCode, 'utf-8').toString('base64'),
-        language: game.judgerLanguage,
+      game: gameDict,
+      callback: {
+        finish: callbackUrl,
       },
-      bots: gamers.map((gamer, index) => {
-        const isExternal = (gamer.type === 'webhook' || gamer.type === 'human' || gamer.type === 'external') && gamer.webhookUrl;
-        return {
-          position: index,
-          botId: String(gamer.id),
-          sourceCode: isExternal ? '' : Buffer.from(gamer.code ?? '', 'utf-8').toString('base64'),
-          language: isExternal ? 'webhook' : gamer.language,
-          runnerType: isExternal ? 'webhook' : 'code',
-          externalUrl: isExternal ? gamer.webhookUrl : undefined,
-          webhookTimeoutMs: gamer.webhookTimeoutMs,
-        };
-      }),
-      timeLimit: game.timeLimit,
-      memoryLimitMB: Math.round(game.memoryLimit),
-      callbackUrl,
-      correlationId,
+      runMode: 'restart',
     };
 
     try {
