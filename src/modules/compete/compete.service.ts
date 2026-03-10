@@ -392,8 +392,9 @@ export class CompeteService {
             ? `${baseUrl}/compete/human-turn-webhook/${match.id}/${g.id}`
             : g.webhookUrl ?? undefined;
 
+        // Human: 3 min to respond; external bot: 30s (they should be polling)
         const webhookTimeoutMs =
-          type === 'human' || type === 'external' ? 300_000 : undefined;
+          type === 'human' ? 180_000 : type === 'external' ? 30_000 : undefined;
 
         return {
           id: g.id,
