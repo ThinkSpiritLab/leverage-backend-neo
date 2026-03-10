@@ -29,6 +29,7 @@ import { SubmitGamerDto } from './dto/submit-gamer.dto';
 import { ModifyPlayerDto } from './dto/modify-player.dto';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
+import { HumanTurnService } from './human-turn.service';
 
 export enum MatchStatus {
   PENDING = 0,
@@ -133,6 +134,7 @@ export class CompeteService {
     private readonly redisService: RedisService,
     private readonly settingService: SettingService,
     private readonly configService: ConfigService,
+    private readonly humanTurnService: HumanTurnService,
   ) {}
 
   // ─── Game CRUD ───────────────────────────────────────────────────────────────
@@ -556,6 +558,8 @@ export class CompeteService {
           { won: score === maxScore ? 1 : 0 },
         );
       }
+      // Push game-over SSE so browser doesn't wait for the 3s poll
+      this.humanTurnService.notifyGameOver(match.id, finalResult);
     }
 
     return { ok: true };
@@ -641,6 +645,8 @@ export class CompeteService {
           { won: score === maxScore ? 1 : 0 },
         );
       }
+      // Push game-over SSE so browser doesn't wait for the 3s poll
+      this.humanTurnService.notifyGameOver(matchId, gamerIdScores);
     }
 
     return { ok: true };

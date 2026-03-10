@@ -114,6 +114,11 @@ export class HumanTurnService {
   /** Notify waiting long-poll clients when a turn becomes available */
   private readonly turnWaiters = new Map<number, (turn: PendingTurn) => void>();
 
+  /** Notify all SSE clients for a match that the game is over */
+  notifyGameOver(matchId: number, finalResult: Record<string, number>) {
+    this.notifySSE(matchId, { type: 'game-over', finalResult });
+  }
+
   private notifySSE(matchId: number, payload: unknown) {
     const data = JSON.stringify(payload);
 
