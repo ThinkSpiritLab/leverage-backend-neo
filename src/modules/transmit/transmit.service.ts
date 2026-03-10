@@ -23,27 +23,57 @@ export class TransmitService {
    * 列出所有评测机（已弃用，返回静态数据）
    */
   async listJudgers() {
-    const baseUrl = process.env.HENG_BASE_URL ?? '';
-    let online = false;
-    if (baseUrl) {
+    const results: { name: string; version: string; ttl: number; type: string }[] = [];
+
+    // Check botzone-neo (primary judge engine)
+    const botzoneBaseUrl = process.env.BOTZONE_BASE_URL ?? '';
+    if (botzoneBaseUrl) {
+      let botzoneOnline = false;
+      let botzoneVersion = '-';
       try {
         const axiosModule = await import('axios');
-        await axiosModule.default.get(`${baseUrl}/`, {
+        const res = await axiosModule.default.get(`${botzoneBaseUrl}/health`, {
           timeout: 2000,
-          validateStatus: () => true, // treat any HTTP response as online
+          validateStatus: () => true,
         });
-        online = true;
+        if (res.data?.status === 'ok') {
+          botzoneOnline = true;
+          botzoneVersion = res.data?.version ?? '-';
+        }
       } catch {
-        online = false;
+        botzoneOnline = false;
       }
+      results.push({
+        name: 'Botzone Neo',
+        version: botzoneVersion,
+        ttl: botzoneOnline ? 30 : 0,
+        type: 'botzone',
+      });
     }
-    return [
-      {
+
+    // Legacy: Check Heng (only if HENG_BASE_URL is set)
+    const hengBaseUrl = process.env.HENG_BASE_URL ?? '';
+    if (hengBaseUrl) {
+      let hengOnline = false;
+      try {
+        const axiosModule = await import('axios');
+        await axiosModule.default.get(`${hengBaseUrl}/`, {
+          timeout: 2000,
+          validateStatus: () => true,
+        });
+        hengOnline = true;
+      } catch {
+        hengOnline = false;
+      }
+      results.push({
         name: 'Heng',
         version: '-',
-        ttl: online ? 30 : 0,
-      },
-    ];
+        ttl: hengOnline ? 30 : 0,
+        type: 'heng',
+      });
+    }
+
+    return results;
   }
 
   /**
