@@ -25,7 +25,10 @@ export interface CompeteTxPayload {
     id: number;
     code: string;
     language: string;
+    position?: number;
   }>;
+  /** position index → real gamerId mapping */
+  positionToGamerId?: Record<number, number>;
 }
 
 /** Shape of the botzone-neo game-submit request body */

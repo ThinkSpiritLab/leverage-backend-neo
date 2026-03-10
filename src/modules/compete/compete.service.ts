@@ -275,20 +275,28 @@ export class CompeteService {
       status: MatchStatus.PENDING,
     });
 
-    // 推入评测队列
+    // 创建 gamer 参与记录（按 gamerIds 顺序确定 position index）
+    await this.matchGamerLinkRepo.save(
+      gamerIds.map((gamerId, index) => ({ matchId: match.id, gamerId, index })),
+    );
+
+    // 推入评测队列（带 positionMap 用于 ELO 回调映射）
+    const positionToGamerId: Record<number, number> = {};
+    gamerIds.forEach((id, index) => { positionToGamerId[index] = id; });
+
     await this.judgeTxQueue.add('compete', {
       matchId: match.id,
+      positionToGamerId,
       game: {
         judgerCode: game.judgerCode,
         judgerLanguage: game.judgerLanguage,
         timeLimit: game.timeLimit,
         memoryLimit: game.memoryLimit,
       },
-      gamers: gamers.map((g) => ({
-        id: g.id,
-        code: g.code,
-        language: g.language,
-      })),
+      gamers: gamerIds.map((id, index) => {
+        const g = gamers.find(gm => gm.id === id)!;
+        return { id: g.id, code: g.code, language: g.language, position: index };
+      }),
     });
 
     return match;
@@ -318,7 +326,7 @@ export class CompeteService {
   async findOneMatch(id: number): Promise<Match> {
     const match = await this.matchRepo.findOne({
       where: { id },
-      relations: ['game', 'links'],
+      relations: ['game', 'links', 'links.gamer'],
     });
     if (!match) throw new NotFoundException(`对局 #${id} 不存在`);
     return match;
@@ -444,9 +452,23 @@ export class CompeteService {
       return { ok: true }; // idempotent
     }
 
+    // Translate position index ("0","1") → real gamerId via match_gamer_link
+    const links = await this.matchGamerLinkRepo.find({ where: { matchId } });
+    const positionToGamerId: Record<string, number> = {};
+    links.forEach(l => { positionToGamerId[String(l.index)] = l.gamerId; });
+
+    // Convert position-keyed scores to gamerId-keyed
+    const gamerIdScores: Record<string, number> = {};
+    if (scores) {
+      for (const [posOrId, score] of Object.entries(scores)) {
+        const gId = positionToGamerId[posOrId] ?? posOrId;
+        gamerIdScores[String(gId)] = score;
+      }
+    }
+
     const resultData = JSON.stringify({
       verdict: 'OK',
-      finalResult: scores ?? {},
+      finalResult: gamerIdScores,
       roundCount: Array.isArray(log) ? log.length : 0,
       rounds: log ?? [],
     });
@@ -456,8 +478,8 @@ export class CompeteService {
       result: resultData,
     });
 
-    if (scores && Object.keys(scores).length >= 2) {
-      await this.updateElo(scores);
+    if (Object.keys(gamerIdScores).length >= 2) {
+      await this.updateElo(gamerIdScores);
     }
 
     return { ok: true };
