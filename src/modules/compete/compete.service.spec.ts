@@ -13,8 +13,10 @@ import { Gamer } from '../../database/entities/gamer.entity';
 import { Match } from '../../database/entities/match.entity';
 import { MatchGamerLink } from '../../database/entities/match-gamer-link.entity';
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
+import { ConfigService } from '@nestjs/config';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
+import { HumanTurnService } from './human-turn.service';
 import { CompeteService, MatchStatus } from './compete.service';
 
 // ─── Mock helpers ────────────────────────────────────────────────────────────
@@ -28,6 +30,7 @@ const makeQb = (overrides: Record<string, any> = {}) => {
     addOrderBy: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
     leftJoinAndSelect: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
@@ -36,6 +39,7 @@ const makeQb = (overrides: Record<string, any> = {}) => {
     groupBy: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
     getMany: jest.fn().mockResolvedValue([]),
+    getOne: jest.fn().mockResolvedValue(null),
     getRawMany: jest.fn().mockResolvedValue([]),
     ...overrides,
   };
@@ -74,7 +78,7 @@ const makeRedisClient = (overrides: Record<string, any> = {}) => ({
 
 // ─── 公共夹具 ─────────────────────────────────────────────────────────────────
 
-const gameFixture: Game = {
+const gameFixture = {
   id: 1,
   title: 'TicTacToe',
   description: '井字棋',
@@ -82,11 +86,13 @@ const gameFixture: Game = {
   memoryLimit: 256,
   gamerQuantity: 2,
   disabled: false,
+  allowHuman: false,
   judgerCode: 'judge code',
   judgerLanguage: 'python3',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
-};
+  setName() { (this as any).name = this.title; },
+} as Game;
 
 const gamerFixture: Gamer = {
   id: 10,
@@ -160,6 +166,9 @@ describe('CompeteService', () => {
 
     mockMatchGamerLinkRepo = {
       find: jest.fn(),
+      save: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
     mockQueue = {
@@ -201,6 +210,22 @@ describe('CompeteService', () => {
         { provide: DataSource, useValue: mockDataSource },
         { provide: RedisService, useValue: mockRedisService },
         { provide: SettingService, useValue: mockSettingService },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('') },
+        },
+        {
+          provide: HumanTurnService,
+          useValue: {
+            waitForResponse: jest.fn(),
+            waitForTurn: jest.fn(),
+            submitResponse: jest.fn(),
+            registerSSEClient: jest.fn(),
+            unregisterSSEClient: jest.fn(),
+            replayPendingTurn: jest.fn(),
+            notifyGameOver: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -265,9 +290,89 @@ describe('CompeteService', () => {
       mockGameRepo.save.mockResolvedValue({ ...dto, id: 2 });
 
       const result = await service.createGame(dto as any);
-      expect(mockGameRepo.create).toHaveBeenCalledWith(dto);
+      expect(mockGameRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ judgerCode: 'code', judgerLanguage: 'python3' }),
+      );
       expect(mockGameRepo.save).toHaveBeenCalled();
       expect(result.id).toBe(2);
+    });
+
+    it('judgerCode 未传时默认为空字符串', async () => {
+      const dto = {
+        title: 'Chess',
+        description: '国际象棋',
+        timeLimit: 2000,
+        memoryLimit: 512,
+        gamerQuantity: 2,
+        // judgerCode 和 judgerLanguage 均未传
+      };
+      mockGameRepo.create.mockReturnValue({ ...dto, id: 3, judgerCode: '', judgerLanguage: '' });
+      mockGameRepo.save.mockResolvedValue({ ...dto, id: 3, judgerCode: '', judgerLanguage: '' });
+
+      const result = await service.createGame(dto as any);
+      // 应以空字符串填充 judgerCode/judgerLanguage
+      expect(mockGameRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ judgerCode: '', judgerLanguage: '' }),
+      );
+      expect(result.id).toBe(3);
+    });
+
+    it('supervisor 角色可创建游戏', async () => {
+      const dto = {
+        title: 'MyGame',
+        description: '测试',
+        timeLimit: 1000,
+        memoryLimit: 256,
+        gamerQuantity: 2,
+        judgerCode: 'judge',
+        judgerLanguage: 'python3',
+      };
+      mockGameRepo.create.mockReturnValue({ ...dto, id: 4 });
+      mockGameRepo.save.mockResolvedValue({ ...dto, id: 4 });
+
+      // supervisor 角色调用 createGame（角色判断在 Controller 层由 RolesGuard 完成）
+      const result = await service.createGame(dto as any, 'supervisor');
+      expect(result.id).toBe(4);
+    });
+  });
+
+  describe('findOneGameWithJudger', () => {
+    it('应返回游戏的 judgerCode 和 judgerLanguage', async () => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({
+          ...gameFixture,
+          judgerCode: 'judge code',
+          judgerLanguage: 'python3',
+        }),
+      });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.findOneGameWithJudger(1);
+      expect(result).toEqual({ judgerCode: 'judge code', judgerLanguage: 'python3' });
+      expect(qb.addSelect).toHaveBeenCalledWith('g.judgerCode');
+      expect(qb.addSelect).toHaveBeenCalledWith('g.judgerLanguage');
+    });
+
+    it('游戏不存在时抛 NotFoundException', async () => {
+      const qb = makeQb({ getOne: jest.fn().mockResolvedValue(null) });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await expect(service.findOneGameWithJudger(999)).rejects.toThrow(NotFoundException);
+    });
+
+    it('judgerCode 为空时返回空字符串', async () => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({
+          ...gameFixture,
+          judgerCode: undefined,
+          judgerLanguage: undefined,
+        }),
+      });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.findOneGameWithJudger(1);
+      expect(result.judgerCode).toBe('');
+      expect(result.judgerLanguage).toBe('');
     });
   });
 
@@ -393,7 +498,10 @@ describe('CompeteService', () => {
         code: 'print("hi")',
       };
       const result = await service.createGamer(dto as any, 42);
-      expect(mockGamerRepo.create).toHaveBeenCalledWith({ ...dto, userId: 42 });
+      // Service 实际调用包含更多字段（type/webhookUrl 等），只验证核心字段
+      expect(mockGamerRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 42, gameId: 1, title: 'MyBot' }),
+      );
       expect(result.id).toBe(10);
     });
 
@@ -406,11 +514,20 @@ describe('CompeteService', () => {
   });
 
   describe('updateGamer', () => {
-    it('应更新并返回 gamer', async () => {
-      mockGamerRepo.findOne
-        .mockResolvedValueOnce(gamerFixture)
-        .mockResolvedValueOnce({ ...gamerFixture, title: 'Updated' });
-      mockGamerRepo.update.mockResolvedValue({ affected: 1 });
+    /** updateGamer 内部调用 findOneGamer，后者使用 createQueryBuilder */
+    const mockGamerQb = (gamerOverride: Partial<typeof gamerFixture> = {}) => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({ ...gamerFixture, ...gamerOverride }),
+      });
+      mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+      return qb;
+    };
+
+    it('应创建新版本 gamer 并返回', async () => {
+      mockGamerQb(); // findOneGamer 返回 gamerFixture（userId=42）
+      const forked = { ...gamerFixture, id: 99, title: 'Updated' };
+      mockGamerRepo.create.mockReturnValue(forked);
+      mockGamerRepo.save.mockResolvedValue(forked);
 
       const result = await service.updateGamer(
         10,
@@ -421,7 +538,7 @@ describe('CompeteService', () => {
     });
 
     it('非本人修改时抛 BadRequestException', async () => {
-      mockGamerRepo.findOne.mockResolvedValue({ ...gamerFixture, userId: 99 });
+      mockGamerQb({ userId: 99 }); // 返回不同 userId
       await expect(service.updateGamer(10, {} as any, 42)).rejects.toThrow(
         BadRequestException,
       );
@@ -498,16 +615,26 @@ describe('CompeteService', () => {
   });
 
   describe('launchMatch', () => {
+    /** 构造 gameRepo.createQueryBuilder 的 mock，返回包含 judgerCode 的 game */
+    const mockGameQb = (gameOverride: Partial<typeof gameFixture> = {}) => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({ ...gameFixture, ...gameOverride }),
+      });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+      return qb;
+    };
+
     it('应发起对局并推入队列', async () => {
-      mockGameRepo.findOneOrFail.mockResolvedValue(gameFixture);
-      const gamer1 = { id: 10, code: 'a', language: 'python3' };
-      const gamer2 = { id: 11, code: 'b', language: 'cpp' };
+      mockGameQb();
+      const gamer1 = { id: 10, code: 'a', language: 'python3', type: 'code' };
+      const gamer2 = { id: 11, code: 'b', language: 'cpp', type: 'code' };
       mockGamerRepo.find.mockResolvedValue([gamer1, gamer2]);
       mockMatchRepo.save.mockResolvedValue({
         id: 100,
         gameId: 1,
         status: MatchStatus.PENDING,
       });
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
 
       const result = await service.launchMatch(1, [10, 11]);
       expect(mockQueue.add).toHaveBeenCalledWith(
@@ -518,20 +645,37 @@ describe('CompeteService', () => {
     });
 
     it('参赛人数不匹配时抛 BadRequestException', async () => {
-      mockGameRepo.findOneOrFail.mockResolvedValue({
-        ...gameFixture,
-        gamerQuantity: 2,
-      });
+      mockGameQb({ gamerQuantity: 2 });
       await expect(service.launchMatch(1, [10])).rejects.toThrow(
         BadRequestException,
       );
     });
 
     it('部分 gamer 不存在时抛 NotFoundException', async () => {
-      mockGameRepo.findOneOrFail.mockResolvedValue(gameFixture);
+      mockGameQb();
       mockGamerRepo.find.mockResolvedValue([gamerFixture]); // 只返回 1 个，但传入 2 个 ID
       await expect(service.launchMatch(1, [10, 11])).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('launchMatch 携带 judgerCode 推入队列', async () => {
+      mockGameQb({ judgerCode: 'custom_judge', judgerLanguage: 'cpp17' });
+      const gamer1 = { id: 10, code: 'a', language: 'python3', type: 'code' };
+      const gamer2 = { id: 11, code: 'b', language: 'cpp', type: 'code' };
+      mockGamerRepo.find.mockResolvedValue([gamer1, gamer2]);
+      mockMatchRepo.save.mockResolvedValue({ id: 101, gameId: 1, status: MatchStatus.PENDING });
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+
+      await service.launchMatch(1, [10, 11]);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'compete',
+        expect.objectContaining({
+          game: expect.objectContaining({
+            judgerCode: 'custom_judge',
+            judgerLanguage: 'cpp17',
+          }),
+        }),
       );
     });
   });
@@ -802,16 +946,19 @@ describe('CompeteService', () => {
         '1': JSON.stringify({ id: 11, code: 'b', language: 'cpp' }),
       };
       mockRedisClient.hgetall.mockResolvedValue(players);
-      mockGameRepo.findOneOrFail.mockResolvedValue(gameFixture);
+      // launchMatch 内部使用 gameRepo.createQueryBuilder
+      const gameQb = makeQb({ getOne: jest.fn().mockResolvedValue(gameFixture) });
+      mockGameRepo.createQueryBuilder.mockReturnValue(gameQb);
       mockGamerRepo.find.mockResolvedValue([
-        { id: 10, code: 'a', language: 'python3' },
-        { id: 11, code: 'b', language: 'cpp' },
+        { id: 10, code: 'a', language: 'python3', type: 'code' },
+        { id: 11, code: 'b', language: 'cpp', type: 'code' },
       ]);
       mockMatchRepo.save.mockResolvedValue({
         id: 100,
         gameId: 1,
         status: MatchStatus.PENDING,
       });
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
       mockRedisClient.setex.mockResolvedValue('OK');
       const multiMock = makeMulti([
         [null, 1],

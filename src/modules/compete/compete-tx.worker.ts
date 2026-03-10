@@ -14,9 +14,9 @@ import { MatchStatus } from './compete.service';
 export interface CompeteTxPayload {
   matchId: number;
   game: {
-    judgerCode: string;
+    judgerCode?: string;
     /** Language string (e.g. 'cpp17') or botzone language identifier */
-    judgerLanguage: string;
+    judgerLanguage?: string;
     timeLimit: number;
     memoryLimit: number;
   };
@@ -39,8 +39,9 @@ export interface CompeteTxPayload {
 interface BotzoneGameSubmitRequest {
   type: 'botzone';
   game: Record<string, {
-    language: string;
-    source: string; // base64
+    language?: string;
+    source?: string; // base64-encoded code
+    name?: string;   // fallback judger name when no source
     limit: { time: number; memory: number };
     runnerType?: 'code' | 'webhook';
     externalUrl?: string;
@@ -101,10 +102,14 @@ export class CompeteTxWorker {
     const callbackToken = this.configService.get<string>('botzone.callbackToken', '');
     const callbackUrl = `${callbackBase}/compete/match-callback/${matchId}${callbackToken ? `?token=${callbackToken}` : ''}`;
     // Build botzone game-type request (game-dict format expected by botzone-neo)
+    // judgerCode 可为空（游戏未配置自定义裁判时）
+    const hasJudgerCode = !!game.judgerCode;
     const gameDict: BotzoneGameSubmitRequest['game'] = {
       judger: {
-        language: game.judgerLanguage,
-        source: Buffer.from(game.judgerCode, 'utf-8').toString('base64'),
+        language: game.judgerLanguage ?? '',
+        ...(hasJudgerCode
+          ? { source: Buffer.from(game.judgerCode!, 'utf-8').toString('base64') }
+          : { name: game.judgerLanguage ?? 'default' }),
         limit: { time: game.timeLimit, memory: Math.round(game.memoryLimit) },
       },
     };

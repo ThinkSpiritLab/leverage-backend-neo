@@ -36,15 +36,17 @@ export class CreateGameDto {
   @Min(2)
   gamerQuantity: number;
 
-  @ApiProperty({ description: '裁判代码' })
+  @ApiProperty({ description: '裁判代码', required: false })
+  @IsOptional()
   @IsString()
   @MaxLength(65536)
-  judgerCode: string;
+  judgerCode?: string;
 
-  @ApiProperty({ description: '裁判代码语言' })
+  @ApiProperty({ description: '裁判代码语言', required: false })
+  @IsOptional()
   @IsString()
   @MaxLength(32)
-  judgerLanguage: string;
+  judgerLanguage?: string;
 
   @ApiProperty({ description: '是否禁用', required: false })
   @IsOptional()

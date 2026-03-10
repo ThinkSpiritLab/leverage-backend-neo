@@ -161,8 +161,26 @@ export class CompeteService {
     return game;
   }
 
-  async createGame(dto: CreateGameDto): Promise<Game> {
-    const game = this.gameRepo.create(dto);
+  /**
+   * 获取游戏（含 judgerCode/judgerLanguage），仅供 supervisor+ 调用
+   */
+  async findOneGameWithJudger(id: number): Promise<{ judgerCode: string; judgerLanguage: string }> {
+    const game = await this.gameRepo
+      .createQueryBuilder('g')
+      .addSelect('g.judgerCode')
+      .addSelect('g.judgerLanguage')
+      .where('g.id = :id', { id })
+      .getOne();
+    if (!game) throw new NotFoundException(`游戏 #${id} 不存在`);
+    return { judgerCode: game.judgerCode ?? '', judgerLanguage: game.judgerLanguage ?? '' };
+  }
+
+  async createGame(dto: CreateGameDto, creatorRole?: string): Promise<Game> {
+    const game = this.gameRepo.create({
+      ...dto,
+      judgerCode: dto.judgerCode ?? '',
+      judgerLanguage: dto.judgerLanguage ?? '',
+    });
     return this.gameRepo.save(game);
   }
 

@@ -104,15 +104,28 @@ export class CompeteController {
 
   /**
    * POST /compete/games
-   * 创建游戏（admin+）
+   * 创建游戏（supervisor+，即 supervisor/admin/sa）
    */
   @Post('games')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('supervisor')
   @ApiBearerAuth()
-  @ApiOperation({ summary: '创建游戏（admin+）' })
-  createGame(@Body() dto: CreateGameDto) {
-    return this.competeService.createGame(dto);
+  @ApiOperation({ summary: '创建游戏（supervisor+）' })
+  createGame(@Body() dto: CreateGameDto, @CurrentUser() user: JwtPayload) {
+    return this.competeService.createGame(dto, user.role);
+  }
+
+  /**
+   * GET /compete/games/:id/judger
+   * 获取游戏裁判代码（supervisor+）
+   */
+  @Get('games/:id/judger')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('supervisor')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取游戏裁判代码（supervisor+）' })
+  getGameJudger(@Param('id', ParseIntPipe) id: number) {
+    return this.competeService.findOneGameWithJudger(id);
   }
 
   /**
