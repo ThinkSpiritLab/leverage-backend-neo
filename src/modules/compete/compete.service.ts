@@ -333,7 +333,7 @@ export class CompeteService {
   async findOneMatch(id: number): Promise<Match> {
     const match = await this.matchRepo.findOne({
       where: { id },
-      relations: ['game', 'links', 'links.gamer'],
+      relations: ['game', 'links', 'links.gamer', 'links.gamer.user'],
     });
     if (!match) throw new NotFoundException(`对局 #${id} 不存在`);
     return match;
