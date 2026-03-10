@@ -3,14 +3,17 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   ParseIntPipe,
   Patch,
   Post,
   Put,
   Query,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -22,6 +25,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
+import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -36,11 +41,23 @@ import { LaunchMatchDto } from './dto/launch-match.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { SubmitGamerDto } from './dto/submit-gamer.dto';
 import { ModifyPlayerDto } from './dto/modify-player.dto';
+import { MatchCallbackDto } from './dto/match-callback.dto';
 
 @ApiTags('compete')
 @Controller('compete')
 export class CompeteController {
-  constructor(private readonly competeService: CompeteService) {}
+  private readonly logger = new Logger(CompeteController.name);
+  private readonly callbackToken: string;
+
+  constructor(
+    private readonly competeService: CompeteService,
+    private readonly configService: ConfigService,
+  ) {
+    this.callbackToken = this.configService.get<string>(
+      'botzone.callbackToken',
+      '',
+    );
+  }
 
   // ─── Games ──────────────────────────────────────────────────────────────────
 
@@ -236,6 +253,49 @@ export class CompeteController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.competeService.inspectMatch(id, user.sub);
+  }
+
+  // ─── Match Callback ──────────────────────────────────────────────────────────
+
+  /**
+   * POST /compete/match-callback
+   * Botzone-neo 对局评测结果回调（仅限 botzone-neo 内部调用）
+   */
+  @Post('match-callback')
+  @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
+  @ApiOperation({ summary: 'botzone-neo 对局评测结果回调' })
+  async receiveMatchCallback(
+    @Headers('authorization') authHeader: string | undefined,
+    @Body() body: MatchCallbackDto,
+  ): Promise<{ ok: boolean }> {
+    this.assertCallbackToken(authHeader);
+
+    this.logger.log(
+      `match-callback: jobId=${body.jobId}, state=${body.state}`,
+    );
+
+    return this.competeService.handleMatchCallback(
+      body.jobId,
+      body.state,
+      body.result,
+    );
+  }
+
+  /** Validate BOTZONE_CALLBACK_TOKEN bearer auth. */
+  private assertCallbackToken(authHeader: string | undefined): void {
+    if (!this.callbackToken) {
+      this.logger.warn(
+        'BOTZONE_CALLBACK_TOKEN not set — match-callback is unprotected (dev mode)',
+      );
+      return;
+    }
+    const token = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : authHeader;
+    if (token !== this.callbackToken) {
+      throw new UnauthorizedException('Invalid callback token');
+    }
   }
 
   // ─── Rooms ───────────────────────────────────────────────────────────────────

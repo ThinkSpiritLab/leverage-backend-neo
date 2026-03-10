@@ -26,6 +26,9 @@ export class Match {
   @Column('int', { default: 0 })
   status: number;
 
+  @Column('varchar', { length: 128, nullable: true })
+  externalJobId: string;
+
   @Column('mediumtext', { nullable: true })
   result: string;
 

@@ -12,6 +12,7 @@ import { SettingModule } from '../setting/setting.module';
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
 import { CompeteController } from './compete.controller';
 import { CompeteService } from './compete.service';
+import { CompeteTxWorker } from './compete-tx.worker';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { CompeteService } from './compete.service';
     SettingModule,
   ],
   controllers: [CompeteController],
-  providers: [CompeteService],
+  providers: [CompeteService, CompeteTxWorker],
   exports: [CompeteService],
 })
 export class CompeteModule {}

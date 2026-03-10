@@ -360,6 +360,121 @@ export class CompeteService {
     };
   }
 
+  // ─── Match Callback ──────────────────────────────────────────────────────────
+
+  /**
+   * 处理 botzone-neo 对局评测回调
+   *
+   * - 幂等：已 FINISHED/ERROR 的对局直接返回 ok
+   * - 仅 terminal 状态（finished/failed）落库
+   * - 落库后更新各参赛 Gamer 的 ELO 分
+   */
+  async handleMatchCallback(
+    jobId: string,
+    state: string,
+    result?: {
+      verdict?: string;
+      rounds?: Record<string, unknown>[];
+      finalResult?: Record<string, number>;
+    },
+  ): Promise<{ ok: boolean }> {
+    const match = await this.matchRepo.findOne({
+      where: { externalJobId: jobId },
+    });
+    if (!match) {
+      this.logger.warn(`match-callback: unknown jobId=${jobId}`);
+      return { ok: false };
+    }
+
+    // Idempotency: already in a terminal state
+    if (
+      match.status === MatchStatus.FINISHED ||
+      match.status === MatchStatus.ERROR
+    ) {
+      return { ok: true };
+    }
+
+    const terminalStates = new Set(['finished', 'failed']);
+    if (!terminalStates.has(state)) {
+      // Intermediate state — acknowledge but don't write
+      return { ok: true };
+    }
+
+    const newStatus =
+      state === 'finished' ? MatchStatus.FINISHED : MatchStatus.ERROR;
+
+    const resultData = JSON.stringify({
+      verdict: result?.verdict ?? null,
+      roundCount: result?.rounds?.length ?? 0,
+      finalResult: result?.finalResult ?? {},
+    });
+
+    await this.matchRepo.update(match.id, {
+      status: newStatus,
+      result: resultData,
+    });
+
+    // Update ELO scores for all participating gamers
+    if (state === 'finished' && result?.finalResult) {
+      await this.updateElo(result.finalResult);
+    }
+
+    return { ok: true };
+  }
+
+  /**
+   * Pairwise ELO update (K=32) for all gamers in a finished match.
+   * finalResult: { [gamerId string]: score }
+   */
+  private async updateElo(
+    finalResult: Record<string, number>,
+  ): Promise<void> {
+    const K = 32;
+
+    const gamerIds = Object.keys(finalResult)
+      .map((k) => parseInt(k, 10))
+      .filter((id) => !isNaN(id));
+
+    if (gamerIds.length < 2) return;
+
+    const gamers = await this.gamerRepo.findBy({ id: In(gamerIds) });
+    if (gamers.length < 2) return;
+
+    const eloMap = new Map<number, number>(gamers.map((g) => [g.id, g.elo]));
+    const deltas = new Map<number, number>(gamerIds.map((id) => [id, 0]));
+
+    // Pairwise update for every unique pair
+    for (let i = 0; i < gamerIds.length; i++) {
+      for (let j = i + 1; j < gamerIds.length; j++) {
+        const idA = gamerIds[i];
+        const idB = gamerIds[j];
+        const eloA = eloMap.get(idA);
+        const eloB = eloMap.get(idB);
+        if (eloA === undefined || eloB === undefined) continue;
+
+        const scoreA = finalResult[String(idA)] ?? 0;
+        const scoreB = finalResult[String(idB)] ?? 0;
+
+        const expectedA = 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
+        const expectedB = 1 - expectedA;
+        const actualA = scoreA > scoreB ? 1 : scoreA === scoreB ? 0.5 : 0;
+        const actualB = 1 - actualA;
+
+        deltas.set(idA, (deltas.get(idA) ?? 0) + K * (actualA - expectedA));
+        deltas.set(idB, (deltas.get(idB) ?? 0) + K * (actualB - expectedB));
+      }
+    }
+
+    // Apply accumulated deltas (floor at 0)
+    await Promise.all(
+      gamers.map((g) => {
+        const delta = deltas.get(g.id) ?? 0;
+        const newElo = Math.max(0, Math.round(g.elo + delta));
+        return this.gamerRepo.update(g.id, { elo: newElo });
+      }),
+    );
+  }
+
   // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
   /**

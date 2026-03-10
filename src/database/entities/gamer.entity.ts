@@ -43,6 +43,9 @@ export class Gamer {
   @Column('text', { select: false })
   code: string;
 
+  @Column('int', { default: 1200, comment: 'ELO rating' })
+  elo: number;
+
   @CreateDateColumn()
   createdAt: Date;
 
