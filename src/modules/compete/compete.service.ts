@@ -261,6 +261,23 @@ export class CompeteService {
     return saved;
   }
 
+  /** 删除 gamer（有历史对局则软删除，否则硬删除） */
+  async deleteGamer(id: number, userId: number): Promise<{ deleted: boolean; disabled: boolean }> {
+    const gamer = await this.findOneGamer(id);
+    if (gamer.userId !== userId) throw new UnauthorizedException('非你的 Bot');
+
+    const matchCount = await this.matchGamerLinkRepo.count({ where: { gamerId: id } });
+    if (matchCount > 0) {
+      // Has match history — soft delete
+      await this.gamerRepo.update(id, { disabled: true });
+      return { deleted: false, disabled: true };
+    }
+
+    // No history — hard delete
+    await this.gamerRepo.delete(id);
+    return { deleted: true, disabled: false };
+  }
+
   /** 生成或刷新 botApiKey（7天有效期） */
   async refreshBotApiKey(gamerId: number, userId: number): Promise<{ botApiKey: string; expiresAt: Date }> {
     const gamer = await this.findOneGamer(gamerId);
@@ -1049,9 +1066,9 @@ export class CompeteService {
     if (game.disabled) throw new BadRequestException('游戏已禁用');
 
     // 取 ELO 最高的 topN 个 gamer
-    // 仅取 code 类型 bot（内榜参赛者），human/external/webhook 无法保证随时在线
+    // 仅取 code 类型且未禁用的 bot（内榜参赛者）
     const gamers = await this.gamerRepo.find({
-      where: { gameId, type: 'code' },
+      where: { gameId, type: 'code', disabled: false },
       order: { elo: 'DESC' },
       take: topN,
     });

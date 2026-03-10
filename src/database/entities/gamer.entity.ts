@@ -51,6 +51,9 @@ export class Gamer {
   @Column('text', { select: false })
   code: string;
 
+  @Column({ type: 'boolean', default: false })
+  disabled: boolean;
+
   @Column('int', { default: 1200, comment: 'ELO rating（内榜，仅code类型对局）' })
   elo: number;
 

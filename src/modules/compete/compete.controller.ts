@@ -236,6 +236,21 @@ export class CompeteController {
     return this.competeService.updateGamer(id, dto, user.sub);
   }
 
+  /**
+   * DELETE /compete/gamers/:id
+   * 删除 Bot（有历史对局则软删除/禁用，否则硬删除）
+   */
+  @Delete('gamers/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除 Bot（有对局历史则禁用，否则彻底删除）' })
+  deleteGamer(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.competeService.deleteGamer(id, user.sub);
+  }
+
   // ─── Matches ─────────────────────────────────────────────────────────────────
 
   /**
