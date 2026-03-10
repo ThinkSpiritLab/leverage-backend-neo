@@ -28,6 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -55,6 +56,7 @@ export class CompeteController {
     private readonly competeService: CompeteService,
     private readonly configService: ConfigService,
     private readonly humanTurnService: HumanTurnService,
+    private readonly jwtService: JwtService,
   ) {
     this.callbackToken = this.configService.get<string>(
       'botzone.callbackToken',
@@ -614,15 +616,29 @@ export class CompeteController {
    * Requires JWT. Only participants of the match can subscribe.
    */
   @Get('matches/:id/human-sse')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @SkipThrottle()
-  @ApiOperation({ summary: '浏览器SSE：接收轮到玩家的推送通知' })
-  humanSse(
+  @ApiOperation({ summary: '浏览器SSE：接收轮到玩家的推送通知（token 可从 query param 传入）' })
+  async humanSse(
     @Param('id', ParseIntPipe) matchId: number,
-    @CurrentUser() user: JwtPayload,
+    @Query('token') tokenParam: string | undefined,
+    @CurrentUser() jwtUser: JwtPayload | undefined,
     @Res() res: import('express').Response,
   ) {
+    // Accept JWT via query param (EventSource cannot set Authorization header)
+    let user: JwtPayload | null = jwtUser ?? null;
+    if (!user && tokenParam) {
+      try {
+        const jwt = this.jwtService.verify<JwtPayload>(tokenParam);
+        user = jwt;
+      } catch {
+        res.status(401).json({ message: 'Invalid token' });
+        return;
+      }
+    }
+    if (!user) {
+      res.status(401).json({ message: '未授权' });
+      return;
+    }
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
