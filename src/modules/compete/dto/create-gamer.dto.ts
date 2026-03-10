@@ -23,7 +23,7 @@ export class CreateGamerDto {
 
   @ApiProperty({ description: 'Bot 类型', enum: ['code', 'webhook', 'human', 'external'], default: 'code', required: false })
   @IsOptional()
-  @IsEnum(['code', 'webhook', 'human'])
+  @IsEnum(['code', 'webhook', 'human', 'external'])
   type?: 'code' | 'webhook' | 'human' | 'external';
 
   @ApiProperty({ description: '代码语言（type=code 时必填）', required: false })
