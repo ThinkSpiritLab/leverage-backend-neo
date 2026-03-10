@@ -238,6 +238,18 @@ export class CompeteService {
     await this.findOneGame(dto.gameId);
 
     const type = dto.type ?? 'code';
+
+    // 每个用户每个游戏只能有一个 human 席位
+    if (type === 'human') {
+      const existing = await this.gamerRepo.findOne({
+        where: { userId, gameId: dto.gameId, type: 'human' },
+      });
+      if (existing) {
+        // Return the existing one instead of creating a duplicate
+        return existing;
+      }
+    }
+
     const needsApiKey = type === 'external'; // human 用浏览器 JWT，不需要 API Key
     const botApiKey = needsApiKey ? randomBytes(24).toString('hex') : null;
     const botApiKeyExpiresAt = needsApiKey
