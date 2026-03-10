@@ -254,10 +254,13 @@ export class CompeteService {
    * 发起对局
    */
   async launchMatch(gameId: number, gamerIds: number[]): Promise<Match> {
-    const game = await this.gameRepo.findOneOrFail({
-      where: { id: gameId },
-      select: ['id', 'title', 'gamerQuantity', 'timeLimit', 'memoryLimit', 'judgerCode', 'judgerLanguage'],
-    });
+    const game = await this.gameRepo
+      .createQueryBuilder('g')
+      .addSelect('g.judgerCode')
+      .addSelect('g.judgerLanguage')
+      .where('g.id = :id', { id: gameId })
+      .getOne();
+    if (!game) throw new NotFoundException(`游戏 #${gameId} 不存在`);
 
     if (gamerIds.length !== game.gamerQuantity) {
       throw new BadRequestException(
@@ -446,6 +449,11 @@ export class CompeteService {
     scores?: Record<string, number>,
     log?: unknown[],
   ): Promise<{ ok: boolean }> {
+    // Update-only callbacks (round progress) have no scores — skip
+    if (!scores || Object.keys(scores).length === 0) {
+      return { ok: true };
+    }
+
     const match = await this.matchRepo.findOne({ where: { id: matchId } });
     if (!match) {
       this.logger.warn(`match-callback: matchId=${matchId} not found`);
