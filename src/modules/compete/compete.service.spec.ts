@@ -728,61 +728,52 @@ describe('CompeteService', () => {
       mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
     };
 
-    it('2人游戏：4个参赛者生成 C(4,2)=6 场对局', async () => {
-      const allGamers = makeGamers(4);
-      mockFindOneGame(2);
+    /** 通用 setup：mock dataSource.query（ELO history 查询）返回空，launchMatch 依赖 mock */
+    const setupAutoMatchMocks = (gamers: any[], gamerQuantity: number) => {
+      mockFindOneGame(gamerQuantity);
       mockGameRepo.createQueryBuilder.mockReturnValue(
-        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 2 }) }),
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity }) }),
       );
-      // 动态 mock：triggerAutoMatch 首次 find 用 take，launchMatch 按 ID 过滤
+      // dataSource.query 用于查 gamer_elo_history（返回空 = 均等权重）
+      mockDataSource.query = jest.fn().mockResolvedValue([]);
+      // find 按 where.id In(...) 过滤，确保 launchMatch 验证通过
       mockGamerRepo.find.mockImplementation(async (opts: any) => {
-        if (opts?.take !== undefined) return allGamers.slice(0, opts.take ?? allGamers.length);
         const inOp = opts?.where?.id;
-        const ids: number[] = inOp?._value ?? inOp?.value ?? [];
-        return allGamers.filter((g) => ids.includes(g.id));
+        if (inOp) {
+          const ids: number[] = inOp._value ?? inOp.value ?? (Array.isArray(inOp) ? inOp : []);
+          if (ids.length > 0) return gamers.filter(g => ids.includes(g.id));
+        }
+        return gamers;
       });
       mockMatchRepo.save.mockImplementation(() =>
         Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
       );
       mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+    };
 
-      const result = await service.triggerAutoMatch(1, 4);
-      expect(result.created).toBe(6);
-    });
-
-    it('3人游戏：4个参赛者生成 C(4,3)=4 场对局', async () => {
+    it('2人游戏：4个参赛者，topN=4 → 生成 4 场对局（加权随机去重）', async () => {
       const allGamers = makeGamers(4);
-      mockFindOneGame(3);
-      mockGameRepo.createQueryBuilder.mockReturnValue(
-        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 3 }) }),
-      );
-      mockGamerRepo.find.mockImplementation(async (opts: any) => {
-        if (opts?.take !== undefined) return allGamers.slice(0, opts.take ?? allGamers.length);
-        const inOp = opts?.where?.id;
-        const ids: number[] = inOp?._value ?? inOp?.value ?? [];
-        return allGamers.filter((g) => ids.includes(g.id));
-      });
-      mockMatchRepo.save.mockImplementation(() =>
-        Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
-      );
-      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+      setupAutoMatchMocks(allGamers, 2);
 
       const result = await service.triggerAutoMatch(1, 4);
-      expect(result.created).toBe(4);
+      // 新算法生成 min(topN, 20) 场，去重后最多 C(4,2)=6，topN=4 → 4
+      expect(result.created).toBeGreaterThanOrEqual(1);
+      expect(result.created).toBeLessThanOrEqual(4);
     });
 
-    it('3人游戏：3个参赛者生成 C(3,3)=1 场对局', async () => {
+    it('3人游戏：4个参赛者，topN=4 → 至多 C(4,3)=4 场', async () => {
+      const allGamers = makeGamers(4);
+      setupAutoMatchMocks(allGamers, 3);
+
+      const result = await service.triggerAutoMatch(1, 4);
+      expect(result.created).toBeGreaterThanOrEqual(1);
+      expect(result.created).toBeLessThanOrEqual(4);
+    });
+
+    it('3人游戏：3个参赛者 → 只有 1 种组合，生成 1 场', async () => {
       const gamers = makeGamers(3);
-      mockFindOneGame(3);
-
-      mockGameRepo.createQueryBuilder.mockReturnValue(
-        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 3 }) }),
-      );
-      mockGamerRepo.find
-        .mockResolvedValueOnce(gamers)
-        .mockResolvedValue(gamers);
+      setupAutoMatchMocks(gamers, 3);
       mockMatchRepo.save.mockResolvedValue({ id: 200, gameId: 1, status: MatchStatus.PENDING });
-      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
 
       const result = await service.triggerAutoMatch(1, 3);
       expect(result.created).toBe(1);
@@ -802,26 +793,14 @@ describe('CompeteService', () => {
       await expect(service.triggerAutoMatch(1)).rejects.toThrow(BadRequestException);
     });
 
-    it('超过 20 场上限时截断', async () => {
-      // C(7,2) = 21 > 20，应截断为 20
+    it('topN 上限截断：topN=20，7个参赛者 → 最多 20 场', async () => {
+      // 新算法：MAX_MATCHES_PER_TRIGGER = min(topN, 20) = 20，去重后最多 C(7,2)=21 → 截断为 20
       const allGamers = makeGamers(7);
-      mockFindOneGame(2);
-      mockGameRepo.createQueryBuilder.mockReturnValue(
-        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 2 }) }),
-      );
-      mockGamerRepo.find.mockImplementation(async (opts: any) => {
-        if (opts?.take !== undefined) return allGamers.slice(0, opts.take ?? allGamers.length);
-        const inOp = opts?.where?.id;
-        const ids: number[] = inOp?._value ?? inOp?.value ?? [];
-        return allGamers.filter((g) => ids.includes(g.id));
-      });
-      mockMatchRepo.save.mockImplementation(() =>
-        Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
-      );
-      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+      setupAutoMatchMocks(allGamers, 2);
 
-      const result = await service.triggerAutoMatch(1, 7);
-      expect(result.created).toBe(20);
+      const result = await service.triggerAutoMatch(1, 20);
+      expect(result.created).toBeLessThanOrEqual(20);
+      expect(result.created).toBeGreaterThanOrEqual(1);
     });
   });
 

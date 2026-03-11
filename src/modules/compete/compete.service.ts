@@ -1574,37 +1574,64 @@ export class CompeteService {
     const game = await this.findOneGame(gameId);
     if (game.disabled) throw new BadRequestException('游戏已禁用');
 
-    // 取 ELO 最高的 topN 个 gamer
-    // 仅取 code 类型且未禁用的 bot（内榜参赛者）
-    const gamers = await this.gamerRepo.find({
+    // 取所有可参赛的 code 类型 bot（不限 N，权重选取）
+    const allGamers = await this.gamerRepo.find({
       where: { gameId, type: 'code', disabled: false },
-      order: { elo: 'DESC' },
-      take: topN,
     });
 
     const needed = game.gamerQuantity ?? 2;
-    if (gamers.length < needed) {
-      throw new BadRequestException(`参赛者不足（需要至少 ${needed} 个，当前 ${gamers.length} 个）`);
+    if (allGamers.length < needed) {
+      throw new BadRequestException(`参赛者不足（需要至少 ${needed} 个，当前 ${allGamers.length} 个）`);
     }
 
-    // 生成所有 N 人组合（C(n, needed) 个），避免重复配对
-    function combinations<T>(arr: T[], n: number): T[][] {
-      if (n === 1) return arr.map((x) => [x]);
-      const result: T[][] = [];
-      for (let i = 0; i <= arr.length - n; i++) {
-        const rest = combinations(arr.slice(i + 1), n - 1);
-        for (const combo of rest) result.push([arr[i], ...combo]);
+    // 查近 10 场对局的 ELO 涨幅作为权重加成
+    const gamerIds = allGamers.map(g => g.id);
+    const recentGains: Record<number, number> = {};
+    if (gamerIds.length > 0) {
+      const rows = await this.dataSource.query(
+        `SELECT gamerId, SUM(GREATEST(eloDelta, 0)) AS gainSum
+         FROM gamer_elo_history
+         WHERE gamerId IN (${gamerIds.map(() => '?').join(',')})
+         GROUP BY gamerId`,
+        gamerIds,
+      ) as { gamerId: number; gainSum: string }[];
+      for (const row of rows) recentGains[row.gamerId] = Number(row.gainSum) || 0;
+    }
+
+    // 权重 = base(1) + 近期涨分加成（涨越多权重越高，促进 hot streak bot 多打）
+    const weights = allGamers.map(g => 1 + Math.sqrt(recentGains[g.id] ?? 0));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+
+    /** 加权随机无放回抽取 k 个 gamer */
+    function weightedSample(gamers: typeof allGamers, w: number[], k: number): typeof allGamers {
+      const remaining = gamers.map((g, i) => ({ g, w: w[i] }));
+      const picked: typeof allGamers = [];
+      for (let _ = 0; _ < k && remaining.length > 0; _++) {
+        const total = remaining.reduce((s, x) => s + x.w, 0);
+        let r = Math.random() * total;
+        let idx = 0;
+        while (idx < remaining.length - 1 && r > remaining[idx].w) {
+          r -= remaining[idx].w;
+          idx++;
+        }
+        picked.push(remaining[idx].g);
+        remaining.splice(idx, 1);
       }
-      return result;
+      return picked;
     }
 
-    const MAX_MATCHES_PER_TRIGGER = 20;
-    const combos = combinations(gamers, needed);
+    // 生成 topN 场对局（每场独立加权随机抽取 needed 个 bot）
+    const MAX_MATCHES_PER_TRIGGER = Math.min(topN, 20);
     const matchIds: number[] = [];
-    for (const combo of combos) {
-      if (matchIds.length >= MAX_MATCHES_PER_TRIGGER) break;
-      const ids = combo.map((g) => g.id);
-      const match = await this.launchMatch(gameId, ids);
+    const seenKeys = new Set<string>();
+
+    for (let attempt = 0; attempt < MAX_MATCHES_PER_TRIGGER * 3 && matchIds.length < MAX_MATCHES_PER_TRIGGER; attempt++) {
+      const combo = weightedSample(allGamers, weights, needed);
+      if (combo.length < needed) break;
+      const key = combo.map(g => g.id).sort().join(',');
+      if (seenKeys.has(key)) continue; // 去重
+      seenKeys.add(key);
+      const match = await this.launchMatch(gameId, combo.map(g => g.id));
       matchIds.push(match.id);
     }
 
