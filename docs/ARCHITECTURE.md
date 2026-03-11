@@ -4,200 +4,93 @@
 
 ```mermaid
 graph TD
-    FE["Nuxt 4 Frontend"]
-    BE["NestJS Backend"]
-    DB["MariaDB 10.11"]
-    RD["Redis 7"]
-    BQ["BullMQ\njudge-tx / judge-rx"]
-    HC["heng-controller"]
-    JN["Judge Nodes × N"]
+    FE["Nuxt 4 SPA\n(52 pages)"]
+    BE["NestJS Backend\n(742 tests)"]
+    DB["MariaDB"]
+    RD["Redis"]
+    BQ["BullMQ\njudge-tx queue"]
+    BN["botzone-neo\n(judge engine)"]
+    SB["shimmy sandbox\n(Direct / Sandlock)"]
 
-    FE <-->|HTTP/REST| BE
+    FE <-->|REST / SSE| BE
     BE <-->|TypeORM| DB
     BE <-->|ioredis| RD
-    BE <-->|enqueue| BQ
-    BQ <-->|HMAC-signed HTTP| HC
-    HC <-->|gRPC / HTTP| JN
-    HC -->|POST /heng/update\nPOST /heng/finish| BE
+    BE -->|Bull job enqueue| BQ
+    BQ -->|HTTP POST /v1/judge| BN
+    BN -->|POST /compete/match-callback| BE
+    BN --> SB
 ```
 
 ### Component Responsibilities
 
 | Component | Role |
 |-----------|------|
-| **NestJS Backend** | REST API, business logic, queue producer/consumer |
-| **MariaDB** | Persistent storage (users, problems, submissions, contests, …) |
-| **Redis** | Session cache, leaderboard Sorted Sets, rate-limit counters |
-| **BullMQ** | Async job queues (`judge-tx` for sending, `judge-rx` for receiving) |
-| **heng-controller** | Judge orchestrator — distributes tasks to judge nodes |
-| **Judge Nodes** | Sandboxed execution environments |
+| **Nuxt 4 SPA** | Frontend — 52 pages, Naive UI, SPA mode (SSR disabled) |
+| **NestJS Backend** | REST API, business logic, Bull queue producer/consumer |
+| **MariaDB** | Persistent storage (users, gamers, matches, ELO history, …) |
+| **Redis** | Queue storage (BullMQ), session cache, rate-limit counters |
+| **BullMQ** | Async job queue (`judge-tx`) for match submission |
+| **botzone-neo** | Judge engine — compiles bots, runs multi-round games, callbacks to backend |
+| **shimmy** | Sandbox library — DirectBackend (dev) / SandlockBackend (Linux cgroups) |
 
 ---
 
 ## Module Reference
 
 ### `auth`
-JWT-based authentication with a **dual-token** strategy:
+JWT-based authentication with dual-token strategy:
 - `access token` — short-lived (15 min, HS256, `JWT_ACCESS_SECRET`)
 - `refresh token` — long-lived (7 days, `JWT_REFRESH_SECRET`)
 
-Contest users share the same token infrastructure but receive a separate `access token` scoped to the contest via `POST /auth/login/contest`.
+Also supports **X-API-Key** header with user-generated API keys (`lev_` prefix, SHA256 stored).
 
-Guards: `JwtAuthGuard` (verifies access token) → `RolesGuard` (checks role weight).
-
-### `problem`
-Problem CRUD. Non-admin users see only visible problems. `findOne` responses are cached in Redis for 6 seconds to absorb burst reads during contests. Tag-based filtering is supported.
-
-### `submission`
-Handles code submission with:
-- **Rate limit** — configurable via `MAX_SUBMISSION_PER_MINUTE` (default 10/min, enforced per user via Redis)
-- **Language bonus** — `LANGUAGE_BONUS` multiplier applies extra time/memory for certain languages
-- On creation, writes a `PENDING` record to DB, then enqueues a job to `judge-tx`
-
-### `heng`
-Bridge between the backend and `heng-controller`:
-- **`judge-tx` Worker** — dequeues submission jobs, signs the request with HMAC (`HENG_AK`/`HENG_SK`), sends to `heng-controller`
-- **`judge-rx` Worker** — processes callbacks pushed by `HengController` into the `judge-rx` queue
-
-### `receive`
-Consumes `judge-rx` jobs (final results). Responsibilities:
-- Update `Submission` record (status, time, memory, judge detail)
-- Update `Problem` statistics (AC count, submit count)
-- Update `User` statistics
-- Update Redis leaderboard(s) — global rank, contest rank, course rank
-
-### `rank`
-Global leaderboard backed by a Redis Sorted Set.  
-Score formula: `AC_count × 1_000_000_000 - penalty_seconds`  
-Higher score = better rank. Operations: `ZADD`, `ZREVRANK`, `ZREVRANGE`.
-
-### `contest`
-Contest management with:
-- Real-time ranking via Redis Sorted Set (same score formula as `rank`)
-- **Balloon tracking** — first AC on a problem per user generates a balloon record; supervisors mark delivery via `PATCH /contests/:id/balloons/:bid`
-- Separate contest user accounts (bulk import with random passwords)
-
-### `course`
-Course management with student enrollment.  
-`GET /courses/:id/submissions/export` supports three filter modes: exact match, range, and regex — useful for homework grading.
-
-### `user`
-User CRUD with:
-- **PBKDF2** password hashing (Node.js built-in `crypto`)
-- **Bulk import** via CSV/JSON (`POST /users/import`)
-- **`canManage` weight check** — a user can only manage accounts with equal or lower privilege weight
+Guards: `JwtAuthGuard` (verifies access token or API key) → `RolesGuard` (checks role weight).
 
 ### `compete`
-Bot battle system with three entities:
-- `Game` — defines a game type (problem + rules)
-- `Gamer` — a user's bot (code + metadata)
-- `Match` — a recorded battle between two gamers
+Core module for bot competition:
 
-### `media`
-File upload service. Validates both file extension and MIME type before accepting. Used primarily for problem test data (`.zip`).
+- **Game** — judge code, renderer HTML, time/memory limits, player count
+- **Gamer** — bot registration (code, language, type: code/webhook/human/external)
+- **Match** — lifecycle: PENDING → RUNNING → FINISHED / ERROR
+- **ELO** — per-game ELO ratings with full history in `gamer_elo_history`
+- **Auto-match scheduler** — adaptive backoff cron, runs matches for enabled games
 
-### `metrics`
-Exposes a Prometheus-compatible `/metrics` endpoint using `@willsoto/nestjs-prometheus`.
+### `botzone` (client)
+`BotzoneClientService` submits match jobs to botzone-neo via HTTP POST `/v1/judge`.
+Receives callbacks at `POST /compete/match-callback/:matchId?token=<callbackToken>`.
 
-### `health`
-Liveness/readiness endpoint at `/health`. Checks DB and Redis connectivity.
-
----
-
-## Judge Pipeline (Detailed)
-
-### Flow Description
-
-1. User calls `POST /submissions` with code + language + problem ID
-2. Backend writes a `PENDING` submission to MariaDB
-3. A job is enqueued into the `judge-tx` BullMQ queue
-4. The `JudgeTxWorker` picks up the job:
-   - Fetches problem test data reference
-   - Signs the request body with HMAC-SHA256 (`HENG_AK` + `HENG_SK`)
-   - POSTs to `heng-controller`
-5. `heng-controller` distributes the task to an available judge node
-6. Judge node runs the code in a sandbox and streams state updates back
-7. `heng-controller` sends intermediate callbacks to `POST /heng/update/:submissionId/:judgeId`
-8. `heng-controller` sends the final result to `POST /heng/finish/:submissionId/:judgeId`
-9. `HengController` receives each callback and pushes it into the `judge-rx` queue (async decoupling)
-10. The `JudgeRxWorker` consumes the job and calls `ReceiveService`
-11. `ReceiveService` updates the DB record, problem stats, user stats, and all relevant Redis leaderboards
-
-### Sequence Diagram
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as NestJS API
-    participant DB as MariaDB
-    participant TX as judge-tx Worker
-    participant HC as heng-controller
-    participant JN as Judge Node
-    participant RX as judge-rx Worker
-    participant RS as ReceiveService
-    participant RD as Redis
-
-    Client->>API: POST /submissions
-    API->>DB: INSERT submission (PENDING)
-    API->>TX: enqueue job
-    API-->>Client: 201 { id }
-
-    TX->>HC: POST /judge (HMAC signed)
-    HC->>JN: distribute task
-
-    JN-->>HC: state update
-    HC->>API: POST /heng/update/:id/:judgeId
-    API->>RX: enqueue update job
-
-    JN-->>HC: final result
-    HC->>API: POST /heng/finish/:id/:judgeId
-    API->>RX: enqueue finish job
-
-    RX->>RS: process(finish)
-    RS->>DB: UPDATE submission (AC/WA/…)
-    RS->>DB: UPDATE problem stats
-    RS->>DB: UPDATE user stats
-    RS->>RD: ZADD leaderboard
-```
+### `mcp`
+13-tool MCP server exposing Leverage as AI-callable tools.
+See [`MCP_SETUP.md`](./MCP_SETUP.md) for setup and [`GAME_DESIGN.md`](./GAME_DESIGN.md) for judge/bot protocol.
 
 ---
 
-## Authentication System
+## Key Design Decisions
 
-### Token Lifecycle
+### Fork-on-Edit
+Bots are **immutable after creation**. Editing creates a new `Gamer` row — the original keeps its ELO history. This preserves leaderboard integrity.
 
-```
-POST /auth/login
-  → returns { accessToken (15m), refreshToken (7d) }
+### User-Submitted Judges
+Game judges are Python/JS programs uploaded by supervisors. botzone-neo compiles them, runs them in a sandbox, and pipes round data via stdin/stdout.
 
-POST /auth/refresh
-  → { refreshToken } → returns { accessToken (15m) }
+### API Key Authentication
+Users can generate `lev_` prefixed API keys for external bot integration:
+- Stored as SHA256 hash (plaintext shown only once at creation)
+- Accepted via `X-API-Key` header in JwtAuthGuard
 
-POST /auth/logout
-  → client discards tokens (stateless; blacklist is a planned feature)
-```
+### Renderer Isolation
+Game renderers are user-uploaded HTML files loaded in sandboxed iframes (`sandbox="allow-scripts"`). They communicate with the host page exclusively via `postMessage` with `type: "gameLog"`.
 
-### Guard Stack
+---
 
-```
-Request
-  └─ JwtAuthGuard         (validates access token, sets req.user)
-       └─ RolesGuard      (checks user.role weight ≤ required weight)
-```
+## Database Schema (Key Tables)
 
-Role weights (lower = more privileged):
-
-| Role | Weight |
-|------|--------|
-| `sa` | 0 |
-| `admin` | 1 |
-| `supervisor` | 2 |
-| `user` | 3 |
-| `contest-user` | 4 |
-| `guest` | 5 |
-
-`RolesGuard` uses `@Roles('admin')` decorator which resolves to "weight ≤ 1", so `sa` also passes.
-
-### Contest Auth
-
-Contest users authenticate via `POST /auth/login/contest` with `contestId + username + password`. They receive a short-lived access token that is scoped to the contest context. The same `JwtAuthGuard` validates this token; the contest ID embedded in the payload is used for authorization checks downstream.
+| Table | Purpose |
+|-------|---------|
+| `user` | Auth, roles |
+| `game` | Game definition (judge, renderer, limits) |
+| `gamer` | Bot registrations |
+| `match` | Match lifecycle + result JSON |
+| `match_gamer_link` | Many-to-many: match ↔ gamer, with position index |
+| `gamer_elo_history` | ELO snapshots per match |
+| `user_api_key` | User API keys (hashed) |

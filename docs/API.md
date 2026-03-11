@@ -59,6 +59,9 @@ The column **Auth** in the tables below uses:
 | POST | `/auth/refresh` | — | Exchange `refreshToken` for a new `accessToken` |
 | POST | `/auth/logout` | — | Stateless logout (client discards token) |
 | GET | `/auth/profile` | user | Return current user's JWT payload |
+| POST | `/auth/api-keys` | user | Create a new API key (returns plaintext once) |
+| GET | `/auth/api-keys` | user | List user's API keys (masked) |
+| DELETE | `/auth/api-keys/:id` | user | Revoke an API key |
 
 ### Users — `/users`
 
@@ -371,3 +374,14 @@ The following endpoints were added after the initial documentation was written. 
 | POST | `/professions` | admin | 创建专业；body: `CreateProfessionDto` |
 | PATCH | `/professions/:id` | admin | 更新专业；body: `UpdateProfessionDto` |
 | DELETE | `/professions/:id` | admin | 删除专业 |
+
+---
+
+### AI Context — `/ai`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/ai` | — | Plain-text AI context document (judge/bot protocol, API quickref, MCP tools) |
+| GET | `/api/ai` | — | Alias (proxy-friendly) |
+
+This endpoint is designed to be pasted into any AI agent's context. It includes the complete judge/bot protocol, REST API reference, and MCP tool list with a Claude Desktop config template.

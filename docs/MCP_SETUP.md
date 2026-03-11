@@ -60,12 +60,18 @@ LEVERAGE_TOKEN=<token> npx ts-node /path/to/leverage-backend-neo/src/mcp/leverag
 | Tool | Description |
 |------|-------------|
 | `list_games` | List all games on the platform |
-| `test_judge` | Test a custom judge with two bots, returns round-by-round results |
-| `test_bot` | Test a bot against an existing opponent |
-| `get_leaderboard` | Get the leaderboard for a game |
-| `list_gamers` | List bots registered for a game |
-| `get_match_result` | Get full match result by match ID |
+| `test_judge` | Test a custom judge with bots; returns full round-by-round results |
+| `test_bot` | Test a bot against an existing opponent in a live match |
+| `get_leaderboard` | Get ELO leaderboard for a game |
+| `list_gamers` | List all bots registered for a game |
+| `get_match_result` | Get full match result (rounds, scores, debug) by match ID |
 | `submit_bot` | Submit a new bot to the platform |
+| `submit_judge` | Upload/replace the judge program for a game (admin token required) |
+| `submit_renderer` | Upload/replace the HTML renderer for a game (admin token required) |
+| `get_judge` | Fetch the current judge source code for a game |
+| `list_matches` | Find matches by gameId, gamerId, or status |
+| `get_gamer` | Read a bot's metadata and source code |
+| `analyze_match` | Pre-process a match result into debugHighlights for efficient AI debugging |
 
 ## Example AI conversation
 
@@ -83,6 +89,7 @@ LEVERAGE_TOKEN=<token> npx ts-node /path/to/leverage-backend-neo/src/mcp/leverag
 8. `submit_bot(gameId=..., title="NimRandom", code=...)` — submit bot 0
 9. `submit_bot(gameId=..., title="NimStrategist", code=...)` — submit bot 1
 10. `get_leaderboard(gameId=...)` — confirm bots appear
+11. _(optional)_ `analyze_match(matchId=...)` — get `debugHighlights` for fast debugging if something looks off
 
 See `GAME_DESIGN.md` for the full judge/bot protocol specification.
 
