@@ -251,7 +251,7 @@
 
     function extractDisplay(payload) {
       if (payload.type === "gameLog") {
-        return payload.gameLog?.rounds?.[payload.round]?.display ?? payload.gameLog?.rounds?.[payload.round]?.judgeCmd?.display || null;
+        return payload.gameLog?.rounds?.[payload.round]?.display ?? payload.gameLog?.rounds?.[payload.round]?.judgeCmd?.display ?? null;
       }
       if (payload.type === "gameState") {
         try {
