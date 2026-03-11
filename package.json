@@ -30,6 +30,7 @@
     "migration:show": "typeorm-ts-node-commonjs migration:show -d data-source.ts",
     "load-test": "k6 run load-tests/auth.k6.js",
     "load-test:all": "for f in load-tests/*.k6.js; do k6 run $f; done",
+    "mcp": "ts-node --project tsconfig.json src/mcp/leverage-mcp.ts",
     "mock:heng": "node scripts/mock-heng.js",
     "mock:heng:wa": "node scripts/mock-heng.js --result=WA",
     "mock:heng:ce": "node scripts/mock-heng.js --result=CE",
@@ -39,6 +40,7 @@
     "@bull-board/api": "^6.20.3",
     "@bull-board/express": "^6.20.3",
     "@bull-board/nestjs": "^6.20.3",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@nestjs/bull": "^11.0.4",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
@@ -76,7 +78,8 @@
     "rxjs": "^7.8.1",
     "turndown": "^7.2.2",
     "typeorm": "^0.3.28",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
