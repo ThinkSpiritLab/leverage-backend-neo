@@ -27,7 +27,7 @@ export class AppController {
    * Share this URL with any AI agent to let it understand
    * the Leverage platform's judge/bot protocol and MCP tools.
    */
-  @Get('ai')
+  @Get(['ai', 'api/ai'])
   @Header('Content-Type', 'text/plain; charset=utf-8')
   @Header('Access-Control-Allow-Origin', '*')
   @ApiOperation({ summary: 'AI context document (public)' })
