@@ -1425,7 +1425,7 @@ describe('ProblemService', () => {
       expect((result as any[])[0].cases).toBe(1);
     });
 
-    it('SPJ 题目应被跳过', async () => {
+    it('SPJ 题目不应被跳过，应正常导入并提取 checker 标记', async () => {
       const xmlBuffer = Buffer.from(`<?xml version="1.0"?>
 <fps version="1.2">
   <item>
@@ -1460,9 +1460,10 @@ describe('ProblemService', () => {
         closed: false,
         noMarkdown: true,
       });
-      // SPJ problem is skipped, only Normal Problem returned
-      expect((result as any[]).length).toBe(1);
-      expect((result as any[])[0].title).toBe('Normal Problem');
+      // 两道题都应被导入（SPJ 题目不再跳过）
+      expect((result as any[]).length).toBe(2);
+      expect((result as any[])[0].title).toBe('SPJ Problem');
+      expect((result as any[])[1].title).toBe('Normal Problem');
     });
 
     it('sample_input 多个时应全部加入内容', async () => {
@@ -1511,6 +1512,157 @@ describe('ProblemService', () => {
       // "P" regex matches prefix="P" no logicId → goes to else branch
       const found = calls.find((c: any[]) => c[0].includes('p.prefix'));
       expect(found).toBeTruthy();
+    });
+  });
+
+  // ── SPJ / checker ─────────────────────────────────────────────────────────
+
+  describe('getChecker', () => {
+    it('应该返回 checkerCode 和 checkerLanguage', async () => {
+      const problemWithChecker = {
+        ...mockProblem,
+        checkerCode: '#include <cstdio>',
+        checkerLanguage: 'cpp17',
+      };
+      const checkerQb = makeQb({
+        getOne: jest.fn().mockResolvedValue(problemWithChecker),
+      });
+      const { service, problemRepo } = await createModule();
+      problemRepo.createQueryBuilder.mockReturnValue(checkerQb);
+
+      const result = await service.getChecker(1);
+
+      expect(result).toEqual({
+        checkerCode: '#include <cstdio>',
+        checkerLanguage: 'cpp17',
+      });
+    });
+
+    it('题目不存在时应抛出 NotFoundException', async () => {
+      const notFoundQb = makeQb({
+        getOne: jest.fn().mockResolvedValue(null),
+      });
+      const { service, problemRepo } = await createModule();
+      problemRepo.createQueryBuilder.mockReturnValue(notFoundQb);
+
+      await expect(service.getChecker(999)).rejects.toThrow(NotFoundException);
+    });
+
+    it('无 checker 的题目应返回 null 值', async () => {
+      const problemNoChecker = {
+        ...mockProblem,
+        checkerCode: undefined,
+        checkerLanguage: undefined,
+      };
+      const noCheckerQb = makeQb({
+        getOne: jest.fn().mockResolvedValue(problemNoChecker),
+      });
+      const { service, problemRepo } = await createModule();
+      problemRepo.createQueryBuilder.mockReturnValue(noCheckerQb);
+
+      const result = await service.getChecker(1);
+
+      expect(result.checkerCode).toBeNull();
+      expect(result.checkerLanguage).toBeNull();
+    });
+  });
+
+  describe('setChecker', () => {
+    it('应该调用 update 并返回新 checker 信息', async () => {
+      const updateQb = {
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      const { service, problemRepo, cacheService } = await createModule({
+        problemRepo: {
+          findOne: jest.fn().mockResolvedValue(mockProblem),
+          createQueryBuilder: jest.fn().mockReturnValue(updateQb),
+        },
+      });
+
+      const result = await service.setChecker(
+        1,
+        '#include <cstdio>',
+        'cpp17',
+      );
+
+      expect(result).toEqual({
+        checkerCode: '#include <cstdio>',
+        checkerLanguage: 'cpp17',
+      });
+      expect(cacheService.del).toHaveBeenCalledWith(
+        'problem:1:admin',
+        'problem:1:user',
+      );
+    });
+
+    it('题目不存在时应抛出 NotFoundException', async () => {
+      const { service, problemRepo } = await createModule({
+        problemRepo: {
+          findOne: jest.fn().mockResolvedValue(null),
+        },
+      });
+
+      await expect(
+        service.setChecker(999, '#include <cstdio>', 'cpp17'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('parseFps - SPJ 题目导入', () => {
+    it('有 SPJ 的 FPS 题目不应被跳过，应提取 checker 信息', async () => {
+      const spjFps = `<?xml version="1.0" encoding="UTF-8"?>
+<fps version="1.2" url="https://github.com/zhblue/freeproblemset/">
+  <item>
+    <title>SPJ Test</title>
+    <time_limit unit="s">1</time_limit>
+    <memory_limit unit="mb">64</memory_limit>
+    <description><![CDATA[SPJ Problem]]></description>
+    <sample_input><![CDATA[1 2]]></sample_input>
+    <sample_output><![CDATA[Accepted]]></sample_output>
+    <test_input><![CDATA[1 2]]></test_input>
+    <test_output><![CDATA[Accepted]]></test_output>
+    <hint></hint>
+    <source>Test</source>
+    <spj language="cpp17"><![CDATA[#include <cstdio>
+int main() { return 0; }]]></spj>
+  </item>
+</fps>`;
+      const { service } = await createModule();
+      const buffer = Buffer.from(spjFps, 'utf-8');
+      // parseFps 是 private，通过 importFps 的 checkOnly=true 路径调用
+      const results = await (service as any).parseFps(buffer, true, true);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].title).toBe('SPJ Test');
+      expect(results[0].checkerLanguage).toBe('cpp17');
+      expect(results[0].checkerCode).toContain('#include <cstdio>');
+    });
+
+    it('无 SPJ 的题目 checkerCode 应为 undefined', async () => {
+      const normalFps = `<?xml version="1.0" encoding="UTF-8"?>
+<fps version="1.2" url="https://github.com/zhblue/freeproblemset/">
+  <item>
+    <title>Normal Test</title>
+    <time_limit unit="s">1</time_limit>
+    <memory_limit unit="mb">64</memory_limit>
+    <description><![CDATA[Normal Problem]]></description>
+    <sample_input><![CDATA[1 2]]></sample_input>
+    <sample_output><![CDATA[3]]></sample_output>
+    <test_input><![CDATA[1 2]]></test_input>
+    <test_output><![CDATA[3]]></test_output>
+    <hint></hint>
+    <source>Test</source>
+  </item>
+</fps>`;
+      const { service } = await createModule();
+      const buffer = Buffer.from(normalFps, 'utf-8');
+      const results = await (service as any).parseFps(buffer, true, true);
+
+      expect(results).toHaveLength(1);
+      expect((results[0] as any).checkerCode).toBeUndefined();
     });
   });
 });

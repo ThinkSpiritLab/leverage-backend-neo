@@ -644,6 +644,48 @@ export class ProblemService {
   }
 
   /**
+   * GET /problems/:id/checker
+   * 获取题目的 Special Judge checker 信息（checkerCode 需要额外 select）
+   */
+  async getChecker(
+    id: number,
+  ): Promise<{ checkerCode: string | null; checkerLanguage: string | null }> {
+    const problem = await this.problemRepo
+      .createQueryBuilder('p')
+      .addSelect('p.checkerCode')
+      .where('p.id = :id', { id })
+      .getOne();
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
+    return {
+      checkerCode: problem.checkerCode ?? null,
+      checkerLanguage: problem.checkerLanguage ?? null,
+    };
+  }
+
+  /**
+   * PATCH /problems/:id/checker
+   * 更新题目的 Special Judge checker 代码和语言
+   */
+  async setChecker(
+    id: number,
+    checkerCode: string,
+    checkerLanguage: string,
+  ): Promise<{ checkerCode: string; checkerLanguage: string }> {
+    const problem = await this.problemRepo.findOne({ where: { id } });
+    if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
+
+    await this.problemRepo
+      .createQueryBuilder()
+      .update(Problem)
+      .set({ checkerCode, checkerLanguage })
+      .where('id = :id', { id })
+      .execute();
+
+    await this.cacheService.del(`problem:${id}:admin`, `problem:${id}:user`);
+    return { checkerCode, checkerLanguage };
+  }
+
+  /**
    * GET /problems/course-problem-list/:courseId
    * 获取课程的题目列表
    */
@@ -734,14 +776,33 @@ export class ProblemService {
     > = [];
 
     for (const p of problems) {
-      if (p.spj) continue; // SPJ not supported
+      // 提取 SPJ checker 信息（如有）——不再跳过 SPJ 题目
+      let checkerCode: string | undefined;
+      let checkerLanguage: string | undefined;
+      if (p.spj) {
+        const spjEntry = (p.spj as unknown[])[0];
+        if (spjEntry && typeof spjEntry === 'object') {
+          const entry = spjEntry as Record<string, unknown>;
+          checkerCode = (entry['_'] as string | undefined)?.trim() || undefined;
+          const attrs = entry['$'] as Record<string, string> | undefined;
+          if (attrs?.language) {
+            checkerLanguage = attrs.language;
+          }
+        } else if (typeof spjEntry === 'string' && spjEntry.trim().length > 0) {
+          checkerCode = spjEntry.trim();
+        }
+      }
 
       const problem: Partial<Problem> & {
         testInputs: string[];
         testOutputs: string[];
+        checkerCode?: string;
+        checkerLanguage?: string;
       } = {
         testInputs: [],
         testOutputs: [],
+        ...(checkerCode ? { checkerCode } : {}),
+        ...(checkerLanguage ? { checkerLanguage } : {}),
       };
 
       problem.title = decode(p.title[0] || '');
@@ -813,6 +874,10 @@ export class ProblemService {
           .getRawOne();
         const nextId: number = maxId != null ? maxId + 1 : 1000;
 
+        const pWithChecker = p as typeof p & {
+          checkerCode?: string;
+          checkerLanguage?: string;
+        };
         result = manager.create(Problem, {
           title: p.title,
           content: p.content,
@@ -825,6 +890,12 @@ export class ProblemService {
           logicId: nextId,
           restricted: params.restricted,
           closed: params.closed,
+          ...(pWithChecker.checkerCode
+            ? { checkerCode: pWithChecker.checkerCode }
+            : {}),
+          ...(pWithChecker.checkerLanguage
+            ? { checkerLanguage: pWithChecker.checkerLanguage }
+            : {}),
         });
         result = await manager.save(Problem, result);
         saved.push(result);

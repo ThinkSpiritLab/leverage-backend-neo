@@ -486,4 +486,49 @@ export class ProblemController {
     await this.problemService.uploadTestData(id, file);
     return { message: '测试数据上传成功' };
   }
+
+  /**
+   * GET /problems/:id/checker
+   * 获取题目的 Special Judge checker 信息（需要 admin）
+   */
+  @Get(':id/checker')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取题目 SPJ Checker 信息（需要 admin）' })
+  @ApiParam({ name: 'id', description: '题目 ID' })
+  async getChecker(@Param('id', ParseIntPipe) id: number) {
+    return this.problemService.getChecker(id);
+  }
+
+  /**
+   * PATCH /problems/:id/checker
+   * 更新题目的 Special Judge checker 代码和语言（需要 admin）
+   */
+  @Patch(':id/checker')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '设置题目 SPJ Checker 代码和语言（需要 admin）' })
+  @ApiParam({ name: 'id', description: '题目 ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['checkerCode', 'checkerLanguage'],
+      properties: {
+        checkerCode: { type: 'string', description: 'Checker 源码' },
+        checkerLanguage: {
+          type: 'string',
+          description: '语言（如 cpp17、c）',
+        },
+      },
+    },
+  })
+  async setChecker(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('checkerCode') checkerCode: string,
+    @Body('checkerLanguage') checkerLanguage: string,
+  ) {
+    return this.problemService.setChecker(id, checkerCode, checkerLanguage);
+  }
 }

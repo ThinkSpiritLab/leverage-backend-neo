@@ -16,8 +16,6 @@ import {
   BotzoneJobState,
   BotzoneOJResult,
   BotzonePollResponse,
-  BotzoneSubmitRequest,
-  BotzoneSubmitResponse,
   LEVERAGE_LANG_TO_BOTZONE,
   botzoneStateToStatus,
 } from './botzone.types';
@@ -66,8 +64,11 @@ export class BotzoneClientService implements IJudgeProvider {
   }
 
   /**
-   * Submit a judge task to botzone-neo.
-   * Returns the external job ID and a callbackToken for the result.
+   * Submit an OJ judge task to botzone-neo via POST /v1/judge.
+   *
+   * 若 params 包含 checkerCode + checkerLanguage，则以 judgeMode='checker' 发送，
+   * 否则以 judgeMode='standard' 发送。
+   * params.testcases 为内联测试用例（必填）。
    */
   async enqueue(params: EnqueueParams): Promise<EnqueueResult> {
     const {
@@ -76,30 +77,42 @@ export class BotzoneClientService implements IJudgeProvider {
       code,
       timeLimit,
       memoryLimit,
-      externalProblemId,
+      testcases = [],
+      checkerCode,
+      checkerLanguage,
     } = params;
 
     const botzoneLanguage = LEVERAGE_LANG_TO_BOTZONE[language] ?? 'cpp17';
-    const problemId = externalProblemId ?? this.defaultProblemId;
     const callbackUrl = `${this.callbackBase}/botzone/callback`;
-    const correlationId = String(submissionId);
 
-    const body: BotzoneSubmitRequest = {
-      sourceCode: Buffer.from(code, 'utf-8').toString('base64'),
+    const useChecker = !!(checkerCode && checkerLanguage);
+
+    const body: Record<string, unknown> = {
+      type: 'oj',
       language: botzoneLanguage,
-      problemId,
-      timeLimit,
-      memoryLimitMB: Math.round(memoryLimit),
-      callbackUrl,
-      correlationId,
+      source: code,
+      testcases: testcases.map((tc) => ({
+        id: tc.id,
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+      })),
+      timeLimitMs: timeLimit,
+      memoryLimitMb: Math.round(memoryLimit),
+      callback: { finish: callbackUrl },
+      judgeMode: useChecker ? 'checker' : 'standard',
     };
 
+    if (useChecker) {
+      body.checkerSource = checkerCode;
+      body.checkerLanguage = checkerLanguage;
+    }
+
     this.logger.log(
-      `Submitting to botzone: submissionId=${submissionId}, language=${botzoneLanguage}`,
+      `Submitting OJ task to botzone: submissionId=${submissionId}, language=${botzoneLanguage}, judgeMode=${body.judgeMode}, testcases=${testcases.length}`,
     );
 
-    const res = await this.httpClient.post<BotzoneSubmitResponse>(
-      '/api/judger/submit',
+    const res = await this.httpClient.post<{ jobId: string }>(
+      '/v1/judge',
       body,
     );
 
@@ -111,9 +124,9 @@ export class BotzoneClientService implements IJudgeProvider {
     return {
       externalJobId: jobId,
       providerMeta: {
-        problemId,
         language: botzoneLanguage,
         callbackUrl,
+        judgeMode: body.judgeMode,
       },
     };
   }

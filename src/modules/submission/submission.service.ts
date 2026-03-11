@@ -14,6 +14,8 @@ import type { Queue } from 'bull';
 import { Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import archiver from 'archiver';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { Submission } from '../../database/entities/submission.entity';
 import { SubmissionMisc } from '../../database/entities/submission-misc.entity';
 import { Problem } from '../../database/entities/problem.entity';
@@ -34,7 +36,12 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { BotzoneClientService } from '../botzone/botzone-client.service';
-import { JudgeProviderName } from '../judge-provider/judge-provider.interface';
+import {
+  InlineTestcase,
+  JudgeProviderName,
+} from '../judge-provider/judge-provider.interface';
+
+const TEST_CASES_PATH = process.env.TEST_CASES_PATH ?? '/tmp/testcases';
 
 export enum UserProblemStatus {
   TODO = 0,
@@ -152,6 +159,51 @@ export class SubmissionService {
   }
 
   /**
+   * 从磁盘读取题目的内联测试用例（botzone-neo OJ 模式所需）
+   */
+  private async readTestcases(problem: Problem): Promise<InlineTestcase[]> {
+    const dir = path.join(
+      TEST_CASES_PATH,
+      problem.prefix,
+      problem.logicId.toString(),
+    );
+    const testcases: InlineTestcase[] = [];
+    for (let i = 1; i <= (problem.cases ?? 0); i++) {
+      try {
+        const input = await fs.readFile(path.join(dir, `${i}.in`), 'utf-8');
+        const expectedOutput = await fs.readFile(
+          path.join(dir, `${i}.out`),
+          'utf-8',
+        );
+        testcases.push({ id: i, input, expectedOutput });
+      } catch {
+        this.logger.warn(
+          `测试用例文件缺失: problem=${problem.id} case=${i}`,
+        );
+      }
+    }
+    return testcases;
+  }
+
+  /**
+   * 加载题目的 checker 信息（checkerCode 有 select:false，需要单独查询）
+   */
+  private async loadCheckerInfo(
+    problemId: number,
+  ): Promise<{ checkerCode?: string; checkerLanguage?: string }> {
+    const row = await this.problemRepo
+      .createQueryBuilder('p')
+      .select(['p.checkerLanguage', 'p.checkerCode'])
+      .addSelect('p.checkerCode') // 强制加载 select:false 列
+      .where('p.id = :id', { id: problemId })
+      .getRawOne<{ p_checkerCode?: string; p_checkerLanguage?: string }>();
+    return {
+      checkerCode: row?.p_checkerCode ?? undefined,
+      checkerLanguage: row?.p_checkerLanguage ?? undefined,
+    };
+  }
+
+  /**
    * Enqueue a submission to botzone-neo and persist the external job ID.
    */
   private async enqueueToBottzone(
@@ -162,6 +214,13 @@ export class SubmissionService {
     memoryLimit: number,
   ): Promise<void> {
     try {
+      // 读取内联测试用例（botzone-neo OJ API 需要）
+      const testcases = await this.readTestcases(problem);
+
+      // 加载 SPJ checker 信息（如有）
+      const { checkerCode, checkerLanguage } =
+        await this.loadCheckerInfo(problem.id);
+
       const result = await this.botzoneClient!.enqueue({
         submissionId: submission.id,
         language: dto.language,
@@ -169,6 +228,9 @@ export class SubmissionService {
         timeLimit,
         memoryLimit,
         testDataUrl: this.buildTestDataUrl(problem),
+        testcases,
+        checkerCode,
+        checkerLanguage,
       });
 
       // Persist externalJobId + providerMeta

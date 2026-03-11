@@ -89,6 +89,18 @@ export class CreateProblemDto {
   @IsNumber()
   spjId?: number;
 
+  @ApiPropertyOptional({ description: 'Special Judge checker 源码' })
+  @IsOptional()
+  @IsString()
+  checkerCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Special Judge checker 语言（如 cpp17、c）',
+  })
+  @IsOptional()
+  @IsString()
+  checkerLanguage?: string;
+
   @ApiPropertyOptional({ description: '创建者 ID' })
   @IsOptional()
   @IsInt()

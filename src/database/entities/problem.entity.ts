@@ -98,6 +98,14 @@ export class Problem {
   @JoinColumn({ name: 'spjId' })
   spj: any;
 
+  /** Special Judge checker 源码（judgeMode='checker' 时使用） */
+  @Column({ type: 'text', nullable: true, select: false })
+  checkerCode?: string;
+
+  /** Special Judge checker 语言（botzone-neo 语言字符串，如 'cpp17'、'c'） */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  checkerLanguage?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

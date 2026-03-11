@@ -71,11 +71,15 @@ describe('BotzoneClientService', () => {
       timeLimit: 1000,
       memoryLimit: 256,
       testDataUrl: 'http://oj-test.local:3000/problems/7/test-data',
+      testcases: [
+        { id: 1, input: '1 2\n', expectedOutput: '3\n' },
+        { id: 2, input: '4 5\n', expectedOutput: '9\n' },
+      ],
     };
 
     beforeEach(() => {
       mockAxiosInstance.post.mockResolvedValue({
-        data: { jobId: 'bz-job-001', queuePosition: 3 },
+        data: { jobId: 'bz-job-001' },
       });
     });
 
@@ -84,37 +88,38 @@ describe('BotzoneClientService', () => {
       expect(result.externalJobId).toBe('bz-job-001');
     });
 
-    it('includes providerMeta with language and problemId', async () => {
+    it('posts to /v1/judge with type=oj', async () => {
+      await service.enqueue(baseParams);
+      const [url, body] = mockAxiosInstance.post.mock.calls[0];
+      expect(url).toBe('/v1/judge');
+      expect(body.type).toBe('oj');
+    });
+
+    it('includes providerMeta with language and judgeMode', async () => {
       const result = await service.enqueue(baseParams);
       expect(result.providerMeta).toMatchObject({
-        problemId: 'prob-001',
         language: 'cpp17',
+        judgeMode: 'standard',
       });
     });
 
-    it('uses externalProblemId override when provided', async () => {
-      await service.enqueue({ ...baseParams, externalProblemId: 'prob-custom' });
-      const body = mockAxiosInstance.post.mock.calls[0][1];
-      expect(body.problemId).toBe('prob-custom');
-    });
-
-    it('encodes code as base64', async () => {
+    it('sends source code as plain string (not base64)', async () => {
       await service.enqueue(baseParams);
       const body = mockAxiosInstance.post.mock.calls[0][1];
-      const decoded = Buffer.from(body.sourceCode, 'base64').toString('utf-8');
-      expect(decoded).toBe(baseParams.code);
+      expect(body.source).toBe(baseParams.code);
     });
 
-    it('sets callbackUrl to /botzone/callback', async () => {
+    it('sends inline testcases', async () => {
       await service.enqueue(baseParams);
       const body = mockAxiosInstance.post.mock.calls[0][1];
-      expect(body.callbackUrl).toBe('http://oj-test.local:3000/botzone/callback');
+      expect(body.testcases).toHaveLength(2);
+      expect(body.testcases[0]).toMatchObject({ id: 1, input: '1 2\n', expectedOutput: '3\n' });
     });
 
-    it('sets correlationId to string of submissionId', async () => {
+    it('sets callback.finish to /botzone/callback', async () => {
       await service.enqueue(baseParams);
       const body = mockAxiosInstance.post.mock.calls[0][1];
-      expect(body.correlationId).toBe('42');
+      expect(body.callback.finish).toBe('http://oj-test.local:3000/botzone/callback');
     });
 
     it('maps language 6 (Java) to "java"', async () => {
@@ -127,6 +132,38 @@ describe('BotzoneClientService', () => {
       await service.enqueue({ ...baseParams, language: 999 });
       const body = mockAxiosInstance.post.mock.calls[0][1];
       expect(body.language).toBe('cpp17');
+    });
+
+    it('uses judgeMode=standard when no checker provided', async () => {
+      await service.enqueue(baseParams);
+      const body = mockAxiosInstance.post.mock.calls[0][1];
+      expect(body.judgeMode).toBe('standard');
+      expect(body.checkerSource).toBeUndefined();
+    });
+
+    it('uses judgeMode=checker and sets checkerSource/checkerLanguage when provided', async () => {
+      await service.enqueue({
+        ...baseParams,
+        checkerCode: '#include <cstdio>',
+        checkerLanguage: 'cpp17',
+      });
+      const body = mockAxiosInstance.post.mock.calls[0][1];
+      expect(body.judgeMode).toBe('checker');
+      expect(body.checkerSource).toBe('#include <cstdio>');
+      expect(body.checkerLanguage).toBe('cpp17');
+    });
+
+    it('sends timeLimitMs and memoryLimitMb', async () => {
+      await service.enqueue(baseParams);
+      const body = mockAxiosInstance.post.mock.calls[0][1];
+      expect(body.timeLimitMs).toBe(1000);
+      expect(body.memoryLimitMb).toBe(256);
+    });
+
+    it('handles empty testcases gracefully', async () => {
+      await service.enqueue({ ...baseParams, testcases: undefined });
+      const body = mockAxiosInstance.post.mock.calls[0][1];
+      expect(body.testcases).toEqual([]);
     });
 
     it('throws when axios.post rejects', async () => {

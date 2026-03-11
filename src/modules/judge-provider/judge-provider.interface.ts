@@ -10,6 +10,13 @@ export enum JudgeProviderName {
   Botzone = 'botzone',
 }
 
+/** 单条测试用例（内联传递给 botzone-neo OJ 评测） */
+export interface InlineTestcase {
+  id: number;
+  input: string;
+  expectedOutput: string;
+}
+
 export interface EnqueueParams {
   submissionId: number;
   language: number;
@@ -20,6 +27,12 @@ export interface EnqueueParams {
   testDataUrl: string;
   /** Optional: problem identifier on the external platform */
   externalProblemId?: string;
+  /** 内联测试用例（botzone-neo OJ 模式需要） */
+  testcases?: InlineTestcase[];
+  /** Special Judge checker 源码（judgeMode='checker'） */
+  checkerCode?: string;
+  /** Special Judge checker 语言（如 'cpp17'、'c'） */
+  checkerLanguage?: string;
 }
 
 export interface EnqueueResult {
