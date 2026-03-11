@@ -643,7 +643,7 @@ export class CompeteService {
         const participantIds = Object.keys(finalResult).map(Number).filter(Boolean);
         const participants = participantIds.length > 0 ? await this.gamerRepo.findBy({ id: In(participantIds) }) : [];
         const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-        await this.updateElo(finalResult, matchType);
+        await this.updateElo(finalResult, matchType, match.id);
       }
 
       // Push game-over SSE so browser doesn't wait for the 3s poll
@@ -734,7 +734,7 @@ export class CompeteService {
         const participantIds = Object.keys(gamerIdScores).map(Number).filter(Boolean);
         const participants = await this.gamerRepo.findBy({ id: In(participantIds) });
         const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-        await this.updateElo(gamerIdScores, matchType);
+        await this.updateElo(gamerIdScores, matchType, matchId);
       }
 
       // Push game-over SSE so browser doesn't wait for the 3s poll
@@ -753,6 +753,7 @@ export class CompeteService {
   private async updateElo(
     finalResult: Record<string, number>,
     matchType: 'inner' | 'outer' = 'outer',
+    matchId = 0,
   ): Promise<void> {
     const K = 32;
 
@@ -822,7 +823,7 @@ export class CompeteService {
         try {
           await this.dataSource.query(
             'INSERT INTO gamer_elo_history (gamerId, matchId, eloBefore, eloAfter, eloDelta) VALUES (?, ?, ?, ?, ?)',
-            [g.id, 0, g.eloExternal ?? g.elo, newEloExt, Math.round(dExt)],
+            [g.id, matchId, g.eloExternal ?? g.elo, newEloExt, Math.round(dExt)],
           );
         } catch { /* history is best-effort */ }
       }),
