@@ -1587,18 +1587,25 @@ export class CompeteService {
       throw new BadRequestException(`参赛者不足（需要至少 ${needed} 个，当前 ${gamers.length} 个）`);
     }
 
-    // Round-robin 配对（每对只生成一场）
-    const matchIds: number[] = [];
-    for (let i = 0; i < gamers.length; i++) {
-      for (let j = i + 1; j < gamers.length; j += needed - 1) {
-        const pair = gamers.slice(j, j + needed - 1);
-        if (pair.length < needed - 1) break;
-        const ids = [gamers[i].id, ...pair.map(g => g.id)];
-        if (ids.length === needed) {
-          const match = await this.launchMatch(gameId, ids);
-          matchIds.push(match.id);
-        }
+    // 生成所有 N 人组合（C(n, needed) 个），避免重复配对
+    function combinations<T>(arr: T[], n: number): T[][] {
+      if (n === 1) return arr.map((x) => [x]);
+      const result: T[][] = [];
+      for (let i = 0; i <= arr.length - n; i++) {
+        const rest = combinations(arr.slice(i + 1), n - 1);
+        for (const combo of rest) result.push([arr[i], ...combo]);
       }
+      return result;
+    }
+
+    const MAX_MATCHES_PER_TRIGGER = 20;
+    const combos = combinations(gamers, needed);
+    const matchIds: number[] = [];
+    for (const combo of combos) {
+      if (matchIds.length >= MAX_MATCHES_PER_TRIGGER) break;
+      const ids = combo.map((g) => g.id);
+      const match = await this.launchMatch(gameId, ids);
+      matchIds.push(match.id);
     }
 
     return { created: matchIds.length, matchIds };

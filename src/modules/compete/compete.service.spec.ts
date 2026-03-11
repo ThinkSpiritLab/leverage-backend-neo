@@ -693,7 +693,192 @@ describe('CompeteService', () => {
     });
   });
 
-  // ─── Room ────────────────────────────────────────────────────────────────────
+  // ─── triggerAutoMatch ────────────────────────────────────────────────────────
+
+  describe('triggerAutoMatch', () => {
+    /** 帮助函数：构造 N 个 mock gamer */
+    const makeGamers = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        id: i + 1,
+        gameId: 1,
+        type: 'code',
+        disabled: false,
+        elo: 1000 - i * 10,
+        code: `code_${i}`,
+        language: 'python3',
+      }));
+
+    /** 构造 gameRepo.findOne mock（用于 findOneGame） */
+    const mockFindOneGame = (gamerQuantity: number, disabled = false) => {
+      mockGameRepo.findOne.mockResolvedValue({ ...gameFixture, gamerQuantity, disabled });
+    };
+
+    /** 构造 launchMatch 内部所需的 createQueryBuilder mock */
+    const mockLaunchMatchDeps = (gamerQuantity: number, gamers: any[]) => {
+      const qb = makeQb({
+        getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity }),
+      });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+      mockGamerRepo.find
+        .mockResolvedValueOnce(gamers) // triggerAutoMatch 内部的 gamerRepo.find
+        .mockResolvedValue(gamers);    // launchMatch 内部每次调用
+      mockMatchRepo.save.mockImplementation(() =>
+        Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
+      );
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+    };
+
+    it('2人游戏：4个参赛者生成 C(4,2)=6 场对局', async () => {
+      const allGamers = makeGamers(4);
+      mockFindOneGame(2);
+      mockGameRepo.createQueryBuilder.mockReturnValue(
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 2 }) }),
+      );
+      // 动态 mock：triggerAutoMatch 首次 find 用 take，launchMatch 按 ID 过滤
+      mockGamerRepo.find.mockImplementation(async (opts: any) => {
+        if (opts?.take !== undefined) return allGamers.slice(0, opts.take ?? allGamers.length);
+        const inOp = opts?.where?.id;
+        const ids: number[] = inOp?._value ?? inOp?.value ?? [];
+        return allGamers.filter((g) => ids.includes(g.id));
+      });
+      mockMatchRepo.save.mockImplementation(() =>
+        Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
+      );
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+
+      const result = await service.triggerAutoMatch(1, 4);
+      expect(result.created).toBe(6);
+    });
+
+    it('3人游戏：4个参赛者生成 C(4,3)=4 场对局', async () => {
+      const allGamers = makeGamers(4);
+      mockFindOneGame(3);
+      mockGameRepo.createQueryBuilder.mockReturnValue(
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 3 }) }),
+      );
+      mockGamerRepo.find.mockImplementation(async (opts: any) => {
+        if (opts?.take !== undefined) return allGamers.slice(0, opts.take ?? allGamers.length);
+        const inOp = opts?.where?.id;
+        const ids: number[] = inOp?._value ?? inOp?.value ?? [];
+        return allGamers.filter((g) => ids.includes(g.id));
+      });
+      mockMatchRepo.save.mockImplementation(() =>
+        Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
+      );
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+
+      const result = await service.triggerAutoMatch(1, 4);
+      expect(result.created).toBe(4);
+    });
+
+    it('3人游戏：3个参赛者生成 C(3,3)=1 场对局', async () => {
+      const gamers = makeGamers(3);
+      mockFindOneGame(3);
+
+      mockGameRepo.createQueryBuilder.mockReturnValue(
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 3 }) }),
+      );
+      mockGamerRepo.find
+        .mockResolvedValueOnce(gamers)
+        .mockResolvedValue(gamers);
+      mockMatchRepo.save.mockResolvedValue({ id: 200, gameId: 1, status: MatchStatus.PENDING });
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+
+      const result = await service.triggerAutoMatch(1, 3);
+      expect(result.created).toBe(1);
+      expect(result.matchIds).toContain(200);
+    });
+
+    it('参赛者不足时抛 BadRequestException', async () => {
+      const gamers = makeGamers(2);
+      mockFindOneGame(3);
+      mockGamerRepo.find.mockResolvedValueOnce(gamers);
+
+      await expect(service.triggerAutoMatch(1, 8)).rejects.toThrow(BadRequestException);
+    });
+
+    it('游戏被禁用时抛 BadRequestException', async () => {
+      mockFindOneGame(2, true);
+      await expect(service.triggerAutoMatch(1)).rejects.toThrow(BadRequestException);
+    });
+
+    it('超过 20 场上限时截断', async () => {
+      // C(7,2) = 21 > 20，应截断为 20
+      const allGamers = makeGamers(7);
+      mockFindOneGame(2);
+      mockGameRepo.createQueryBuilder.mockReturnValue(
+        makeQb({ getOne: jest.fn().mockResolvedValue({ ...gameFixture, gamerQuantity: 2 }) }),
+      );
+      mockGamerRepo.find.mockImplementation(async (opts: any) => {
+        if (opts?.take !== undefined) return allGamers.slice(0, opts.take ?? allGamers.length);
+        const inOp = opts?.where?.id;
+        const ids: number[] = inOp?._value ?? inOp?.value ?? [];
+        return allGamers.filter((g) => ids.includes(g.id));
+      });
+      mockMatchRepo.save.mockImplementation(() =>
+        Promise.resolve({ id: Math.floor(Math.random() * 10000), gameId: 1, status: MatchStatus.PENDING }),
+      );
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+
+      const result = await service.triggerAutoMatch(1, 7);
+      expect(result.created).toBe(20);
+    });
+  });
+
+  // ─── updateElo (3人) ─────────────────────────────────────────────────────────
+
+  describe('updateElo (3人游戏)', () => {
+    it('3人对局 pairwise ELO 计算无误', async () => {
+      // 通过 handleMatchResult 的内部路径间接测 updateElo：
+      // 直接测 private 方法，用 (service as any).updateElo
+      const gamer1 = { id: 1, elo: 1000, eloExternal: 1000 };
+      const gamer2 = { id: 2, elo: 1000, eloExternal: 1000 };
+      const gamer3 = { id: 3, elo: 900,  eloExternal: 900  };
+      mockGamerRepo.findBy = jest.fn().mockResolvedValue([gamer1, gamer2, gamer3]);
+      mockGamerRepo.update = jest.fn().mockResolvedValue({});
+      mockDataSource.query = jest.fn().mockResolvedValue([]);
+
+      // gamer1 胜（score 最高），gamer2 次之，gamer3 败
+      const finalResult: Record<string, number> = { '1': 10, '2': 5, '3': 1 };
+      await (service as any).updateElo(finalResult, 'inner', 42);
+
+      // gamer1 赢了两场 pairwise，elo 应上升
+      const updateCalls: [number, any][] = mockGamerRepo.update.mock.calls;
+      const g1Update = updateCalls.find(([id]) => id === 1)?.[1];
+      const g3Update = updateCalls.find(([id]) => id === 3)?.[1];
+      expect(g1Update?.elo).toBeGreaterThan(1000);
+      expect(g3Update?.elo).toBeLessThan(900);
+    });
+  });
+
+  // ─── launchMatch (3人) ───────────────────────────────────────────────────────
+
+  describe('launchMatch (3人游戏)', () => {
+    it('3人游戏创建正确的 match_gamer_link 记录', async () => {
+      const game3 = { ...gameFixture, gamerQuantity: 3 };
+      const qb = makeQb({ getOne: jest.fn().mockResolvedValue(game3) });
+      mockGameRepo.createQueryBuilder.mockReturnValue(qb);
+
+      const g1 = { id: 1, code: 'a', language: 'python3', type: 'code' };
+      const g2 = { id: 2, code: 'b', language: 'cpp',     type: 'code' };
+      const g3 = { id: 3, code: 'c', language: 'java',    type: 'code' };
+      mockGamerRepo.find.mockResolvedValue([g1, g2, g3]);
+      mockMatchRepo.save.mockResolvedValue({ id: 300, gameId: 1, status: MatchStatus.PENDING });
+      mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
+
+      const result = await service.launchMatch(1, [1, 2, 3]);
+      expect(result.id).toBe(300);
+
+      // 确认 matchGamerLinkRepo.save 被调用，且包含 3 个 link
+      const savedLinks = mockMatchGamerLinkRepo.save.mock.calls[0][0];
+      expect(savedLinks).toHaveLength(3);
+      expect(savedLinks[0]).toMatchObject({ matchId: 300, gamerId: 1, index: 0 });
+      expect(savedLinks[1]).toMatchObject({ matchId: 300, gamerId: 2, index: 1 });
+      expect(savedLinks[2]).toMatchObject({ matchId: 300, gamerId: 3, index: 2 });
+    });
+  });
+
+// ─── Room ────────────────────────────────────────────────────────────────────
 
   describe('createRoom', () => {
     it('应创建房间并返回 roomId', async () => {
