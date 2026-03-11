@@ -62,4 +62,8 @@ export class CreateGameDto {
   @IsOptional()
   @IsBoolean()
   allowHuman?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  autoMatchEnabled?: boolean;
 }

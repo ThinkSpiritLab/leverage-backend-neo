@@ -16,6 +16,7 @@ import { CompeteController } from './compete.controller';
 import { CompeteService } from './compete.service';
 import { HumanTurnService } from './human-turn.service';
 import { CompeteCleanupTask } from './compete-cleanup.task';
+import { AutoMatchSchedulerService } from './auto-match-scheduler.service';
 // CompeteTxWorker merged into JudgeTxWorker — do not register here
 
 @Module({
@@ -30,7 +31,7 @@ import { CompeteCleanupTask } from './compete-cleanup.task';
     SettingModule,
   ],
   controllers: [CompeteController],
-  providers: [CompeteService, HumanTurnService, CompeteCleanupTask],
+  providers: [CompeteService, HumanTurnService, CompeteCleanupTask, AutoMatchSchedulerService],
   exports: [CompeteService, HumanTurnService],
 })
 export class CompeteModule {}

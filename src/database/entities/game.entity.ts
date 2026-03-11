@@ -51,6 +51,10 @@ export class Game {
   @Column({ type: 'boolean', default: false })
   allowHuman: boolean;
 
+  /** 是否开启自动对战调度（默认关闭） */
+  @Column({ type: 'boolean', default: false })
+  autoMatchEnabled: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

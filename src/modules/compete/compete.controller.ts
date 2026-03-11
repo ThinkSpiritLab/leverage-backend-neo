@@ -36,6 +36,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
 import { CompeteService } from './compete.service';
 import { HumanTurnService } from './human-turn.service';
+import { AutoMatchSchedulerService } from './auto-match-scheduler.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import { CreateGamerDto } from './dto/create-gamer.dto';
@@ -60,6 +61,7 @@ export class CompeteController {
     private readonly configService: ConfigService,
     private readonly humanTurnService: HumanTurnService,
     private readonly jwtService: JwtService,
+    private readonly autoMatchSchedulerService: AutoMatchSchedulerService,
   ) {
     this.callbackToken = this.configService.get<string>(
       'botzone.callbackToken',
@@ -565,6 +567,19 @@ export class CompeteController {
     @Query('topN') topN?: string,
   ) {
     return this.competeService.triggerAutoMatch(gameId, topN ? Number(topN) : 8);
+  }
+
+  /**
+   * GET /compete/games/:id/auto-match-status
+   * Admin: returns current auto-match scheduler state for a game.
+   */
+  @Get('games/:id/auto-match-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'sa')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理员：查询自动对战调度状态' })
+  getAutoMatchStatus(@Param('id', ParseIntPipe) id: number) {
+    return this.autoMatchSchedulerService.getStatus(id);
   }
 
   // ─── Playground ──────────────────────────────────────────────────────────
