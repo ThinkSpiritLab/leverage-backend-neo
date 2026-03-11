@@ -98,7 +98,7 @@
       const last = visible[visible.length - 1];
       const final = gameLog?.finalResult || null;
 
-      const scores = final?.scores || last?.judgeCmd?.display?.scores || {'0':0,'1':0};
+      const scores = final?.scores || last?.display?.scores || last?.judgeCmd?.display?.scores || {'0':0,'1':0};
       document.getElementById('score0').textContent = scores[0] ?? scores['0'] ?? 0;
       document.getElementById('score1').textContent = scores[1] ?? scores['1'] ?? 0;
       document.getElementById('round').textContent = `${visible.length} / 15`;
@@ -109,7 +109,7 @@
         document.getElementById('rows').innerHTML = '<tr><td colspan="6" class="empty">No rounds played yet.</td></tr>';
       } else {
         document.getElementById('rows').innerHTML = visible.map((entry, i) => {
-          const display = entry?.judgeCmd?.display || {};
+          const display = entry?.display ?? entry?.judgeCmd?.display ?? {};
           const rd = display.lastRound || display.history?.[display.history.length - 1] || {};
           const moves = rd.moves || {};
           const payoff = rd.payoff || {};

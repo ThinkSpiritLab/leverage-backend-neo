@@ -341,7 +341,7 @@
     function getDisplayFromMessage(data) {
       if (data.type === "gameLog") {
         return data.gameLog && data.gameLog.rounds && data.gameLog.rounds[data.round]
-          ? data.gameLog.rounds[data.round].judgeCmd.display
+          ? (data.gameLog.rounds[data.round].display ?? data.gameLog.rounds[data.round].judgeCmd?.display)
           : null;
       }
       if (data.type === "gameState") {

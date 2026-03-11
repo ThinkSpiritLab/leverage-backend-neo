@@ -334,7 +334,7 @@
     window.addEventListener("message", (event) => {
       if (event.data.type === "gameLog") {
         const { gameLog, round } = event.data;
-        render(gameLog.rounds?.[round]?.judgeCmd?.display);
+        render(gameLog.rounds?.[round]?.display ?? gameLog.rounds?.[round]?.judgeCmd?.display);
       }
 
       if (event.data.type === "gameState") {
