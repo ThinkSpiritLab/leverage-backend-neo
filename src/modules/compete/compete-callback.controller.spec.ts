@@ -5,6 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { AutoMatchSchedulerService } from './auto-match-scheduler.service';
 import { CompeteController } from './compete.controller';
 import { CompeteService } from './compete.service';
 import { HumanTurnService } from './human-turn.service';
@@ -75,6 +76,7 @@ describe('CompeteController — match-callback', () => {
         { provide: SettingService, useValue: {} },
         { provide: HumanTurnService, useValue: { notifyGameOver: jest.fn(), waitForTurn: jest.fn(), registerSSEClient: jest.fn(), unregisterSSEClient: jest.fn(), replayPendingTurn: jest.fn() } },
         { provide: JwtService, useValue: { sign: jest.fn(), verify: jest.fn() } },
+        { provide: AutoMatchSchedulerService, useValue: { getStatus: jest.fn(), resetState: jest.fn() } },
       ],
     }).compile();
 
