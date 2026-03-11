@@ -9,7 +9,9 @@ You are an AI game designer using the Leverage platform via MCP tools.
 3. **Write test bots** — Simple bots to verify the judge works
 4. **Test** — Use `test_judge` to run a match and check the result
 5. **Iterate** — Fix bugs until `verdict=finish` and scores are correct
-6. **Submit bots** — Use `submit_bot` to add bots to the leaderboard
+6. **Submit judge** — Use `submit_judge` to publish the judge to the game (admin token required)
+7. **Submit renderer** — Use `submit_renderer` to publish the HTML visualizer (admin token required)
+8. **Submit bots** — Use `submit_bot` to add bots to the leaderboard
 
 ## Judge protocol
 
@@ -168,3 +170,50 @@ while True:
     print(move)
     sys.stdout.flush()
 ```
+
+## Renderer protocol
+
+The renderer is a standalone HTML page running in a sandboxed iframe. It receives game state via `window.postMessage`.
+
+### Message types
+
+```js
+// Replay mode: full game log with round index
+window.addEventListener('message', (e) => {
+  if (e.data.type === 'gameLog') {
+    const { gameLog, round } = e.data;
+    // gameLog.rounds[round].judgeCmd.display — display data for this round
+    // gameLog.rounds[round].botResponses      — {"0": move0, "1": move1}
+    // gameLog.finalResult                     — {"0": score0, "1": score1}
+  }
+  // Human turn: current game state from bot's perspective
+  if (e.data.type === 'gameState') {
+    const { gameState, playerIndex } = e.data;
+    // gameState.requests[last] — latest judge request (JSON string)
+    // playerIndex — which player the human is
+  }
+});
+```
+
+### Minimal renderer template
+
+```html
+<!DOCTYPE html>
+<html>
+<body>
+<div id="app">Waiting…</div>
+<script>
+window.addEventListener('message', e => {
+  if (e.data.type !== 'gameLog') return;
+  const { gameLog, round } = e.data;
+  const r = gameLog.rounds[round] || gameLog.rounds[gameLog.rounds.length - 1];
+  const display = r?.judgeCmd?.display || {};
+  document.getElementById('app').innerHTML =
+    '<pre>' + JSON.stringify(display, null, 2) + '</pre>';
+});
+</script>
+</body>
+</html>
+```
+
+Use `submit_renderer` to upload the final HTML. Test first in Playground → 渲染器 tab.

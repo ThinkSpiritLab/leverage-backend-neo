@@ -54,6 +54,22 @@ async function apiPost(path: string, body: unknown): Promise<unknown> {
   return res.json();
 }
 
+async function apiPatch(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`PATCH ${path} failed (${res.status}): ${text}`);
+  }
+  return res.json();
+}
+
 // ─── Polling helper ───────────────────────────────────────────────────────────
 
 /** Poll a match until verdict is not "continue" (or timeout). */
@@ -320,6 +336,91 @@ server.tool(
             null,
             2,
           ),
+        },
+      ],
+    };
+  },
+);
+
+// ── Tool: submit_judge ────────────────────────────────────────────────────────
+
+server.tool(
+  'submit_judge',
+  'Upload a custom judge program to a game (requires admin/supervisor token). ' +
+  'After uploading, the judge runs in a sandbox for every match of this game. ' +
+  'Use test_judge first to validate your code before submitting.',
+  {
+    gameId: z.number().int().describe('Game ID to update'),
+    judgerCode: z.string().describe('Judge source code (Python, C++, etc.)'),
+    judgerLanguage: z.number().int().optional().default(9)
+      .describe('Language ID: 9=Python3, 2=C++17, 6=Java, 7=JavaScript. Default: 9 (Python3)'),
+  },
+  async ({ gameId, judgerCode, judgerLanguage }) => {
+    const result = (await apiPatch(`/compete/games/${gameId}`, {
+      judgerCode,
+      judgerLanguage,
+    })) as Record<string, unknown>;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            { ok: true, gameId, judgerLanguage, message: '裁判程序已更新' },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
+);
+
+// ── Tool: submit_renderer ─────────────────────────────────────────────────────
+
+server.tool(
+  'submit_renderer',
+  'Upload an HTML renderer for a game (requires admin/supervisor token). ' +
+  'The renderer is sandboxed in an iframe and receives game state via postMessage. ' +
+  'Expected message types: gameLog ({type:"gameLog", gameLog, round}) and gameState ({type:"gameState", gameState, playerIndex}). ' +
+  'Use the renderer tab in Playground to test before submitting.',
+  {
+    gameId: z.number().int().describe('Game ID to update'),
+    rendererHtml: z.string().describe(
+      'Full HTML string for the renderer. Must listen to window.postMessage for type="gameLog" and optionally type="gameState".',
+    ),
+  },
+  async ({ gameId, rendererHtml }) => {
+    await apiPatch(`/compete/games/${gameId}`, { rendererHtml });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            { ok: true, gameId, htmlLength: rendererHtml.length, message: '渲染器已更新' },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
+);
+
+// ── Tool: get_judge ───────────────────────────────────────────────────────────
+
+server.tool(
+  'get_judge',
+  'Get the current judge code for a game (requires admin/supervisor token).',
+  {
+    gameId: z.number().int().describe('Game ID'),
+  },
+  async ({ gameId }) => {
+    const result = (await apiGet(`/compete/games/${gameId}/judger`)) as Record<string, unknown>;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
