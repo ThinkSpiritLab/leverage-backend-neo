@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iterated Prisoner's Dilemma</title>
+  <style>
+    :root {
+      --panel: rgba(255, 252, 246, 0.88);
+      --ink: #172121;
+      --accent: #1f6f5f;
+      --danger: #b8402a;
+      --grid: #d6c9b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background: linear-gradient(135deg, #efe5d6, #f8f4ed 55%, #ebe2d1);
+      padding: 20px;
+    }
+    .shell {
+      max-width: 900px; margin: 0 auto;
+      background: var(--panel);
+      border: 1px solid rgba(23,33,33,.08);
+      border-radius: 20px; overflow: hidden;
+      box-shadow: 0 18px 50px rgba(23,33,33,.12);
+    }
+    .hero { padding: 24px 24px 16px; border-bottom: 1px solid rgba(23,33,33,.08); }
+    h1 { margin: 0 0 6px; font-size: clamp(1.6rem,4vw,2.6rem); }
+    .status { margin: 0; font-size: .95rem; opacity: .7; }
+    .banner {
+      margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+      background: linear-gradient(90deg,rgba(215,166,61,.2),rgba(31,111,95,.1));
+      border: 1px solid rgba(23,33,33,.08); font-size: 1rem;
+    }
+    .metrics {
+      display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+      gap: 12px; padding: 16px 24px;
+    }
+    .metric {
+      background: rgba(255,255,255,.56);
+      border: 1px solid rgba(23,33,33,.08);
+      border-radius: 14px; padding: 14px;
+    }
+    .metric .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; opacity: .65; }
+    .metric .value { font-size: 1.8rem; margin-top: 4px; font-weight: 600; }
+    .table-wrap { padding: 0 24px 24px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,.55); border-radius: 14px; overflow: hidden; }
+    th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid var(--grid); }
+    thead th { background: rgba(23,33,33,.05); font-size: .82rem; text-transform: uppercase; letter-spacing: .07em; }
+    tbody tr:last-child td { border-bottom: none; }
+    .choice {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.8rem; height: 1.8rem; border-radius: 999px;
+      font-weight: 700; color: white; font-size: .85rem;
+    }
+    .choice.c { background: var(--accent); }
+    .choice.d { background: var(--danger); }
+    .empty { opacity: .55; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <h1>Iterated Prisoner's Dilemma</h1>
+      <p class="status" id="status">Waiting for replay data…</p>
+      <div class="banner" id="banner">Match not started.</div>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="label">Player 1 Total</div><div class="value" id="score0">0</div></div>
+      <div class="metric"><div class="label">Player 2 Total</div><div class="value" id="score1">0</div></div>
+      <div class="metric"><div class="label">Round</div><div class="value" id="round">0 / 15</div></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Round</th><th>P1 Choice</th><th>P2 Choice</th><th>P1 +pts</th><th>P2 +pts</th><th>Score</th></tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="6" class="empty">No rounds played yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function badge(c) {
+      const cls = c === 'C' ? 'c' : 'd';
+      return `<span class="choice ${cls}">${c}</span>`;
+    }
+
+    function render(gameLog, roundIndex) {
+      const rounds = Array.isArray(gameLog?.rounds) ? gameLog.rounds : [];
+      const idx = typeof roundIndex === 'number' ? roundIndex : rounds.length - 1;
+      const visible = rounds.slice(0, Math.max(0, idx + 1));
+      const last = visible[visible.length - 1];
+      const final = gameLog?.finalResult || null;
+
+      const scores = final?.scores || last?.judgeCmd?.display?.scores || {'0':0,'1':0};
+      document.getElementById('score0').textContent = scores[0] ?? scores['0'] ?? 0;
+      document.getElementById('score1').textContent = scores[1] ?? scores['1'] ?? 0;
+      document.getElementById('round').textContent = `${visible.length} / 15`;
+      document.getElementById('status').textContent = visible.length
+        ? `Round ${visible.length} of 15` : 'Waiting…';
+
+      if (!visible.length) {
+        document.getElementById('rows').innerHTML = '<tr><td colspan="6" class="empty">No rounds played yet.</td></tr>';
+      } else {
+        document.getElementById('rows').innerHTML = visible.map((entry, i) => {
+          const display = entry?.judgeCmd?.display || {};
+          const rd = display.lastRound || display.history?.[display.history.length - 1] || {};
+          const moves = rd.moves || {};
+          const payoff = rd.payoff || {};
+          const cum = rd.cumulative || {};
+          const m0 = moves[0] ?? moves['0'] ?? 'C';
+          const m1 = moves[1] ?? moves['1'] ?? 'C';
+          return `<tr>
+            <td>${i+1}</td>
+            <td>${badge(m0)}</td>
+            <td>${badge(m1)}</td>
+            <td>${payoff[0] ?? payoff['0'] ?? 0}</td>
+            <td>${payoff[1] ?? payoff['1'] ?? 0}</td>
+            <td>${cum[0] ?? cum['0'] ?? 0} – ${cum[1] ?? cum['1'] ?? 0}</td>
+          </tr>`;
+        }).join('');
+      }
+
+      if (final) {
+        const a = +(scores[0] ?? scores['0'] ?? 0);
+        const b = +(scores[1] ?? scores['1'] ?? 0);
+        const w = a > b ? 'Player 1 wins! 🏆' : b > a ? 'Player 2 wins! 🏆' : 'Draw 🤝';
+        document.getElementById('banner').textContent = `${w}  |  Final: ${a} – ${b}`;
+      } else if (visible.length) {
+        document.getElementById('banner').textContent = 'Match in progress…';
+      }
+    }
+
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'gameLog') render(e.data.gameLog, e.data.round);
+    });
+  </script>
+</body>
+</html>
