@@ -35,7 +35,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
           strict: false,
         });
       }
-      const user = await this.apiKeyService.validateApiKey(apiKeyHeader);
+      const user = await this.apiKeyService!.validateApiKey(apiKeyHeader);
       if (!user) {
         throw new UnauthorizedException('无效的 API Key');
       }
