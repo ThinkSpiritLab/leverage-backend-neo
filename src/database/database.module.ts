@@ -28,6 +28,7 @@ import { SubmissionMisc } from './entities/submission-misc.entity';
 import { Suspicion } from './entities/suspicion.entity';
 import { Tag } from './entities/tag.entity';
 import { User } from './entities/user.entity';
+import { UserApiKey } from './entities/user-api-key.entity';
 import { UserMeta } from './entities/user-meta.entity';
 
 const entities = [
@@ -57,6 +58,7 @@ const entities = [
   Gamer,
   Match,
   MatchGamerLink,
+  UserApiKey,
 ];
 
 @Module({

@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Liar's Dice</title>
+  <style>
+    :root {
+      --bg: #f2efe8;
+      --panel: rgba(255, 252, 245, 0.88);
+      --ink: #182126;
+      --muted: #6f6a63;
+      --accent: #bb4d00;
+      --accent-soft: #ffd9bf;
+      --good: #2d6a4f;
+      --bad: #9b2226;
+      --line: rgba(24, 33, 38, 0.12);
+      --shadow: 0 18px 40px rgba(24, 33, 38, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(255, 217, 191, 0.9), transparent 35%),
+        radial-gradient(circle at bottom right, rgba(187, 77, 0, 0.18), transparent 28%),
+        linear-gradient(135deg, #ece8de, #f8f6f0);
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero, .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .hero {
+      padding: 24px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      letter-spacing: 0.02em;
+    }
+
+    .hero .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 18px;
+    }
+
+    .players {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid rgba(24, 33, 38, 0.08);
+      display: grid;
+      gap: 10px;
+      transform: translateY(8px);
+      opacity: 0;
+      animation: settle 380ms ease forwards;
+    }
+
+    .card.current {
+      outline: 2px solid var(--accent);
+      background: linear-gradient(180deg, rgba(255, 217, 191, 0.5), rgba(255,255,255,0.82));
+    }
+
+    .card.eliminated {
+      opacity: 0.65;
+      filter: grayscale(0.35);
+    }
+
+    .heading {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .player-name {
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .lives {
+      color: var(--bad);
+      letter-spacing: 0.08em;
+    }
+
+    .dice-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      min-height: 54px;
+    }
+
+    .die {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-size: 1.25rem;
+      font-weight: 700;
+      background: #fff;
+      border: 1px solid rgba(24, 33, 38, 0.12);
+      box-shadow: 0 8px 16px rgba(24, 33, 38, 0.08);
+    }
+
+    .die.hidden {
+      background: linear-gradient(135deg, #182126, #46535c);
+      color: #fff;
+    }
+
+    .sidebar {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+
+    .bid {
+      font-size: 2rem;
+      font-weight: 700;
+    }
+
+    .message {
+      line-height: 1.5;
+    }
+
+    .history {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .result-true { color: var(--good); }
+    .result-false { color: var(--bad); }
+
+    @keyframes settle {
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <h1>Liar's Dice</h1>
+      <div class="meta">
+        <span id="handMeta">Waiting for game log</span>
+        <span id="turnMeta"></span>
+        <span id="bidMeta"></span>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="players" id="players"></div>
+      <aside class="sidebar">
+        <section class="panel">
+          <div class="label">Current Bid</div>
+          <div class="bid" id="currentBid">No bid yet</div>
+        </section>
+        <section class="panel">
+          <div class="label">Table Talk</div>
+          <div class="message" id="message">Waiting for state…</div>
+        </section>
+        <section class="panel">
+          <div class="label">Resolution</div>
+          <div id="resolution">No challenge yet.</div>
+        </section>
+        <section class="panel">
+          <div class="label">Elimination History</div>
+          <ol class="history" id="history"></ol>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    const playersEl = document.getElementById("players");
+    const currentBidEl = document.getElementById("currentBid");
+    const messageEl = document.getElementById("message");
+    const resolutionEl = document.getElementById("resolution");
+    const historyEl = document.getElementById("history");
+    const handMetaEl = document.getElementById("handMeta");
+    const turnMetaEl = document.getElementById("turnMeta");
+    const bidMetaEl = document.getElementById("bidMeta");
+
+    const pips = { 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6" };
+
+    function heartString(lives) {
+      return "❤️".repeat(Math.max(0, lives)) || "—";
+    }
+
+    function render(display) {
+      if (!display) return;
+
+      handMetaEl.textContent = `Hand ${display.hand}`;
+      turnMetaEl.textContent = display.turnPlayer !== null && display.turnPlayer !== undefined
+        ? `Turn: Player ${display.turnPlayer}`
+        : "Turn complete";
+      bidMetaEl.textContent = `${display.bidsThisHand}/${display.maxBidsPerHand} bids`;
+      currentBidEl.textContent = display.currentBid
+        ? `${display.currentBid.count} × face ${display.currentBid.face}`
+        : "No bid yet";
+      messageEl.textContent = display.message || "No message";
+
+      if (display.resolution) {
+        const res = display.resolution;
+        const verdictClass = res.bidTrue ? "result-true" : "result-false";
+        resolutionEl.innerHTML = `
+          <div class="${verdictClass}">
+            Bid ${res.bid.count} × ${res.bid.face} was ${res.bidTrue ? "true" : "false"}.
+          </div>
+          <div>Challenger: Player ${res.challenger}</div>
+          <div>Bidder: Player ${res.bidder}</div>
+          <div>Actual count: ${res.actualCount}</div>
+          <div>Life lost: Player ${res.loser}</div>
+          ${res.eliminated ? `<div>Eliminated: Player ${res.eliminated}</div>` : ""}
+          ${res.autoChallenge ? "<div>Auto-challenge triggered at the bid cap.</div>" : ""}
+        `;
+      } else {
+        resolutionEl.textContent = "No challenge yet.";
+      }
+
+      playersEl.innerHTML = "";
+      for (const player of display.players || []) {
+        const card = document.createElement("article");
+        card.className = `card${player.id === display.turnPlayer ? " current" : ""}${player.eliminated ? " eliminated" : ""}`;
+
+        const heading = document.createElement("div");
+        heading.className = "heading";
+        heading.innerHTML = `
+          <div class="player-name">Player ${player.id}</div>
+          <div class="lives">${heartString(player.lives)}</div>
+        `;
+
+        const diceRow = document.createElement("div");
+        diceRow.className = "dice-row";
+        const dice = player.dice || [];
+
+        if (dice.length === 0) {
+          const empty = document.createElement("div");
+          empty.textContent = player.eliminated ? "Eliminated" : "No dice";
+          diceRow.appendChild(empty);
+        } else {
+          for (const value of dice) {
+            const die = document.createElement("div");
+            die.className = `die${player.revealed ? "" : " hidden"}`;
+            die.textContent = player.revealed ? (pips[value] || value) : "?";
+            diceRow.appendChild(die);
+          }
+        }
+
+        const status = document.createElement("div");
+        status.textContent = player.eliminated
+          ? "Out of the game"
+          : player.revealed
+            ? "Dice revealed"
+            : `${player.diceCount} hidden dice`;
+
+        card.appendChild(heading);
+        card.appendChild(diceRow);
+        card.appendChild(status);
+        playersEl.appendChild(card);
+      }
+
+      historyEl.innerHTML = "";
+      const history = display.eliminationHistory || [];
+      if (!history.length) {
+        const item = document.createElement("li");
+        item.textContent = "Nobody eliminated yet.";
+        historyEl.appendChild(item);
+      } else {
+        for (const event of history) {
+          const item = document.createElement("li");
+          item.textContent = `Hand ${event.hand}: Player ${event.player} ${event.reason}.`;
+          historyEl.appendChild(item);
+        }
+      }
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.data.type === "gameLog") {
+        const { gameLog, round } = event.data;
+        render(gameLog.rounds?.[round]?.judgeCmd?.display);
+      }
+
+      if (event.data.type === "gameState") {
+        const display = event.data.gameState?.display;
+        if (display) render(display);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -6,11 +6,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContestUser } from '../../database/entities/contest-user.entity';
 import { Contest } from '../../database/entities/contest.entity';
 import { User } from '../../database/entities/user.entity';
+import { UserApiKey } from '../../database/entities/user-api-key.entity';
 import { Setting } from '../../database/entities/setting.entity';
 import { ContestAuthGuard } from '../../common/guards/contest-auth.guard';
 import { MetricsModule } from '../metrics/metrics.module';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { ApiKeyController } from './api-key.controller';
+import { ApiKeyService } from './api-key.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAccessStrategy } from './strategies/jwt-access.strategy';
@@ -22,7 +25,7 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
     ConfigModule,
     MetricsModule,
     PassportModule,
-    TypeOrmModule.forFeature([User, ContestUser, Contest, Setting]),
+    TypeOrmModule.forFeature([User, UserApiKey, ContestUser, Contest, Setting]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -41,9 +44,10 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, ApiKeyController],
   providers: [
     AuthService,
+    ApiKeyService,
     JwtAccessStrategy,
     JwtRefreshStrategy,
     JwtContestStrategy,
@@ -52,6 +56,6 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
     RolesGuard,
     ContestAuthGuard,
   ],
-  exports: [AuthService, JwtAuthGuard, RolesGuard, ContestAuthGuard, JwtModule],
+  exports: [AuthService, ApiKeyService, JwtAuthGuard, RolesGuard, ContestAuthGuard, JwtModule],
 })
 export class AuthModule {}
