@@ -427,6 +427,134 @@ server.tool(
   },
 );
 
+// ── Tool: list_matches ────────────────────────────────────────────────────────
+
+server.tool(
+  'list_matches',
+  'List recent matches for a game or a specific bot (gamer). Use this to find matchIds you can then inspect with get_match_result.',
+  {
+    gameId: z.number().int().optional().describe('Filter by game ID'),
+    gamerId: z.number().int().optional().describe('Filter by bot (gamer) ID — returns matches this bot participated in'),
+    status: z.number().int().optional().describe('Filter by status: 0=pending, 1=running, 2=finished, 3=failed'),
+    isTest: z.boolean().optional().describe('true = test/playground matches only; false = ranked only'),
+    page: z.number().int().optional().default(1),
+    perPage: z.number().int().optional().default(10),
+  },
+  async ({ gameId, gamerId, status, isTest, page, perPage }) => {
+    const params = new URLSearchParams();
+    if (gameId !== undefined) params.set('gameId', String(gameId));
+    if (gamerId !== undefined) params.set('gamerId', String(gamerId));
+    if (status !== undefined) params.set('status', String(status));
+    if (isTest !== undefined) params.set('isTest', String(isTest));
+    params.set('page', String(page ?? 1));
+    params.set('perPage', String(perPage ?? 10));
+    const data = (await apiGet(`/compete/matches?${params}`)) as Record<string, unknown>;
+    const items = (data.items ?? data) as Record<string, unknown>[];
+    const summary = Array.isArray(items)
+      ? items.map((m) => ({
+          id: m.id,
+          status: m.status,
+          isTest: m.isTest,
+          createdAt: m.createdAt,
+          gamers: (m.gamers as any[])?.map((g: any) => ({ id: g.id, title: g.title, elo: g.elo })),
+          winner: (m.winner as any)?.title ?? null,
+        }))
+      : data;
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ matches: summary, total: data.total }, null, 2) }],
+    };
+  },
+);
+
+// ── Tool: get_gamer ───────────────────────────────────────────────────────────
+
+server.tool(
+  'get_gamer',
+  'Get details of a specific bot (gamer), including its code (if accessible). Useful for reading a user\'s bot to help debug or improve it.',
+  {
+    gamerId: z.number().int().describe('Bot (gamer) ID'),
+  },
+  async ({ gamerId }) => {
+    const data = (await apiGet(`/compete/gamers/${gamerId}`)) as Record<string, unknown>;
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(
+            {
+              id: data.id,
+              title: data.title,
+              language: data.language,
+              elo: data.elo,
+              type: data.type,
+              opensource: data.opensource,
+              code: data.code ?? '(code not accessible — bot is not open-source or you lack permission)',
+              disabled: data.disabled,
+              gameId: data.gameId,
+              createdAt: data.createdAt,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
+);
+
+// ── Tool: analyze_match ───────────────────────────────────────────────────────
+
+server.tool(
+  'analyze_match',
+  'Get a match result with extracted debug info: judge debug strings, bot stderr, and a round-by-round summary. Better than get_match_result for debugging.',
+  {
+    matchId: z.number().int().describe('Match ID'),
+  },
+  async ({ matchId }) => {
+    const result = (await apiGet(`/compete/matches/${matchId}`)) as Record<string, unknown>;
+    const gameLog = result.gameLog as Record<string, unknown> | undefined;
+    if (!gameLog) {
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    const rounds = (gameLog.rounds as any[]) ?? [];
+    const summary = rounds.map((r, i) => ({
+      round: i + 1,
+      display: r.judgeCmd?.display ?? r.display,
+      botResponses: r.botResponses,
+      verdict: r.judgeCmd?.verdict ?? r.verdict,
+      judgeDebug: r.debug?.judge ?? r.judgeCmd?.debug,
+      bot0Debug: r.debug?.bot_0 ?? r.debug?.['bot_0'],
+      bot0Stderr: r.debug?.bot_0_stderr,
+      bot1Debug: r.debug?.bot_1 ?? r.debug?.['bot_1'],
+      bot1Stderr: r.debug?.bot_1_stderr,
+    }));
+
+    const output = {
+      matchId: result.id,
+      status: result.status,
+      gamers: (result.gamers as any[])?.map((g: any) => ({ id: g.id, title: g.title, elo: g.elo })),
+      finalResult: gameLog.finalResult,
+      totalRounds: rounds.length,
+      rounds: summary,
+      // Collect all non-empty debug/stderr messages for quick scanning
+      debugHighlights: summary
+        .filter((r) => r.judgeDebug || r.bot0Debug || r.bot0Stderr || r.bot1Debug || r.bot1Stderr)
+        .map((r) => ({
+          round: r.round,
+          ...(r.judgeDebug ? { judgeDebug: r.judgeDebug } : {}),
+          ...(r.bot0Debug ? { bot0Debug: r.bot0Debug } : {}),
+          ...(r.bot0Stderr ? { bot0Stderr: r.bot0Stderr } : {}),
+          ...(r.bot1Debug ? { bot1Debug: r.bot1Debug } : {}),
+          ...(r.bot1Stderr ? { bot1Stderr: r.bot1Stderr } : {}),
+        })),
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+    };
+  },
+);
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 async function main() {
