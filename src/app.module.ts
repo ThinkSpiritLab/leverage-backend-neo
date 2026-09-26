@@ -73,7 +73,7 @@ import { runsHttp } from './runtime/backend-role';
     // Redis (global)
     RedisModule,
 
-    // BullMQ Queues
+    // Shared Bull queue for internal OJ and Bot match jobs
     QueueModule,
 
     // Prometheus Metrics

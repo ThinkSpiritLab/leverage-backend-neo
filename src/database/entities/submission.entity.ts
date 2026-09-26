@@ -79,27 +79,24 @@ export class Submission {
   @OneToMany('RejudgeLog', (r: { submission: Submission }) => r.submission)
   rejudgeLogs: any[];
 
-  // ─── External judge provider fields (additive, nullable) ──────────────────
+  // ─── Judge attempt and historical provider fields (additive, nullable) ────
 
   /**
-   * Name of the external judge provider used for this submission.
-   * null = legacy / heng (default).
-   * 'botzone' = submitted to botzone-neo.
+   * 'internal' is the active worker. null/'botzone' are historical results kept
+   * for read/rollback compatibility; no external evaluator is registered.
    */
   @Index()
   @Column('varchar', { length: 32, nullable: true, default: null })
   provider: string | null;
 
   /**
-   * Job ID returned by the external judge provider.
-   * Used for fallback polling and idempotent callback handling.
+   * Historical external judge job ID. New jobs use judgeAttempt instead.
    */
   @Column('varchar', { length: 128, nullable: true, default: null })
   externalJobId: string | null;
 
   /**
-   * Arbitrary metadata from the external provider (JSON string).
-   * Stored as text to remain schema-agnostic.
+   * Result accounting metadata (JSON text), including historical provider data.
    */
   @Column('text', { nullable: true, default: null })
   providerMeta: string | null;

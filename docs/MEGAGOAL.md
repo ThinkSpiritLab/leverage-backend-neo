@@ -179,7 +179,9 @@ exact process RSS. Unknown metrics remain absent/null, never fabricated zeros.
 
 Current: one backend now owns OJ and code-Bot evaluation. The old Heng and
 external botzone-neo evaluator clients, pollers, callbacks and dedicated workers
-are removed. Real Nest HTTP → Bull → Docker → MariaDB/Redis E2E passes for a
+are removed; the obsolete RX Bull queue is no longer registered. Historical
+provider columns and applied migrations remain for existing data compatibility.
+Real Nest HTTP → Bull → Docker → MariaDB/Redis E2E passes for a
 Python AC submission and a Python-judge/Python+C++ two-Bot match with persisted
 ELO and Redis game-over replay; Redis uses a temporary authenticated instance.
 The current backend gates pass (684 unit, 42 SQLite integration with 3 existing
@@ -193,9 +195,9 @@ isolated test-data/media volumes. Docker stats reports
 sampled container memory, and CPU is quota-limited; cumulative CPU time remains
 unavailable rather than inferred from wall time.
 
-Next: finalize signed branch commits/pushes, check auth-negative and real API/UI
-contract at the release boundary, and agree how a **trusted** production worker
-accesses Docker and the same Redis/DB/testcase volume. Current Compose is
+Next: check auth-negative and real API/UI contract at the release boundary, and
+agree how a **trusted** production worker accesses Docker and the same
+Redis/DB/testcase volume. Current Compose is
 **API-only**, not a complete deployable judge; drain legacy queues and rehearse
 migrations on a restored clone before any upgrade. Do not merge main or deploy.
 

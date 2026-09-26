@@ -6,8 +6,7 @@ import { RankModule } from '../rank/rank.module';
 /**
  * ReceiveModule
  *
- * 评测结果处理模块：
- * - ReceiveService：接收并处理 heng-controller 回调的评测结果
+ * 评测结果处理模块：内部 worker 的事务结算与排名发布。
  */
 @Module({
   imports: [RedisModule, RankModule],

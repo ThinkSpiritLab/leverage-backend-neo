@@ -27,7 +27,7 @@ export class Match {
   status: number;
 
   @Column('varchar', { length: 128, nullable: true })
-  externalJobId: string;
+  externalJobId: string | null;
 
   @Column('mediumtext', { nullable: true })
   result: string;

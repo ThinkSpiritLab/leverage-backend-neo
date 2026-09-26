@@ -102,7 +102,7 @@ export class Problem {
   @Column({ type: 'text', nullable: true, select: false })
   checkerCode?: string;
 
-  /** Special Judge checker 语言（botzone-neo 语言字符串，如 'cpp17'、'c'） */
+  /** 内部评测 checker 语言标识，如 'cpp17'、'c'。 */
   @Column({ type: 'varchar', length: 32, nullable: true })
   checkerLanguage?: string;
 
