@@ -233,6 +233,50 @@ describe('CompeteService', () => {
     service = module.get<CompeteService>(CompeteService);
   });
 
+  describe('atomic match settlement', () => {
+    it('locks the match and commits result/ELO together, status write last', async () => {
+      const matchRow = { id: 55, status: MatchStatus.PENDING, isTest: false };
+      const lockedMatchRepo = { findOne: jest.fn().mockResolvedValue(matchRow), update: jest.fn().mockResolvedValue({ affected: 1 }) };
+      const lockedLinkRepo = { update: jest.fn().mockResolvedValue({ affected: 1 }) };
+      const lockedGamerRepo = {
+        find: jest.fn(async () => [
+          { id: 10, type: 'code', elo: 1200, eloExternal: 1200 },
+          { id: 11, type: 'code', elo: 1200, eloExternal: 1200 },
+        ]),
+        findBy: jest.fn().mockResolvedValue([
+          { id: 10, type: 'code', elo: 1200, eloExternal: 1200 },
+          { id: 11, type: 'code', elo: 1200, eloExternal: 1200 },
+        ]),
+        update: jest.fn().mockResolvedValue({ affected: 1 }),
+      };
+      const order: string[] = [];
+      lockedLinkRepo.update.mockImplementation(async () => { order.push('won'); });
+      lockedGamerRepo.update.mockImplementation(async () => { order.push('elo'); });
+      lockedGamerRepo.findBy.mockImplementation(async () => {
+        order.push('gamers');
+        return [
+          { id: 10, type: 'code', elo: 1200, eloExternal: 1200 },
+          { id: 11, type: 'code', elo: 1200, eloExternal: 1200 },
+        ];
+      });
+      lockedMatchRepo.update.mockImplementation(async () => { order.push('status'); });
+      const manager = {
+        getRepository: (entity: unknown) => entity === Match ? lockedMatchRepo : entity === MatchGamerLink ? lockedLinkRepo : lockedGamerRepo,
+        query: jest.fn().mockImplementation(async () => { order.push('history'); }),
+      };
+      mockDataSource.transaction = jest.fn(async (callback: (manager: any) => unknown) => callback(manager));
+      mockMatchGamerLinkRepo.find.mockResolvedValue([
+        { matchId: 55, gamerId: 10, index: 0 },
+        { matchId: 55, gamerId: 11, index: 1 },
+      ]);
+
+      await expect(service.handleMatchCallbackByMatchId(55, { '0': 1, '1': 0 })).resolves.toEqual({ ok: true });
+      expect(lockedMatchRepo.findOne).toHaveBeenCalledWith({ where: { id: 55 }, lock: { mode: 'pessimistic_write' } });
+      expect(order.indexOf('history')).toBeLessThan(order.indexOf('status'));
+      expect(order.at(-1)).toBe('status');
+    });
+  });
+
   // ─── Game CRUD ──────────────────────────────────────────────────────────────
 
   describe('findAllGames', () => {

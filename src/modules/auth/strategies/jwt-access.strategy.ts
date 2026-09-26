@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Repository } from 'typeorm';
+import { User } from '../../../database/entities/user.entity';
+import { assertAccountActive, mapAuthorityToRole } from '../account-auth.util';
 
 export interface JwtPayload {
   sub: number;
@@ -11,7 +15,10 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt') {
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -21,7 +28,28 @@ export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  validate(payload: JwtPayload): JwtPayload {
-    return { sub: payload.sub, username: payload.username, role: payload.role };
+  async validate(payload: JwtPayload): Promise<JwtPayload> {
+    // Contest tokens use the same signing key but a separate Passport strategy.
+    if (
+      !Number.isInteger(payload?.sub) ||
+      typeof payload.username !== 'string' ||
+      typeof payload.role !== 'string' ||
+      payload.role === 'contest-user' ||
+      'contestId' in (payload as object)
+    ) {
+      assertAccountActive(null);
+    }
+
+    const user = await this.userRepo.findOne({
+      where: { id: payload.sub },
+      select: ['id', 'username', 'authority', 'status', 'statusEndsAt'],
+    });
+    assertAccountActive(user);
+
+    return {
+      sub: user.id,
+      username: user.username,
+      role: mapAuthorityToRole(user.authority),
+    };
   }
 }

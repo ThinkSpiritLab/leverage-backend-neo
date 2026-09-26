@@ -10,6 +10,7 @@ import { IsNull, Repository } from 'typeorm';
 
 import { UserApiKey } from '../../database/entities/user-api-key.entity';
 import { User } from '../../database/entities/user.entity';
+import { isAccountBlocked, mapAuthorityToRole } from './account-auth.util';
 
 @Injectable()
 export class ApiKeyService {
@@ -67,21 +68,26 @@ export class ApiKeyService {
     });
     if (!apiKey) return null;
 
+    const user = await this.userRepo.findOne({
+      where: { id: apiKey.userId },
+      select: ['id', 'username', 'authority', 'status', 'statusEndsAt'],
+    });
+    if (!user || isAccountBlocked(user.status, user.statusEndsAt)) return null;
+
     // 异步更新 lastUsedAt，不阻塞请求
-    this.apiKeyRepo.update(apiKey.id, { lastUsedAt: new Date() });
+    void this.apiKeyRepo.update(apiKey.id, { lastUsedAt: new Date() });
 
-    const user = await this.userRepo.findOne({ where: { id: apiKey.userId } });
-    if (!user) return null;
-
-    return { sub: user.id, username: user.username, role: user.authority };
+    return {
+      sub: user.id,
+      username: user.username,
+      role: mapAuthorityToRole(user.authority),
+    };
   }
 
   /**
    * 列出用户的所有 API Key（不含 hash）
    */
-  async listApiKeys(
-    userId: number,
-  ): Promise<
+  async listApiKeys(userId: number): Promise<
     {
       id: number;
       name: string;
@@ -94,7 +100,14 @@ export class ApiKeyService {
     const keys = await this.apiKeyRepo.find({
       where: { userId },
       order: { createdAt: 'DESC' },
-      select: ['id', 'name', 'keyPrefix', 'createdAt', 'lastUsedAt', 'revokedAt'],
+      select: [
+        'id',
+        'name',
+        'keyPrefix',
+        'createdAt',
+        'lastUsedAt',
+        'revokedAt',
+      ],
     });
     return keys;
   }

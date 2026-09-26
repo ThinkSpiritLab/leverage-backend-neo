@@ -19,6 +19,7 @@ export interface InlineTestcase {
 
 export interface EnqueueParams {
   submissionId: number;
+  attemptId?: string;
   language: number;
   code: string;
   timeLimit: number;

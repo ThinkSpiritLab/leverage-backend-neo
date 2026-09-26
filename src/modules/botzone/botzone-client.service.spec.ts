@@ -29,6 +29,7 @@ const mockAxiosInstance = (axios as any).__mockInstance as {
 const configValues: Record<string, unknown> = {
   'botzone.baseUrl': 'http://botzone-test.local',
   'botzone.apiKey': 'test-api-key',
+  'botzone.callbackToken': 'test-callback-secret',
   'botzone.defaultProblemId': 'prob-001',
   baseUrl: 'http://oj-test.local:3000',
 };
@@ -119,7 +120,11 @@ describe('BotzoneClientService', () => {
     it('sets callback.finish to /botzone/callback', async () => {
       await service.enqueue(baseParams);
       const body = mockAxiosInstance.post.mock.calls[0][1];
-      expect(body.callback.finish).toBe('http://oj-test.local:3000/botzone/callback');
+      const callback = new URL(body.callback.finish);
+      expect(callback.origin + callback.pathname).toBe('http://oj-test.local:3000/botzone/callback');
+      expect(callback.searchParams.get('submissionId')).toBe('42');
+      expect(callback.searchParams.get('token')).toMatch(/^[a-f0-9]{64}$/);
+      expect(body.callback.finish).not.toContain('test-callback-secret');
     });
 
     it('maps language 6 (Java) to "java"', async () => {

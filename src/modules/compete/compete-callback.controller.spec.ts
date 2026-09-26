@@ -5,6 +5,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { JwtAccessStrategy } from '../auth/strategies/jwt-access.strategy';
 import { AutoMatchSchedulerService } from './auto-match-scheduler.service';
 import { CompeteController } from './compete.controller';
 import { CompeteService } from './compete.service';
@@ -29,6 +30,7 @@ const mockConfigService = {
 
 const mockCompeteService = {
   handleMatchCallback: jest.fn(),
+  assertMatchGamerOwner: jest.fn(),
 };
 
 // Minimal providers needed to instantiate CompeteService (not actually called)
@@ -59,6 +61,7 @@ describe('CompeteController — match-callback', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockCompeteService.handleMatchCallback.mockResolvedValue({ ok: true });
+    mockCompeteService.assertMatchGamerOwner.mockResolvedValue(42);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CompeteController],
@@ -74,7 +77,8 @@ describe('CompeteController — match-callback', () => {
         { provide: DataSource, useValue: {} },
         { provide: RedisService, useValue: {} },
         { provide: SettingService, useValue: {} },
-        { provide: HumanTurnService, useValue: { notifyGameOver: jest.fn(), waitForTurn: jest.fn(), registerSSEClient: jest.fn(), unregisterSSEClient: jest.fn(), replayPendingTurn: jest.fn() } },
+        { provide: HumanTurnService, useValue: { notifyGameOver: jest.fn(), waitForResponse: jest.fn().mockResolvedValue('ok'), waitForTurn: jest.fn(), registerSSEClient: jest.fn(), unregisterSSEClient: jest.fn(), replayPendingTurn: jest.fn() } },
+        { provide: JwtAccessStrategy, useValue: { validate: jest.fn(async value => value) } },
         { provide: JwtService, useValue: { sign: jest.fn(), verify: jest.fn() } },
         { provide: AutoMatchSchedulerService, useValue: { getStatus: jest.fn(), resetState: jest.fn() } },
       ],
@@ -109,10 +113,28 @@ describe('CompeteController — match-callback', () => {
       expect(mockCompeteService.handleMatchCallback).not.toHaveBeenCalled();
     });
 
+    it('未配置回调 token 时 fail closed', async () => {
+      (controller as any).callbackToken = '';
+      await expect(controller.receiveMatchCallbackLegacy(undefined, buildCallback()))
+        .rejects.toBeInstanceOf(UnauthorizedException);
+      expect(mockCompeteService.handleMatchCallback).not.toHaveBeenCalled();
+    });
+
     it('无 Authorization 头时：抛出 UnauthorizedException', async () => {
       await expect(
         controller.receiveMatchCallbackLegacy(undefined, buildCallback()),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
+  describe('human-turn-webhook', () => {
+    it('requires the callback token and verifies the match/gamer link before waiting', async () => {
+      await expect(controller.humanTurnWebhook(8, 31, {}, undefined, undefined))
+        .rejects.toBeInstanceOf(UnauthorizedException);
+      expect(mockCompeteService.assertMatchGamerOwner).not.toHaveBeenCalled();
+
+      await expect(controller.humanTurnWebhook(8, 31, {}, undefined, 'secret-token')).resolves.toBe('ok');
+      expect(mockCompeteService.assertMatchGamerOwner).toHaveBeenCalledWith(8, 31);
     });
   });
 

@@ -366,8 +366,12 @@ export class ContestService {
       const scoreRaw = scores[index];
       // 解码 Redis score：acCount * 1e9 - penaltySeconds
       const encodedScore = scoreRaw ? parseFloat(scoreRaw) : 0;
-      const solved = Math.floor(encodedScore / 1_000_000_000);
-      const penaltySec = Math.max(0, solved * 1_000_000_000 - encodedScore);
+      // DB counters are authoritative; flooring a score reduced by a penalty
+      // incorrectly subtracts one solved problem (and can even produce -1).
+      const solved = cu?.accepts ?? Math.max(0, Math.ceil(encodedScore / 1_000_000_000));
+      const penaltySec = cu
+        ? Math.max(0, (cu.submits - cu.accepts) * 1200)
+        : Math.max(0, solved * 1_000_000_000 - encodedScore);
       const penaltyMin = Math.round(penaltySec / 60);
 
       return {

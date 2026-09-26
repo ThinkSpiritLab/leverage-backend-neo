@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bull';
 import { getToken } from '@willsoto/nestjs-prometheus';
 import { SubmissionService, UserProblemStatus } from './submission.service';
+import { ReceiveService } from '../receive/receive.service';
 import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { Submission } from '../../database/entities/submission.entity';
 import { SubmissionMisc } from '../../database/entities/submission-misc.entity';
@@ -179,10 +180,22 @@ describe('SubmissionService', () => {
     } as any;
 
     judgeTxQueue = { add: jest.fn().mockResolvedValue({}) };
+    submissionRepo.manager = {
+      transaction: async (fn: any) => fn({
+        findOne: async (entity: any, options: any) => {
+          const value = await (entity === Submission ? submissionRepo : miscRepo).findOne(options);
+          return value ? { ...value } : null;
+        },
+        save: (_entity: any, value: any) => rejudgeLogRepo.save(value),
+        update: (entity: any, criteria: any, value: any) => entity === Submission
+          ? submissionRepo.update(criteria, value) : Promise.resolve({ affected: 1 }),
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SubmissionService,
+        { provide: ReceiveService, useValue: { finalize: jest.fn() } },
         { provide: getRepositoryToken(Submission), useValue: submissionRepo },
         { provide: getRepositoryToken(SubmissionMisc), useValue: miscRepo },
         { provide: getRepositoryToken(Problem), useValue: problemRepo },
@@ -415,10 +428,11 @@ describe('SubmissionService', () => {
   // =========================================================================
 
   describe('getStatus', () => {
-    it('Redis 有缓存时应直接返回', async () => {
+    it('忽略旧 Redis 缓存，以当前数据库状态为准', async () => {
       redisService.get.mockResolvedValue('0');
       const result = await service.getStatus(42);
-      expect(result).toEqual({ status: 0 });
+      expect(result).toEqual({ status: Status.PENDING });
+      expect(redisService.get).not.toHaveBeenCalled();
     });
 
     it('Redis 无缓存时应从 DB 读取', async () => {

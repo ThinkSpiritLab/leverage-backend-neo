@@ -117,7 +117,7 @@ export class BotzonePollService implements OnModuleInit, OnApplicationShutdown {
           sub.externalJobId!,
         );
         if (pollResult.done) {
-          await this.botzoneResultService.finalize(sub.id, pollResult);
+          await this.botzoneResultService.finalize(sub.id, pollResult, sub.externalJobId!, sub.judgeAttempt ?? undefined);
           this.logger.log(
             `BotzonePollService: finalized submissionId=${sub.id} via polling, status=${pollResult.status}`,
           );

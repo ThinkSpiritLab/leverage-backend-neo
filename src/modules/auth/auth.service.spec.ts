@@ -132,6 +132,37 @@ describe('AuthService', () => {
       );
     });
 
+    it('封禁中的用户不能登录', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1,
+        username: 'alice',
+        authority: 'user',
+        passwordHash: hashPassword('pass'),
+        status: 2,
+        statusEndsAt: null,
+      } as unknown as User);
+
+      await expect(service.loginUser('alice', 'pass')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(jwtService.sign).not.toHaveBeenCalled();
+    });
+
+    it('已过封禁截止时间的 status=2 用户仍可登录', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1,
+        username: 'alice',
+        authority: 'user',
+        passwordHash: hashPassword('pass'),
+        status: 2,
+        statusEndsAt: new Date(Date.now() - 1000),
+      } as User);
+
+      await expect(service.loginUser('alice', 'pass')).resolves.toHaveProperty(
+        'accessToken',
+      );
+    });
+
     it('旧格式密码验证通过后触发 upgradePasswordIfNeeded', async () => {
       // 旧格式：不含 pbkdf2: 前缀
       // 由于旧格式 legacyVerify 需要 HMAC key，这里测试升级路径本身
@@ -160,6 +191,21 @@ describe('AuthService', () => {
   describe('loginContest', () => {
     const contestId = 1;
     const password = 'contestPassword';
+
+    it('封禁中的全站用户不能登录竞赛', async () => {
+      userRepo.findOne.mockResolvedValue({
+        id: 1,
+        username: 'alice',
+        passwordHash: hashPassword(password),
+        status: 2,
+        statusEndsAt: null,
+      } as unknown as User);
+
+      await expect(
+        service.loginContest(contestId, 'alice', password),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(contestUserRepo.findOne).not.toHaveBeenCalled();
+    });
 
     it('allowDirectLogin=true 用全站密码验证', async () => {
       const user = {
@@ -224,6 +270,12 @@ describe('AuthService', () => {
     it('有效 refresh token → 返回新 accessToken', async () => {
       const payload = { sub: 1, username: 'alice', role: 'user' };
       jwtService.verify.mockReturnValue(payload);
+      userRepo.findOne.mockResolvedValue({
+        id: 1,
+        username: 'alice',
+        authority: 'user',
+        status: 0,
+      } as User);
       jwtService.sign.mockReturnValue('new-access-token');
 
       const result = await service.refreshToken('valid-refresh-token');
@@ -232,12 +284,48 @@ describe('AuthService', () => {
       expect(jwtService.verify).toHaveBeenCalled();
     });
 
-    it('无效 token → 抛出 UnauthorizedException', () => {
+    it('无效 token → 抛出 UnauthorizedException', async () => {
       jwtService.verify.mockImplementation(() => {
         throw new Error('invalid token');
       });
 
-      expect(() => service.refreshToken('invalid-token')).toThrow(
+      await expect(service.refreshToken('invalid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('刷新时读取当前角色而不是沿用旧 token 角色', async () => {
+      jwtService.verify.mockReturnValue({
+        sub: 1,
+        username: 'alice',
+        role: 'sa',
+      });
+      userRepo.findOne.mockResolvedValue({
+        id: 1,
+        username: 'alice',
+        authority: 'user',
+        status: 0,
+      } as User);
+
+      await service.refreshToken('valid-refresh-token');
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ sub: 1, username: 'alice', role: 'user' }),
+        expect.any(Object),
+      );
+    });
+
+    it.each([
+      ['deleted', null],
+      ['banned', { id: 1, username: 'alice', authority: 'user', status: 2 }],
+    ])('rejects refresh for %s accounts', async (_label, currentUser) => {
+      jwtService.verify.mockReturnValue({
+        sub: 1,
+        username: 'alice',
+        role: 'user',
+      });
+      userRepo.findOne.mockResolvedValue(currentUser as User | null);
+
+      await expect(service.refreshToken('valid-refresh-token')).rejects.toThrow(
         UnauthorizedException,
       );
     });

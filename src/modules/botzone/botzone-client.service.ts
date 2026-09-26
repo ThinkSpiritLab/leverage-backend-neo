@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'crypto';
 import axios, { AxiosInstance } from 'axios';
 import {
   EnqueueParams,
@@ -83,7 +84,13 @@ export class BotzoneClientService implements IJudgeProvider {
     } = params;
 
     const botzoneLanguage = LEVERAGE_LANG_TO_BOTZONE[language] ?? 'cpp17';
-    const callbackUrl = `${this.callbackBase}/botzone/callback`;
+    const callback = new URL(`${this.callbackBase}/botzone/callback`);
+    callback.searchParams.set('submissionId', String(submissionId));
+    if (params.attemptId) callback.searchParams.set('attemptId', params.attemptId);
+    const token = this.configService.get<string>('botzone.callbackToken', '');
+    if (!token) throw new Error('BOTZONE_CALLBACK_TOKEN is required');
+    callback.searchParams.set('token', createHmac('sha256', token).update(`${submissionId}:${params.attemptId ?? ''}`).digest('hex'));
+    const callbackUrl = callback.toString();
 
     const useChecker = !!(checkerCode && checkerLanguage);
 
@@ -125,7 +132,6 @@ export class BotzoneClientService implements IJudgeProvider {
       externalJobId: jobId,
       providerMeta: {
         language: botzoneLanguage,
-        callbackUrl,
         judgeMode: body.judgeMode,
       },
     };

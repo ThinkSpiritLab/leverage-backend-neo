@@ -104,6 +104,14 @@ export class Submission {
   @Column('text', { nullable: true, default: null })
   providerMeta: string | null;
 
+  /** Identifies the current dispatch; retained until the next rejudge. */
+  @Column('varchar', { length: 32, nullable: true })
+  judgeAttempt?: string | null;
+
+  /** Last result included in counters, preserved while a rejudge is pending. */
+  @Column('int', { nullable: true })
+  judgedStatus?: number | null;
+
   @Index()
   @CreateDateColumn()
   createdAt: Date;

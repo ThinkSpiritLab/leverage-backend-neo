@@ -23,6 +23,7 @@ function createMockManager(
       id: 1,
       userId: 10,
       problemId: 20,
+      status: Status.PENDING,
       contestId: null,
       courseId: null,
     } as Submission),
@@ -53,8 +54,9 @@ describe('ReceiveService', () => {
       transaction: jest
         .fn()
         .mockImplementation(async (cb: (m: EntityManager) => Promise<void>) => {
-          await cb(mockManager as EntityManager);
+          return await cb(mockManager as EntityManager);
         }),
+      getRepository: jest.fn((entity) => ({ findOne: (options: any) => mockManager.findOne!(entity, options) })) as any,
       createQueryBuilder: jest.fn().mockReturnValue({
         update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
@@ -148,24 +150,10 @@ describe('ReceiveService', () => {
   // ─── receiveUpdate ────────────────────────────────────────────────────────
 
   describe('receiveUpdate', () => {
-    it('应将状态写入 Redis，TTL=300', async () => {
-      const stateUpdate: JudgeStateUpdate = { state: JudgeState.Judging };
-      await service.receiveUpdate(1, stateUpdate);
-
-      expect(mockRedisService.set).toHaveBeenCalledWith(
-        'submissionStatus:1',
-        Status.JUDGING,
-        300,
-      );
-    });
-
-    it('Confirmed 状态应映射为 PENDING', async () => {
-      await service.receiveUpdate(5, { state: JudgeState.Confirmed });
-      expect(mockRedisService.set).toHaveBeenCalledWith(
-        'submissionStatus:5',
-        Status.PENDING,
-        300,
-      );
+    it.each([[JudgeState.Judging, Status.JUDGING], [JudgeState.Confirmed, Status.PENDING]])('persists %s in the authoritative row', async (state, status) => {
+      await service.receiveUpdate(1, { state });
+      expect(mockManager.update).toHaveBeenCalledWith(Submission, 1, { status });
+      expect(mockRedisService.set).not.toHaveBeenCalled();
     });
   });
 
@@ -228,14 +216,10 @@ describe('ReceiveService', () => {
       expect(acceptsCalls).toHaveLength(0);
     });
 
-    it('应更新 Redis 最终状态', async () => {
+    it('does not maintain a divergent Redis status cache', async () => {
       await service.receiveResult(1, buildResult());
-      // Redis set 应被调用（submissionStatus 和 ups hash）
-      expect(mockRedisService.set).toHaveBeenCalledWith(
-        'submissionStatus:1',
-        Status.AC,
-        300,
-      );
+      expect(mockManager.update).toHaveBeenCalledWith(Submission, 1, expect.objectContaining({ status: Status.AC }));
+      expect(mockRedisService.set).not.toHaveBeenCalled();
     });
 
     // ─── 首次 AC vs 重复 AC ──────────────────────────────────────────────────
@@ -259,7 +243,7 @@ describe('ReceiveService', () => {
         // findOne 返回之前的 AC submission
         (mockManager.findOne as jest.Mock).mockImplementation(
           (entity, opts) => {
-            if (opts?.where?.status === Status.AC) {
+            if (opts?.where?.judgedStatus === Status.AC) {
               return Promise.resolve({
                 id: 999,
                 userId: 10,
@@ -290,6 +274,7 @@ describe('ReceiveService', () => {
           id: 1,
           userId: 10,
           problemId: 20,
+          status: Status.PENDING,
           contestId: 100,
           courseId: null,
         } as Submission);
@@ -329,6 +314,7 @@ describe('ReceiveService', () => {
           id: 1,
           userId: 10,
           problemId: 20,
+          status: Status.PENDING,
           contestId: 100,
           courseId: null,
         });
@@ -387,7 +373,7 @@ describe('ReceiveService', () => {
         );
       });
 
-      it('竞赛 CE 时应跳过全部 ContestUser 更新和排行榜', async () => {
+      it('竞赛 CE 时应跳过全部 ContestUser 更新，并重新发布现有排行', async () => {
         await service.receiveResult(
           1,
           buildResult(JudgeResultKind.CompileError),
@@ -400,10 +386,10 @@ describe('ReceiveService', () => {
           mockManager.increment as jest.Mock
         ).mock.calls.filter(([entity]: [any]) => entity === ContestUser);
         expect(contestCalls).toHaveLength(0);
-        expect(mockRankService.updateContestRank).not.toHaveBeenCalled();
+        expect(mockRankService.updateContestRank).toHaveBeenCalledWith(100, 10, 0, 1200);
       });
 
-      it('竞赛 SE 时应跳过全部 ContestUser 更新和排行榜', async () => {
+      it('竞赛 SE 时应跳过全部 ContestUser 更新，并重新发布现有排行', async () => {
         await service.receiveResult(
           1,
           buildResult(JudgeResultKind.SystemError),
@@ -416,7 +402,7 @@ describe('ReceiveService', () => {
           mockManager.increment as jest.Mock
         ).mock.calls.filter(([entity]: [any]) => entity === ContestUser);
         expect(contestCalls).toHaveLength(0);
-        expect(mockRankService.updateContestRank).not.toHaveBeenCalled();
+        expect(mockRankService.updateContestRank).toHaveBeenCalledWith(100, 10, 0, 1200);
       });
 
       it('ContestUser 不存在时不调用 rankService.updateContestRank', async () => {
@@ -437,6 +423,7 @@ describe('ReceiveService', () => {
           id: 1,
           userId: 10,
           problemId: 20,
+          status: Status.PENDING,
           contestId: null,
           courseId: 50,
         });
@@ -559,7 +546,7 @@ describe('ReceiveService', () => {
               });
             }
             // Prev AC submission exists
-            if (opts?.where?.status === Status.AC) {
+            if (opts?.where?.judgedStatus === Status.AC) {
               return Promise.resolve({ id: 999, status: Status.AC });
             }
             return Promise.resolve(null);
@@ -592,7 +579,7 @@ describe('ReceiveService', () => {
           mockManager.increment as jest.Mock
         ).mock.calls.filter(([entity]: [any]) => entity === CourseUser);
         expect(courseCalls).toHaveLength(0);
-        expect(mockRankService.updateCourseRank).not.toHaveBeenCalled();
+        expect(mockRankService.updateCourseRank).toHaveBeenCalledWith(50, 10, 0, 1200);
       });
 
       it('课程 WA 时应调用 rankService.updateCourseRank', async () => {
@@ -618,29 +605,10 @@ describe('ReceiveService', () => {
       });
     });
 
-    // ─── updateUserProblemStatus 条件更新 ──────────────────────────────────
-
-    describe('updateUserProblemStatus - 条件写入', () => {
-      it('当前无记录（值=0）时，任何结果都应写入 Redis', async () => {
-        (mockRedisService.hget as jest.Mock).mockResolvedValue(null); // current = 0
-        await service.receiveResult(
-          1,
-          buildResult(JudgeResultKind.WrongAnswer),
-        );
-        // newVal=2 > 0 → hset should be called
-        expect(mockRedisService.hset).toHaveBeenCalledWith(
-          expect.stringContaining('ups:'),
-          expect.any(String),
-          2,
-        );
-      });
-
-      it('已有记录（值=2）时，AC（newVal=1 不大于 2）不应再写入 Redis', async () => {
-        (mockRedisService.hget as jest.Mock).mockResolvedValue('2'); // current = 2 (non-AC)
-        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
-        // newVal=1, 1 > 2 is false → hset NOT called
-        expect(mockRedisService.hset).not.toHaveBeenCalled();
-      });
+    it('does not write the unused UPS cache after WA or AC', async () => {
+      await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer));
+      await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
+      expect(mockRedisService.hset).not.toHaveBeenCalled();
     });
 
     // ─── saveSuspicion ─────────────────────────────────────────────────────
@@ -670,7 +638,7 @@ describe('ReceiveService', () => {
         expect(saveCalls.length).toBeGreaterThan(0);
       });
 
-      it('saveSuspicion save 失败时主流程不应抛出', async () => {
+      it('数据库写入失败应回滚并允许队列重试', async () => {
         const {
           SubmissionMisc: SM,
         } = require('../../database/entities/submission-misc.entity');
@@ -683,17 +651,17 @@ describe('ReceiveService', () => {
         (mockManager.save as jest.Mock).mockRejectedValue(
           new Error('DB write failed'),
         );
-        // Should NOT throw - saveSuspicion has its own try-catch
+        // Persistence errors must not turn a rollback into a terminal result.
         await expect(
           service.receiveResult(1, buildResult()),
-        ).resolves.toBeUndefined();
+        ).rejects.toThrow('DB write failed');
       });
     });
 
     // ─── receiveResult 事务失败回滚 ────────────────────────────────────────
 
     describe('receiveResult - 事务失败', () => {
-      it('事务抛出时应将 Submission 标记为 SE 并重新抛出错误', async () => {
+      it('事务失败保留原状态并抛出错误供重试', async () => {
         const transactionError = new Error('transaction failed');
         (mockDataSource.transaction as jest.Mock).mockRejectedValue(
           transactionError,
@@ -710,7 +678,7 @@ describe('ReceiveService', () => {
         await expect(service.receiveResult(1, buildResult())).rejects.toThrow(
           'transaction failed',
         );
-        expect(mockExecute).toHaveBeenCalled();
+        expect(mockExecute).not.toHaveBeenCalled();
       });
     });
   });

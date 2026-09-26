@@ -199,6 +199,7 @@ export const JudgeStateToStatus: Record<JudgeState, Status> = {
 /** judge-tx 队列 payload */
 export interface JudgeTxPayload {
   submissionId: number;
+  attemptId?: string;
   /** CreateJudgeRequest 中除 callbackUrls 外的所有字段 */
   task: Omit<CreateJudgeRequest, 'callbackUrls'>;
 }

@@ -6,10 +6,12 @@ import {
   Post,
   UnauthorizedException,
   Headers,
+  Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { BotzoneClientService } from './botzone-client.service';
 import { BotzoneResultService } from './botzone-result.service';
 import { BOTZONE_TERMINAL_STATES } from './botzone.types';
@@ -57,13 +59,16 @@ export class BotzoneCallbackController {
   async receiveCallback(
     @Headers('authorization') authHeader: string | undefined,
     @Body() body: BotzoneCallbackBody,
+    @Query('submissionId') querySubmissionId?: string,
+    @Query('attemptId') attemptId?: string,
+    @Query('token') queryToken?: string,
   ): Promise<{ ok: boolean }> {
-    this.assertToken(authHeader);
+    this.assertToken(authHeader, queryToken, querySubmissionId, attemptId);
 
     const { correlationId, jobId, state } = body;
-    const submissionId = parseInt(correlationId, 10);
+    const submissionId = Number(querySubmissionId ?? correlationId);
 
-    if (isNaN(submissionId)) {
+    if (!Number.isSafeInteger(submissionId) || submissionId <= 0 || (attemptId !== undefined && !/^[a-f0-9]{32}$/.test(attemptId))) {
       this.logger.warn(
         `Botzone callback: invalid correlationId="${correlationId}"`,
       );
@@ -80,7 +85,7 @@ export class BotzoneCallbackController {
     if (isTerminal) {
       const pollResult = this.botzoneClient.mapCallback(body);
       // BotzoneResultService handles idempotency internally
-      await this.botzoneResultService.finalize(submissionId, pollResult);
+      await this.botzoneResultService.finalize(submissionId, pollResult, jobId, attemptId);
     } else {
       // Intermediate state: no DB write needed, just log
       this.logger.debug(
@@ -93,21 +98,19 @@ export class BotzoneCallbackController {
 
   /**
    * Validate BOTZONE_CALLBACK_TOKEN.
-   * If not configured, log a warning and allow in dev mode.
+   * Fail closed when callback authentication is not configured.
    */
-  private assertToken(authHeader: string | undefined): void {
-    if (!this.callbackToken) {
-      this.logger.warn(
-        'BOTZONE_CALLBACK_TOKEN not set — botzone callback is unprotected (dev mode)',
-      );
-      return;
-    }
+  private assertToken(authHeader: string | undefined, queryToken?: string, submissionId?: string, attemptId?: string): void {
+    if (!this.callbackToken) throw new UnauthorizedException('Botzone callback is not configured');
 
     const token = authHeader?.startsWith('Bearer ')
       ? authHeader.slice(7)
       : authHeader;
 
-    if (token !== this.callbackToken) {
+    const expected = authHeader !== undefined ? this.callbackToken : createHmac('sha256', this.callbackToken).update(`${submissionId}:${attemptId ?? ''}`).digest('hex');
+    const supplied = Buffer.from(token ?? queryToken ?? '');
+    const expectedBytes = Buffer.from(expected);
+    if (supplied.length !== expectedBytes.length || !timingSafeEqual(supplied, expectedBytes)) {
       throw new UnauthorizedException('Invalid botzone callback token');
     }
   }

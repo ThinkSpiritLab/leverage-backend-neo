@@ -53,7 +53,11 @@ describe('ApiKeyService', () => {
     it('生成 lev_ 前缀的密钥并存储 sha256 哈希', async () => {
       // save 返回 create 的入参（模拟 TypeORM save 行为）
       mockApiKeyRepo.create.mockImplementation((v) => v);
-      mockApiKeyRepo.save.mockImplementation(async (v) => ({ ...v, id: 10, createdAt: new Date() }));
+      mockApiKeyRepo.save.mockImplementation(async (v) => ({
+        ...v,
+        id: 10,
+        createdAt: new Date(),
+      }));
 
       const result = await service.createApiKey(1, 'test-key');
 
@@ -61,7 +65,9 @@ describe('ApiKeyService', () => {
       expect(result.name).toBe('test-key');
 
       const createArg = mockApiKeyRepo.create.mock.calls[0][0];
-      const expectedHash = createHash('sha256').update(result.key).digest('hex');
+      const expectedHash = createHash('sha256')
+        .update(result.key)
+        .digest('hex');
       expect(createArg.keyHash).toBe(expectedHash);
       expect(createArg.keyPrefix).toBe(result.key.slice(0, 12));
     });
@@ -82,18 +88,29 @@ describe('ApiKeyService', () => {
   // ── validateApiKey ────────────────────────────────────────────────────────────
 
   describe('validateApiKey', () => {
-    it('有效 key 返回用户 payload', async () => {
+    it('有效 key 返回用户 payload 并映射 superadmin 为 sa', async () => {
       mockApiKeyRepo.findOne.mockResolvedValue(mockKey);
-      mockUserRepo.findOne.mockResolvedValue(mockUser);
+      mockUserRepo.findOne.mockResolvedValue({
+        ...mockUser,
+        authority: 'superadmin',
+        status: 0,
+      });
 
       const result = await service.validateApiKey('lev_testkey');
 
-      expect(result).toEqual({ sub: 1, username: 'alice', role: 'user' });
+      expect(result).toEqual({ sub: 1, username: 'alice', role: 'sa' });
       expect(mockApiKeyRepo.findOne).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ revokedAt: IsNull() }),
         }),
       );
+    });
+
+    it('封禁用户的 API key 返回 null', async () => {
+      mockApiKeyRepo.findOne.mockResolvedValue(mockKey);
+      mockUserRepo.findOne.mockResolvedValue({ ...mockUser, status: 2 });
+
+      expect(await service.validateApiKey('lev_testkey')).toBeNull();
     });
 
     it('key 不存在返回 null', async () => {
@@ -138,12 +155,16 @@ describe('ApiKeyService', () => {
 
     it('key 不存在抛 NotFoundException', async () => {
       mockApiKeyRepo.findOne.mockResolvedValue(null);
-      await expect(service.revokeApiKey(1, 99)).rejects.toThrow(NotFoundException);
+      await expect(service.revokeApiKey(1, 99)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('非拥有者抛 ForbiddenException', async () => {
       mockApiKeyRepo.findOne.mockResolvedValue({ ...mockKey, userId: 999 });
-      await expect(service.revokeApiKey(1, 10)).rejects.toThrow(ForbiddenException);
+      await expect(service.revokeApiKey(1, 10)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 });

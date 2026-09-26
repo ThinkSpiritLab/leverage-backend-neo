@@ -7,6 +7,7 @@ import { RankModule } from '../rank/rank.module';
 import { BotzoneClientService } from './botzone-client.service';
 import { BotzoneCallbackController } from './botzone-callback.controller';
 import { BotzoneResultService } from './botzone-result.service';
+import { ReceiveModule } from '../receive/receive.module';
 import { BotzonePollService } from './botzone-poll.service';
 
 /**
@@ -22,6 +23,7 @@ import { BotzonePollService } from './botzone-poll.service';
  */
 @Module({
   imports: [
+    ReceiveModule,
     TypeOrmModule.forFeature([Submission, SubmissionMisc]),
     RedisModule,
     RankModule,

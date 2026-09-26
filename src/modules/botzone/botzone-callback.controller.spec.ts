@@ -117,7 +117,7 @@ describe('BotzoneCallbackController', () => {
       ).resolves.toEqual({ ok: true });
     });
 
-    it('allows through when no token configured (dev mode)', async () => {
+    it('rejects callbacks when no token is configured', async () => {
       const noTokenConfig = {
         get: jest.fn((key: string, def?: unknown) => {
           if (key === 'botzone.callbackToken') return '';
@@ -139,7 +139,7 @@ describe('BotzoneCallbackController', () => {
       const body = buildOJBody();
       await expect(
         ctrl2.receiveCallback(undefined, body),
-      ).resolves.toEqual({ ok: true });
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -151,7 +151,7 @@ describe('BotzoneCallbackController', () => {
     it('calls finalize for finished/Accepted OJ result', async () => {
       const body = buildOJBody();
       await controller.receiveCallback(AUTH, body);
-      expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(42, expect.any(Object));
+      expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(42, expect.any(Object), 'bz-job-42', undefined);
     });
 
     it('calls finalize for finished/WrongAnswer', async () => {
@@ -166,6 +166,7 @@ describe('BotzoneCallbackController', () => {
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(
         42,
         expect.objectContaining({ done: true, status: Status.WA }),
+        'bz-job-42', undefined,
       );
     });
 
@@ -184,7 +185,7 @@ describe('BotzoneCallbackController', () => {
         },
       });
       await controller.receiveCallback(AUTH, body);
-      expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(77, expect.any(Object));
+      expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(77, expect.any(Object), 'bz-job-42', undefined);
     });
 
     it('calls finalize for failed state (SE)', async () => {
@@ -206,6 +207,7 @@ describe('BotzoneCallbackController', () => {
       expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(
         10,
         expect.objectContaining({ done: true, status: Status.AC }),
+        'bz-game-10', undefined,
       );
     });
   });

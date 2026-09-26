@@ -20,6 +20,11 @@ import {
   isLegacyPasswordFormat,
   verifyPassword,
 } from '../../common/utils/crypto.util';
+import {
+  assertAccountActive,
+  isAccountBlocked,
+  mapAuthorityToRole,
+} from './account-auth.util';
 
 export interface JwtPayload {
   sub: number;
@@ -60,7 +65,8 @@ export class AuthService {
       where: { key: 'register.open' },
       cache: 12 * 1000,
     });
-    const isOpen = !registerOpen || ['true', '1'].includes(registerOpen.valueString);
+    const isOpen =
+      !registerOpen || ['true', '1'].includes(registerOpen.valueString);
     if (!isOpen) {
       throw new ForbiddenException('当前站点未开放注册');
     }
@@ -96,10 +102,21 @@ export class AuthService {
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const user = await this.userRepo.findOne({
       where: { username },
-      select: ['id', 'username', 'authority', 'passwordHash', 'status'],
+      select: [
+        'id',
+        'username',
+        'authority',
+        'passwordHash',
+        'status',
+        'statusEndsAt',
+      ],
     });
 
     if (!user) {
+      this.loginCounter.labels({ success: 'false', type: 'user' }).inc();
+      throw new UnauthorizedException('用户名或密码错误');
+    }
+    if (isAccountBlocked(user.status, user.statusEndsAt)) {
       this.loginCounter.labels({ success: 'false', type: 'user' }).inc();
       throw new UnauthorizedException('用户名或密码错误');
     }
@@ -115,7 +132,7 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: user.id,
       username: user.username,
-      role: this.mapAuthority(user.authority),
+      role: mapAuthorityToRole(user.authority),
     };
 
     this.loginCounter.labels({ success: 'true', type: 'user' }).inc();
@@ -138,9 +155,9 @@ export class AuthService {
     // 找全站用户
     const user = await this.userRepo.findOne({
       where: { username },
-      select: ['id', 'username', 'passwordHash'],
+      select: ['id', 'username', 'passwordHash', 'status', 'statusEndsAt'],
     });
-    if (!user) {
+    if (!user || isAccountBlocked(user.status, user.statusEndsAt)) {
       throw new UnauthorizedException('用户名或密码错误');
     }
 
@@ -191,16 +208,29 @@ export class AuthService {
   /**
    * 用 refresh token 换新 access token
    */
-  refreshToken(refreshToken: string): { accessToken: string } {
+  async refreshToken(refreshToken: string): Promise<{ accessToken: string }> {
     try {
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
         secret: this.configService.get<string>('jwt.refreshSecret'),
       });
+      if (
+        !Number.isInteger(payload?.sub) ||
+        typeof payload.username !== 'string' ||
+        'contestId' in (payload as object)
+      ) {
+        throw new UnauthorizedException();
+      }
+
+      const user = await this.userRepo.findOne({
+        where: { id: payload.sub },
+        select: ['id', 'username', 'authority', 'status', 'statusEndsAt'],
+      });
+      assertAccountActive(user);
 
       const newPayload: JwtPayload = {
-        sub: payload.sub,
-        username: payload.username,
-        role: payload.role,
+        sub: user.id,
+        username: user.username,
+        role: mapAuthorityToRole(user.authority),
       };
 
       return { accessToken: this.generateAccessToken(newPayload) };
@@ -261,23 +291,6 @@ export class AuthService {
     if (isLegacyPasswordFormat(user.passwordHash)) {
       const newHash = hashPassword(plainPassword);
       await this.userRepo.update(user.id, { passwordHash: newHash });
-    }
-  }
-
-  /**
-   * 将 User authority 字段映射到 role 字符串
-   */
-  private mapAuthority(authority: string): string {
-    switch (authority) {
-      case 'superadmin':
-      case 'sa':
-        return 'sa';
-      case 'admin':
-        return 'admin';
-      case 'supervisor':
-        return 'supervisor';
-      default:
-        return 'user';
     }
   }
 }

@@ -143,6 +143,7 @@ describe('JudgeRxWorker', () => {
       expect(mockReceiveService.receiveResult).toHaveBeenCalledWith(
         SUBMISSION_ID,
         payload.data,
+        JUDGE_ID,
       );
       // 完成后清理 judgeId
       expect(mockRedisService.srem).toHaveBeenCalledWith(
@@ -162,6 +163,7 @@ describe('JudgeRxWorker', () => {
       expect(mockReceiveService.receiveResult).toHaveBeenCalledWith(
         SUBMISSION_ID,
         payload.data,
+        JUDGE_ID,
       );
     });
 
@@ -205,6 +207,7 @@ describe('JudgeRxWorker', () => {
             }),
           }),
         }),
+        JUDGE_ID,
       );
     });
 
@@ -273,6 +276,7 @@ describe('JudgeRxWorker', () => {
       expect(mockReceiveService.receiveUpdate).toHaveBeenCalledWith(
         SUBMISSION_ID,
         { state: JudgeState.Judging },
+        JUDGE_ID,
       );
     });
 
@@ -285,6 +289,7 @@ describe('JudgeRxWorker', () => {
       expect(mockReceiveService.receiveUpdate).toHaveBeenCalledWith(
         SUBMISSION_ID,
         { state: JudgeState.Pending },
+        JUDGE_ID,
       );
     });
 
@@ -297,6 +302,7 @@ describe('JudgeRxWorker', () => {
       expect(mockReceiveService.receiveUpdate).toHaveBeenCalledWith(
         SUBMISSION_ID,
         { state: JudgeState.Preparing },
+        JUDGE_ID,
       );
     });
 

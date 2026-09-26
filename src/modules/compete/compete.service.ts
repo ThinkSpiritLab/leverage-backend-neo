@@ -10,7 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import type { Queue } from 'bull';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -31,6 +31,7 @@ import { PlaygroundJudgeDto } from './dto/playground-judge.dto';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
 import { HumanTurnService } from './human-turn.service';
+import { assertAccountActive } from '../auth/account-auth.util';
 
 export enum MatchStatus {
   PENDING = 0,
@@ -263,6 +264,21 @@ export class CompeteService {
     return { items, total };
   }
 
+  async assertMatchGamerOwner(matchId: number, gamerId: number): Promise<number> {
+    const link = await this.matchGamerLinkRepo.findOne({ where: { matchId, gamerId } });
+    if (!link) throw new NotFoundException('Match gamer not found');
+    const gamer = await this.gamerRepo.findOne({ where: { id: gamerId } });
+    if (!gamer) throw new NotFoundException('Gamer not found');
+    return gamer.userId;
+  }
+
+  async isMatchParticipant(matchId: number, userId: number): Promise<boolean> {
+    const links = await this.matchGamerLinkRepo.find({ where: { matchId } });
+    if (!links.length) return false;
+    const gamers = await this.gamerRepo.findBy({ id: In(links.map((link) => link.gamerId)) });
+    return gamers.some((gamer) => gamer.userId === userId);
+  }
+
   async findOneGamer(id: number): Promise<Gamer> {
     // Use QueryBuilder to force-load code (select:false column) alongside relations
     const gamer = await this.gamerRepo
@@ -352,12 +368,14 @@ export class CompeteService {
   async findGamerByApiKey(apiKey: string): Promise<Gamer | null> {
     const result = await this.gamerRepo
       .createQueryBuilder('g')
+      .leftJoinAndSelect('g.user', 'user')
       .addSelect('g.botApiKey')
       .addSelect('g.botApiKeyExpiresAt')
       .where('g.botApiKey = :apiKey', { apiKey })
       .getOne();
     if (!result) return null;
     if (result.botApiKeyExpiresAt && result.botApiKeyExpiresAt < new Date()) return null; // expired
+    assertAccountActive(result.user);
     return result;
   }
 
@@ -444,9 +462,11 @@ export class CompeteService {
         const baseUrl = this.configService.get<string>('baseUrl', 'http://localhost:3000');
 
         // human/external gamers use internal long-poll webhook
+        const callbackToken = this.configService.get<string>('botzone.callbackToken', '');
+        const webhookAuth = callbackToken ? `?token=${encodeURIComponent(callbackToken)}` : '';
         const resolvedWebhookUrl =
           type === 'human' || type === 'external'
-            ? `${baseUrl}/compete/human-turn-webhook/${match.id}/${g.id}`
+            ? `${baseUrl}/compete/human-turn-webhook/${match.id}/${g.id}${webhookAuth}`
             : g.webhookUrl ?? undefined;
 
         // Human: 3 min to respond; external bot: 30s (they should be polling)
@@ -586,89 +606,25 @@ export class CompeteService {
       finalResult?: Record<string, number>;
     },
   ): Promise<{ ok: boolean }> {
-    const match = await this.matchRepo.findOne({
-      where: { externalJobId: jobId },
-    });
+    const match = await this.matchRepo.findOne({ where: { externalJobId: jobId } });
     if (!match) {
       this.logger.warn(`match-callback: unknown jobId=${jobId}`);
       return { ok: false };
     }
-
-    // Idempotency: already in a terminal state
-    if (
-      match.status === MatchStatus.FINISHED ||
-      match.status === MatchStatus.ERROR
-    ) {
-      return { ok: true };
-    }
-
-    const terminalStates = new Set(['finished', 'failed']);
-    if (!terminalStates.has(state)) {
-      // Intermediate state — acknowledge but don't write
-      return { ok: true };
-    }
-
-    const newStatus =
-      state === 'finished' ? MatchStatus.FINISHED : MatchStatus.ERROR;
-
-    const resultData = JSON.stringify({
+    if (state !== 'finished' && state !== 'failed') return { ok: true };
+    const finalResult = state === 'finished' ? result?.finalResult : undefined;
+    return this.finalizeMatch(match.id, state === 'finished' ? MatchStatus.FINISHED : MatchStatus.ERROR, {
       verdict: result?.verdict ?? null,
       roundCount: result?.rounds?.length ?? 0,
-      finalResult: result?.finalResult ?? {},
-    });
-
-    await this.matchRepo.update(match.id, {
-      status: newStatus,
-      result: resultData,
-    });
-
-    // Update ELO scores and win flags for all participating gamers
-    if (state === 'finished' && result?.finalResult) {
-      const finalResult = result.finalResult;
-
-      // Set won=1/0 on match_gamer_link
-      const maxScore = Math.max(...Object.values(finalResult));
-      for (const [gamerIdStr, score] of Object.entries(finalResult)) {
-        const gamerId = Number(gamerIdStr);
-        if (!gamerId) continue;
-        await this.matchGamerLinkRepo.update(
-          { matchId: match.id, gamerId },
-          { won: score === maxScore ? 1 : 0 },
-        );
-      }
-
-      // Skip ELO update for test matches
-      if (!match.isTest) {
-        // Detect match type: inner if all gamers are 'code' type
-        const participantIds = Object.keys(finalResult).map(Number).filter(Boolean);
-        const participants = participantIds.length > 0 ? await this.gamerRepo.findBy({ id: In(participantIds) }) : [];
-        const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-        await this.updateElo(finalResult, matchType, match.id);
-      }
-
-      // Push game-over SSE so browser doesn't wait for the 3s poll
-      this.humanTurnService.notifyGameOver(match.id, finalResult);
-    }
-
-    return { ok: true };
+      finalResult: finalResult ?? {},
+    }, finalResult);
   }
 
-  /**
-   * botzone-neo MatchResult callback: { scores, log, compiles }
-   * scores: { [botId string]: number } — botId is gamer id
-   */
   /** Forfeit: mark match as ERROR, no ELO change */
   async handleMatchForfeit(matchId: number, forfeitedBotId?: string): Promise<{ ok: boolean }> {
-    const match = await this.matchRepo.findOne({ where: { id: matchId } });
-    if (!match) return { ok: false };
-    if (match.status === MatchStatus.FINISHED || match.status === MatchStatus.ERROR) return { ok: true };
-
-    await this.matchRepo.update(matchId, {
-      status: MatchStatus.ERROR,
-      result: JSON.stringify({ verdict: 'forfeit', forfeitedBot: forfeitedBotId }),
+    return this.finalizeMatch(matchId, MatchStatus.ERROR, {
+      verdict: 'forfeit', forfeitedBot: forfeitedBotId,
     });
-    this.logger.warn(`Match ${matchId} marked as forfeit (bot ${forfeitedBotId} no-response)`);
-    return { ok: true };
   }
 
   async handleMatchCallbackByMatchId(
@@ -676,72 +632,61 @@ export class CompeteService {
     scores?: Record<string, number>,
     log?: unknown[],
   ): Promise<{ ok: boolean }> {
-    // Update-only callbacks (round progress) have no scores — skip
-    if (!scores || Object.keys(scores).length === 0) {
-      return { ok: true };
-    }
-
-    const match = await this.matchRepo.findOne({ where: { id: matchId } });
-    if (!match) {
-      this.logger.warn(`match-callback: matchId=${matchId} not found`);
-      return { ok: false };
-    }
-
-    if (match.status === MatchStatus.FINISHED || match.status === MatchStatus.ERROR) {
-      return { ok: true }; // idempotent
-    }
-
-    // Translate position index ("0","1") → real gamerId via match_gamer_link
+    if (!scores || Object.keys(scores).length === 0) return { ok: true };
     const links = await this.matchGamerLinkRepo.find({ where: { matchId } });
     const positionToGamerId: Record<string, number> = {};
-    links.forEach(l => { positionToGamerId[String(l.index)] = l.gamerId; });
-
-    // Convert position-keyed scores to gamerId-keyed
+    links.forEach((link) => { positionToGamerId[String(link.index)] = link.gamerId; });
     const gamerIdScores: Record<string, number> = {};
-    if (scores) {
-      for (const [posOrId, score] of Object.entries(scores)) {
-        const gId = positionToGamerId[posOrId] ?? posOrId;
-        gamerIdScores[String(gId)] = score;
-      }
+    for (const [positionOrId, score] of Object.entries(scores)) {
+      gamerIdScores[String(positionToGamerId[positionOrId] ?? positionOrId)] = score;
     }
-
-    const resultData = JSON.stringify({
+    return this.finalizeMatch(matchId, MatchStatus.FINISHED, {
       verdict: 'OK',
       finalResult: gamerIdScores,
       roundCount: Array.isArray(log) ? log.length : 0,
       rounds: log ?? [],
-    });
+    }, gamerIdScores);
+  }
 
-    await this.matchRepo.update(matchId, {
-      status: MatchStatus.FINISHED,
-      result: resultData,
-    });
+  private async finalizeMatch(
+    matchId: number,
+    status: MatchStatus,
+    result: Record<string, unknown>,
+    finalResult?: Record<string, number>,
+  ): Promise<{ ok: boolean }> {
+    const outcome = await this.dataSource.transaction(async (manager) => {
+      const matches = manager.getRepository(Match);
+      const match = await matches.findOne({
+        where: { id: matchId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!match) return { ok: false };
+      if ([MatchStatus.FINISHED, MatchStatus.ERROR].includes(match.status)) return { ok: true };
 
-    if (Object.keys(gamerIdScores).length >= 2) {
-      // Set won=1/0 on match_gamer_link
-      const maxScore = Math.max(...Object.values(gamerIdScores));
-      for (const [gamerIdStr, score] of Object.entries(gamerIdScores)) {
-        const gamerId = Number(gamerIdStr);
-        if (!gamerId) continue;
-        await this.matchGamerLinkRepo.update(
-          { matchId, gamerId },
-          { won: score === maxScore ? 1 : 0 },
-        );
+      if (finalResult && Object.keys(finalResult).length) {
+        const links = manager.getRepository(MatchGamerLink);
+        const maxScore = Math.max(...Object.values(finalResult));
+        for (const [gamerIdStr, score] of Object.entries(finalResult)) {
+          const gamerId = Number(gamerIdStr);
+          if (Number.isInteger(gamerId) && gamerId > 0) {
+            await links.update({ matchId, gamerId }, { won: score === maxScore ? 1 : 0 });
+          }
+        }
+        if (Object.keys(finalResult).length >= 2 && !match.isTest) {
+          const participantIds = Object.keys(finalResult).map(Number).filter(Number.isInteger);
+          const participants = await manager.getRepository(Gamer).findBy({ id: In(participantIds) });
+          const matchType = participants.every((gamer) => gamer.type === 'code') ? 'inner' : 'outer';
+          await this.updateElo(finalResult, matchType, matchId, manager);
+        }
       }
 
-      // Skip ELO update for test matches
-      if (!match.isTest) {
-        const participantIds = Object.keys(gamerIdScores).map(Number).filter(Boolean);
-        const participants = await this.gamerRepo.findBy({ id: In(participantIds) });
-        const matchType = participants.every(g => g.type === 'code') ? 'inner' : 'outer';
-        await this.updateElo(gamerIdScores, matchType, matchId);
-      }
-
-      // Push game-over SSE so browser doesn't wait for the 3s poll
-      this.humanTurnService.notifyGameOver(matchId, gamerIdScores);
+      await matches.update(matchId, { status, result: JSON.stringify(result) });
+      return { ok: true };
+    });
+    if (outcome.ok && status === MatchStatus.FINISHED && finalResult) {
+      this.humanTurnService.notifyGameOver(matchId, finalResult);
     }
-
-    return { ok: true };
+    return outcome;
   }
 
   /**
@@ -754,6 +699,7 @@ export class CompeteService {
     finalResult: Record<string, number>,
     matchType: 'inner' | 'outer' = 'outer',
     matchId = 0,
+    manager?: EntityManager,
   ): Promise<void> {
     const K = 32;
 
@@ -763,7 +709,11 @@ export class CompeteService {
 
     if (gamerIds.length < 2) return;
 
-    const gamers = await this.gamerRepo.findBy({ id: In(gamerIds) });
+    const gamerRepo = manager?.getRepository(Gamer) ?? this.gamerRepo;
+    // Different matches may share gamers: lock their ratings in a stable order.
+    const gamers = manager
+      ? await gamerRepo.find({ where: { id: In(gamerIds) }, order: { id: 'ASC' }, lock: { mode: 'pessimistic_write' } })
+      : await gamerRepo.findBy({ id: In(gamerIds) });
     if (gamers.length < 2) return;
 
     // 外榜 ELO map
@@ -817,15 +767,15 @@ export class CompeteService {
           updates.elo = newEloInner;
         }
 
-        await this.gamerRepo.update(g.id, updates);
+        await gamerRepo.update(g.id, updates);
 
-        // Record ELO history (外榜数据)
-        try {
-          await this.dataSource.query(
-            'INSERT INTO gamer_elo_history (gamerId, matchId, eloBefore, eloAfter, eloDelta) VALUES (?, ?, ?, ?, ?)',
-            [g.id, matchId, g.eloExternal ?? g.elo, newEloExt, Math.round(dExt)],
-          );
-        } catch { /* history is best-effort */ }
+        await (manager ? manager.query(
+          'INSERT INTO gamer_elo_history (gamerId, matchId, eloBefore, eloAfter, eloDelta) VALUES (?, ?, ?, ?, ?)',
+          [g.id, matchId, g.eloExternal ?? g.elo, newEloExt, Math.round(dExt)],
+        ) : this.dataSource.query(
+          'INSERT INTO gamer_elo_history (gamerId, matchId, eloBefore, eloAfter, eloDelta) VALUES (?, ?, ?, ?, ?)',
+          [g.id, matchId, g.eloExternal ?? g.elo, newEloExt, Math.round(dExt)],
+        ));
       }),
     );
   }

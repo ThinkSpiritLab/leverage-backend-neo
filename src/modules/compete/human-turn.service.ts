@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 export interface PendingTurn {
   matchId: number;
   gamerId: number;
+  ownerUserId?: number;
   turnToken: string;
   gameState: unknown;
   resolve: (response: string) => void;
@@ -33,8 +34,8 @@ export class HumanTurnService {
   /** matchId:gamerId → pending turn */
   private readonly pending = new Map<string, PendingTurn>();
 
-  /** SSE writers keyed by matchId:userId */
-  private readonly sseClients = new Map<string, (data: string) => void>();
+  /** SSE writers keyed by matchId:userId, with independent connection ids. */
+  private readonly sseClients = new Map<string, { matchId: number; userId: number; writer: (data: string) => void }>();
 
   private key(matchId: number, gamerId: number) {
     return `${matchId}:${gamerId}`;
@@ -46,6 +47,7 @@ export class HumanTurnService {
     gamerId: number,
     gameState: unknown,
     timeoutMs = 300_000,
+    ownerUserId?: number,
   ): Promise<string> {
     const k = this.key(matchId, gamerId);
     // Cancel any stale pending turn for this slot
@@ -61,7 +63,7 @@ export class HumanTurnService {
       }, timeoutMs);
 
       const entry: PendingTurn = {
-        matchId, gamerId, turnToken, gameState,
+        matchId, gamerId, ownerUserId, turnToken, gameState,
         resolve: (r) => { clearTimeout(timer); this.pending.delete(k); resolve(r); },
         reject: (e) => { clearTimeout(timer); this.pending.delete(k); reject(e); },
         timer,
@@ -74,12 +76,14 @@ export class HumanTurnService {
   }
 
   /** Browser / external bot submits their response */
-  submitResponse(turnToken: string, response: string): boolean {
-    for (const [, entry] of this.pending) {
-      if (entry.turnToken === turnToken) {
-        entry.resolve(response);
-        return true;
-      }
+  submitResponse(turnToken: string, response: string, userId?: number, gamerId?: number): boolean {
+    if (userId === undefined && gamerId === undefined) return false;
+    for (const entry of this.pending.values()) {
+      if (entry.turnToken !== turnToken) continue;
+      if (gamerId !== undefined && entry.gamerId !== gamerId) return false;
+      if (userId !== undefined && entry.ownerUserId !== userId) return false;
+      entry.resolve(response);
+      return true;
     }
     return false;
   }
@@ -122,10 +126,16 @@ export class HumanTurnService {
   private notifySSE(matchId: number, payload: unknown) {
     const data = JSON.stringify(payload);
 
-    // Notify SSE browser clients watching this match
-    for (const [key, writer] of this.sseClients) {
-      if (key.startsWith(`${matchId}:`)) {
-        try { writer(data); } catch { this.sseClients.delete(key); }
+    for (const client of this.sseClients.values()) {
+      if (client.matchId !== matchId) continue;
+      if (typeof (payload as any).gamerId === 'number') {
+        const turn = this.getPendingTurn((payload as any).gamerId as number);
+        if (!turn || turn.ownerUserId !== client.userId) continue;
+      }
+      try { client.writer(data); } catch {
+        for (const [connectionId, value] of this.sseClients) {
+          if (value === client) this.sseClients.delete(connectionId);
+        }
       }
     }
 
@@ -142,36 +152,32 @@ export class HumanTurnService {
   }
 
   /** Register an SSE browser client */
-  registerSSEClient(matchId: number, userId: number, writer: (data: string) => void) {
-    const k = `${matchId}:${userId}`;
-    this.sseClients.set(k, writer);
+  registerSSEClient(matchId: number, userId: number, writer: (data: string) => void): string {
+    const connectionId = randomUUID();
+    this.sseClients.set(connectionId, { matchId, userId, writer });
     this.logger.log(`SSE client registered: matchId=${matchId} userId=${userId}`);
+    return connectionId;
   }
 
   /**
    * If there's already a pending turn for this match (e.g. SSE client connected late),
    * immediately push it to the just-connected client so they don't miss their turn.
    */
-  replayPendingTurn(matchId: number, writer: (data: string) => void) {
-    this.logger.log(`replayPendingTurn: matchId=${matchId}, pending keys=[${[...this.pending.keys()].join(',')}]`);
-    for (const [, entry] of this.pending) {
-      if (entry.matchId === matchId) {
-        this.logger.log(`replayPendingTurn: found pending turn for matchId=${matchId}, gamerId=${entry.gamerId}, replaying`);
-        const payload = JSON.stringify({
-          type: 'your-turn',
-          turnToken: entry.turnToken,
-          gamerId: entry.gamerId,
-          gameState: entry.gameState,
-        });
-        try { writer(payload); this.logger.log(`replayPendingTurn: wrote your-turn to SSE`); } catch (e) { this.logger.error(`replayPendingTurn write failed: ${e}`); }
-        return;
-      }
+  replayPendingTurn(matchId: number, userId: number, writer: (data: string) => void) {
+    for (const entry of this.pending.values()) {
+      if (entry.matchId !== matchId || entry.ownerUserId !== userId) continue;
+      writer(JSON.stringify({
+        type: 'your-turn',
+        turnToken: entry.turnToken,
+        gamerId: entry.gamerId,
+        gameState: entry.gameState,
+      }));
+      return;
     }
-    this.logger.warn(`replayPendingTurn: no pending turn found for matchId=${matchId}`);
   }
 
-  unregisterSSEClient(matchId: number, userId: number) {
-    this.sseClients.delete(`${matchId}:${userId}`);
+  unregisterSSEClient(connectionId: string) {
+    this.sseClients.delete(connectionId);
   }
 
   private cancelPending(key: string) {

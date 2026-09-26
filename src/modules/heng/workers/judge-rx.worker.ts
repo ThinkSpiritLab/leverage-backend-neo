@@ -52,7 +52,7 @@ export class JudgeRxWorker implements OnApplicationShutdown {
     // Step 2: 分发处理
     if (type === 'finish') {
       this.logger.log(`Receiving finish result: submissionId=${submissionId}`);
-      await this.receiveService.receiveResult(submissionId, data);
+      await this.receiveService.receiveResult(submissionId, data, judgeId);
 
       // 评测完成，清理 judgeId（防止重复处理）
       await this.redisService.srem(`judge-ids:${submissionId}`, judgeId);
@@ -62,7 +62,7 @@ export class JudgeRxWorker implements OnApplicationShutdown {
     } else {
       // type === 'update'
       this.logger.debug(`Receiving state update: submissionId=${submissionId}`);
-      await this.receiveService.receiveUpdate(submissionId, data);
+      await this.receiveService.receiveUpdate(submissionId, data, judgeId);
     }
   }
 }

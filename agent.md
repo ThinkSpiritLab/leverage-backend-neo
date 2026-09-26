@@ -23,8 +23,9 @@ auto-discover `AGENTS.md` need to be pointed to this file explicitly.
   and role checks. Frontend route guards are not backend authorization.
 - `src/modules/submission/`: submission creation, querying and rejudging.
 - `src/modules/heng/`: Heng HTTP adapter, callback endpoints, judge TX/RX workers.
-- `src/modules/receive/`: Heng result persistence, statistics and ranking updates.
-- `src/modules/botzone/`: alternate judge adapter, callback finalization and polling.
+- `src/modules/receive/`: shared transactional finalization for Heng/Botzone,
+  attempt checks, rejudge accounting and post-commit ranking publication.
+- `src/modules/botzone/`: alternate judge adapter, authenticated callbacks and polling.
 - `src/modules/compete/`: game/bot CRUD, rooms, matches, ELO, playground, human
   turns and automatic matching. `HumanTurnService` keeps pending turns and SSE
   clients in process memory, so do not assume arbitrary multi-instance routing.
@@ -44,6 +45,8 @@ Use pnpm and retain `pnpm-lock.yaml`. Install explicitly with
 - `pnpm start:dev`: backend development server, port 3000 by default.
 - `pnpm build`: Nest compilation.
 - `pnpm test:unit --runInBand`: unit project; narrow with `--runTestsByPath`.
+- `pnpm test:accounting`, `pnpm test:migrations`: disposable real MariaDB checks;
+  require Docker. Migration data can use `TEST_TMPDIR` on an external disk.
 - `pnpm exec eslint "{src,apps,libs,test}/**/*.ts"`: non-fixing lint check.
   **`pnpm lint` includes `--fix` and modifies files.**
 - `pnpm test:e2e`: MariaDB/Redis Testcontainers suite, requires Docker.
@@ -60,6 +63,8 @@ The backend requires MariaDB/MySQL-compatible storage and Redis. Review
 into production. Do not start the app against an unknown database: development
 uses `synchronize`, while production automatically runs migrations at startup.
 Seed/clear scripts mutate data and are not routine verification steps.
+See `docs/HARDENING.md` for deployment ordering, additive rollback boundaries,
+callback configuration, legacy pending submissions and validation limitations.
 
 ## Change boundaries
 

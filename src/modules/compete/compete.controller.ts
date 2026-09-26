@@ -29,6 +29,7 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { JwtAccessStrategy } from '../auth/strategies/jwt-access.strategy';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -62,6 +63,7 @@ export class CompeteController {
     private readonly humanTurnService: HumanTurnService,
     private readonly jwtService: JwtService,
     private readonly autoMatchSchedulerService: AutoMatchSchedulerService,
+    private readonly accessStrategy: JwtAccessStrategy,
   ) {
     this.callbackToken = this.configService.get<string>(
       'botzone.callbackToken',
@@ -415,8 +417,7 @@ export class CompeteController {
   /** Validate BOTZONE_CALLBACK_TOKEN bearer auth. */
   private assertCallbackToken(authHeader: string | undefined, queryToken?: string): void {
     if (!this.callbackToken) {
-      this.logger.warn('BOTZONE_CALLBACK_TOKEN not set — match-callback is unprotected (dev mode)');
-      return;
+      throw new UnauthorizedException('BOTZONE_CALLBACK_TOKEN is not configured');
     }
     const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
     const token = headerToken ?? queryToken;
@@ -631,9 +632,13 @@ export class CompeteController {
     @Param('matchId', ParseIntPipe) matchId: number,
     @Param('gamerId', ParseIntPipe) gamerId: number,
     @Body() gameState: unknown,
+    @Headers('authorization') authHeader?: string,
+    @Query('token') tokenParam?: string,
   ) {
+    this.assertCallbackToken(authHeader, tokenParam);
+    const ownerUserId = await this.competeService.assertMatchGamerOwner(matchId, gamerId);
     this.logger.log(`human-turn-webhook: matchId=${matchId} gamerId=${gamerId}`);
-    const response = await this.humanTurnService.waitForResponse(matchId, gamerId, gameState, 300_000);
+    const response = await this.humanTurnService.waitForResponse(matchId, gamerId, gameState, 300_000, ownerUserId);
     // Return as plain text so botzone-neo's WebhookRunner gets it directly
     return response;
   }
@@ -651,7 +656,6 @@ export class CompeteController {
     @Query('gamerId') gamerIdStr?: string,
     @Headers('authorization') authorization?: string,
     @Headers('x-bot-key') botKey?: string,
-    @CurrentUser() user?: JwtPayload,
   ) {
     let gamerId: number;
 
@@ -660,8 +664,11 @@ export class CompeteController {
       const gamer = await this.competeService.findGamerByApiKey(botKey);
       if (!gamer) throw new UnauthorizedException('Bot API Key 无效或已过期');
       gamerId = gamer.id;
-    } else if (user && gamerIdStr) {
-      // JWT auth
+    } else if (gamerIdStr) {
+      const token = authorization?.replace(/^Bearer\s+/i, '');
+      let user: JwtPayload | null = null;
+      try { user = token ? await this.accessStrategy.validate(this.jwtService.verify<JwtPayload>(token)) : null; } catch { /* invalid */ }
+      if (!user) throw new UnauthorizedException('需要 Bearer token 或 X-Bot-Key');
       gamerId = parseInt(gamerIdStr, 10);
       if (isNaN(gamerId)) throw new UnauthorizedException('gamerId 无效');
       const gamer = await this.competeService.findOneGamer(gamerId);
@@ -696,20 +703,20 @@ export class CompeteController {
     @Headers('x-bot-key') botKey?: string,
     @Headers('authorization') authHeader?: string,
   ) {
-    // Auth: must have either X-Bot-Key or Bearer JWT
-    let user: JwtPayload | null = null;
-    if (!botKey) {
-      const token = authHeader?.replace(/^Bearer\s+/i, '');
-      if (token) {
-        try { user = this.jwtService.verify<JwtPayload>(token); } catch { /* invalid */ }
-      }
-    }
-    if (!botKey && !user) throw new UnauthorizedException('需要认证');
+    let ownerUserId: number | undefined;
+    let botGamerId: number | undefined;
     if (botKey) {
       const gamer = await this.competeService.findGamerByApiKey(botKey);
       if (!gamer) throw new UnauthorizedException('Bot API Key 无效或已过期');
+      botGamerId = gamer.id;
+    } else {
+      const token = authHeader?.replace(/^Bearer\s+/i, '');
+      let user: JwtPayload | null = null;
+      try { user = token ? await this.accessStrategy.validate(this.jwtService.verify<JwtPayload>(token)) : null; } catch { /* invalid */ }
+      if (!user) throw new UnauthorizedException('需要认证');
+      ownerUserId = user.sub;
     }
-    const ok = this.humanTurnService.submitResponse(body.turnToken, body.response);
+    const ok = this.humanTurnService.submitResponse(body.turnToken, body.response, ownerUserId, botGamerId);
     if (!ok) return { success: false, message: '找不到对应的 turn，可能已超时' };
     return { success: true };
   }
@@ -733,7 +740,7 @@ export class CompeteController {
     if (!user && tokenParam) {
       try {
         const jwt = this.jwtService.verify<JwtPayload>(tokenParam);
-        user = jwt;
+        user = await this.accessStrategy.validate(jwt);
       } catch {
         res.status(401).json({ message: 'Invalid token' });
         return;
@@ -743,6 +750,10 @@ export class CompeteController {
       res.status(401).json({ message: '未授权' });
       return;
     }
+    if (!(await this.competeService.isMatchParticipant(matchId, user.sub))) {
+      res.status(403).json({ message: '非对局参与者' });
+      return;
+    }
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -750,19 +761,16 @@ export class CompeteController {
 
     const writer = (data: string) => {
       const chunk = `data: ${data}\n\n`;
-      this.logger.debug(`SSE write: ${chunk.substring(0, 80)}`);
-      const ok = res.write(chunk);
-      this.logger.debug(`SSE write result: ${ok}`);
+      res.write(chunk);
     };
 
     // Test: send an immediate 'connected' event so we know the stream works
     writer(JSON.stringify({ type: 'connected', matchId }));
 
-    this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
+    const connectionId = this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
 
-    // Immediately replay any pending turn for this user's gamer in this match
-    // (handles the case where SSE connects after the turn was already issued)
-    this.humanTurnService.replayPendingTurn(matchId, writer);
+    // Replay only this user's pending turn.
+    this.humanTurnService.replayPendingTurn(matchId, user.sub, writer);
 
     // Send keep-alive ping every 20s
     const ping = setInterval(() => {
@@ -771,7 +779,7 @@ export class CompeteController {
 
     res.on('close', () => {
       clearInterval(ping);
-      this.humanTurnService.unregisterSSEClient(matchId, user.sub);
+      this.humanTurnService.unregisterSSEClient(connectionId);
     });
   }
 }

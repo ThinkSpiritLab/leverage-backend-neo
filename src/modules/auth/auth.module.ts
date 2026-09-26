@@ -56,6 +56,6 @@ import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
     RolesGuard,
     ContestAuthGuard,
   ],
-  exports: [AuthService, ApiKeyService, JwtAuthGuard, RolesGuard, ContestAuthGuard, JwtModule],
+  exports: [AuthService, ApiKeyService, JwtAccessStrategy, JwtAuthGuard, RolesGuard, ContestAuthGuard, JwtModule],
 })
 export class AuthModule {}

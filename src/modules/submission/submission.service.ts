@@ -11,7 +11,8 @@ import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import type { Queue } from 'bull';
-import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
+import { In, Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import archiver from 'archiver';
 import * as fs from 'fs/promises';
@@ -36,6 +37,7 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { BotzoneClientService } from '../botzone/botzone-client.service';
+import { ReceiveService } from '../receive/receive.service';
 import {
   InlineTestcase,
   JudgeProviderName,
@@ -97,6 +99,7 @@ export class SubmissionService {
     private readonly submissionCounter: Counter<string>,
     @Optional()
     private readonly botzoneClient: BotzoneClientService | null,
+    private readonly receiveService: ReceiveService,
   ) {}
 
   async create(userId: number, dto: CreateSubmissionDto): Promise<Submission> {
@@ -106,10 +109,6 @@ export class SubmissionService {
       cache: 6000,
     });
     if (!problem) throw new NotFoundException(`题目 #${dto.problemId} 不存在`);
-    const { timeLimit, memoryLimit } = this.applyLanguageBonus(
-      problem,
-      dto.language,
-    );
 
     // Determine which judge provider to use
     const botzoneEnabled = this.configService.get<boolean>(
@@ -128,23 +127,11 @@ export class SubmissionService {
       contestId: dto.contestId ?? null,
       courseId: dto.courseId ?? null,
       provider: usesBotzone ? JudgeProviderName.Botzone : null,
+      judgeAttempt: randomBytes(16).toString('hex'),
     });
     await this.miscRepo.save({ submissionId: submission.id, code: dto.code });
 
-    if (usesBotzone) {
-      await this.enqueueToBottzone(submission, problem, dto, timeLimit, memoryLimit);
-    } else {
-      await this.judgeTxQueue.add('judge', {
-        submissionId: submission.id,
-        task: {
-          language: dto.language,
-          code: dto.code,
-          timeLimit,
-          memoryLimit,
-          testDataUrl: this.buildTestDataUrl(problem),
-        },
-      });
-    }
+    await this.dispatch(submission, problem, dto.code);
 
     // Increment business metric counter
     const langName = LANGUAGE_EXT_MAP[dto.language] ?? String(dto.language);
@@ -203,55 +190,36 @@ export class SubmissionService {
     };
   }
 
-  /**
-   * Enqueue a submission to botzone-neo and persist the external job ID.
-   */
-  private async enqueueToBottzone(
-    submission: Submission,
-    problem: Problem,
-    dto: CreateSubmissionDto,
-    timeLimit: number,
-    memoryLimit: number,
-  ): Promise<void> {
+  /** Shared first-submit/rejudge path. A late response cannot change a newer attempt. */
+  private async dispatch(submission: Submission, problem: Problem, code: string): Promise<void> {
+    const { timeLimit, memoryLimit } = this.applyLanguageBonus(problem, submission.language);
+    const current = { id: submission.id, judgeAttempt: submission.judgeAttempt!, status: In([Status.PENDING, Status.JUDGING, Status.COMPILING]) };
     try {
-      // 读取内联测试用例（botzone-neo OJ API 需要）
-      const testcases = await this.readTestcases(problem);
-
-      // 加载 SPJ checker 信息（如有）
-      const { checkerCode, checkerLanguage } =
-        await this.loadCheckerInfo(problem.id);
-
-      const result = await this.botzoneClient!.enqueue({
-        submissionId: submission.id,
-        language: dto.language,
-        code: dto.code,
-        timeLimit,
-        memoryLimit,
-        testDataUrl: this.buildTestDataUrl(problem),
-        testcases,
-        checkerCode,
-        checkerLanguage,
+      if (submission.provider === JudgeProviderName.Botzone) {
+        if (!this.botzoneClient) throw new Error('Botzone provider is unavailable');
+        const testcases = await this.readTestcases(problem);
+        const checker = await this.loadCheckerInfo(problem.id);
+        const result = await this.botzoneClient.enqueue({
+          submissionId: submission.id, attemptId: submission.judgeAttempt!,
+          language: submission.language, code, timeLimit, memoryLimit,
+          testDataUrl: this.buildTestDataUrl(problem), testcases, ...checker,
+        });
+        await this.submissionRepo.update(current, {
+          externalJobId: result.externalJobId,
+          providerMeta: result.providerMeta ? JSON.stringify(result.providerMeta) : null,
+        });
+      } else {
+        await this.judgeTxQueue.add('judge', {
+          submissionId: submission.id, attemptId: submission.judgeAttempt,
+          task: { language: submission.language, code, timeLimit, memoryLimit, testDataUrl: this.buildTestDataUrl(problem) },
+        });
+      }
+    } catch (error) {
+      await this.receiveService.finalize(submission.id, { done: true, status: Status.SE }, {
+        provider: submission.provider === JudgeProviderName.Botzone ? 'botzone' : 'heng',
+        attemptId: submission.judgeAttempt ?? undefined,
       });
-
-      // Persist externalJobId + providerMeta
-      await this.submissionRepo.update(submission.id, {
-        externalJobId: result.externalJobId,
-        providerMeta: result.providerMeta
-          ? JSON.stringify(result.providerMeta)
-          : null,
-      });
-
-      this.logger.log(
-        `Botzone enqueue success: submissionId=${submission.id}, externalJobId=${result.externalJobId}`,
-      );
-    } catch (err) {
-      this.logger.error(
-        `Botzone enqueue failed for submissionId=${submission.id}`,
-        err,
-      );
-      // Mark as SE so it doesn't stay pending indefinitely
-      await this.submissionRepo.update(submission.id, { status: Status.SE });
-      throw err;
+      throw error;
     }
   }
 
@@ -296,48 +264,29 @@ export class SubmissionService {
   }
 
   async rejudge(id: number): Promise<void> {
-    const submission = await this.submissionRepo.findOne({
-      where: { id },
-      relations: ['problem'],
+    const { submission, code } = await this.submissionRepo.manager.transaction(async manager => {
+      const submission = await manager.findOne(Submission, {
+        where: { id }, relations: ['problem'], lock: { mode: 'pessimistic_write' },
+      });
+      if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+      const misc = await manager.findOne(SubmissionMisc, { where: { submissionId: id } });
+      if (!misc) throw new NotFoundException(`提交 #${id} 的代码不存在`);
+      await manager.save(RejudgeLog, {
+        submissionId: id, status: submission.status, time: submission.time,
+        memory: submission.memory, judger: submission.judger, judgeResult: misc.judgeResult,
+        compileErrorMsg: misc.compileErrorMsg, submittedAt: submission.updatedAt,
+      });
+      const reset = { status: Status.PENDING, judger: null, externalJobId: null,
+        providerMeta: null, judgeAttempt: randomBytes(16).toString('hex') };
+      await manager.update(Submission, id, reset);
+      await manager.update(SubmissionMisc, { submissionId: id }, { judgeResult: '', compileErrorMsg: '' });
+      return { submission: Object.assign(submission, reset), code: misc.code };
     });
-    if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
-    const misc = await this.miscRepo.findOne({ where: { submissionId: id } });
-    if (!misc) throw new NotFoundException(`提交 #${id} 的代码不存在`);
-    await this.rejudgeLogRepo.save({
-      submissionId: id,
-      status: submission.status,
-      time: submission.time,
-      memory: submission.memory,
-      judger: submission.judger,
-      judgeResult: misc.judgeResult,
-      compileErrorMsg: misc.compileErrorMsg,
-      submittedAt: submission.updatedAt,
-    });
-    await this.submissionRepo.update(id, {
-      status: Status.PENDING,
-      judger: null,
-    });
-    const { timeLimit, memoryLimit } = this.applyLanguageBonus(
-      submission.problem,
-      submission.language,
-    );
-    await this.judgeTxQueue.add('judge', {
-      submissionId: submission.id,
-      task: {
-        language: submission.language,
-        code: misc.code,
-        timeLimit,
-        memoryLimit,
-        testDataUrl: this.buildTestDataUrl(submission.problem),
-      },
-    });
+    await this.dispatch(submission, submission.problem, code);
     this.logger.log(`Rejudge queued: submissionId=${id}`);
   }
 
   async getStatus(id: number): Promise<{ status: number }> {
-    const cacheKey = `submission-status:${id}`;
-    const cached = await this.redisService.get(cacheKey);
-    if (cached !== null) return { status: parseInt(cached, 10) };
     const submission = await this.submissionRepo.findOne({
       where: { id },
       select: ['id', 'status'],

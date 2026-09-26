@@ -88,7 +88,11 @@ async function buildService() {
   mockMatchRepo = makeRepo();
   mockMatchGamerLinkRepo = makeRepo();
   mockQueue = { add: jest.fn().mockResolvedValue({}) };
-  mockDataSource = { query: jest.fn(), createQueryBuilder: jest.fn() };
+  mockGamerRepo.find.mockImplementation((options: any) => mockGamerRepo.findBy(options.where));
+  mockDataSource = { query: jest.fn(), createQueryBuilder: jest.fn(), transaction: jest.fn(async fn => fn({
+    getRepository: (entity: unknown) => entity === Match ? mockMatchRepo : entity === Gamer ? mockGamerRepo : mockMatchGamerLinkRepo,
+    query: (...args: any[]) => mockDataSource.query(...args),
+  })) };
   const client = makeRedisClient();
   mockRedisService = {
     get: jest.fn(),

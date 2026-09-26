@@ -560,7 +560,8 @@ describe('ContestService', () => {
       expect(result).toHaveLength(3);
       expect(result[0].rank).toBe(1);
       expect(result[0].username).toBe('user1');
-      expect(result[0].solved).toBeDefined();
+      expect(result[0].solved).toBe(5);
+      expect(result[0].penaltyMin).toBe(60);
       expect(contestRepo.findOne).not.toHaveBeenCalled();
     });
 

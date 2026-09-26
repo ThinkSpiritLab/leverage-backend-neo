@@ -67,7 +67,7 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     this.activeGauge.set(active);
 
     // Step 1: 生成唯一 judgeId（32 字节随机 hex）
-    const judgeId = randomBytes(16).toString('hex');
+    const judgeId = job.data.attemptId ?? randomBytes(16).toString('hex');
 
     this.logger.log(
       `Processing judge-tx: submissionId=${submissionId}, judgeId=${judgeId}`,

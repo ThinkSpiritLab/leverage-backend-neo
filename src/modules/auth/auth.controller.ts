@@ -84,7 +84,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 200, description: '返回新的 accessToken' })
   @ApiResponse({ status: 401, description: 'Refresh token 无效或已过期' })
-  refresh(@Body() dto: RefreshDto): { accessToken: string } {
+  async refresh(@Body() dto: RefreshDto): Promise<{ accessToken: string }> {
     return this.authService.refreshToken(dto.refreshToken);
   }
 
