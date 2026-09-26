@@ -184,8 +184,11 @@ provider columns and applied migrations remain for existing data compatibility.
 Real Nest HTTP → Bull → Docker → MariaDB/Redis E2E passes for a
 Python AC submission and a Python-judge/Python+C++ two-Bot match with persisted
 ELO and Redis game-over replay; Redis uses a temporary authenticated instance.
-The current backend gates pass (684 unit, 42 SQLite integration with 3 existing
+The current backend gates pass (707 unit, 42 SQLite integration with 3 existing
 skips, 80 Docker HTTP E2E with no skips, and fresh/upgrade MariaDB migrations).
+The former ZIP upload no-op now stores bounded, validated testcase pairs and
+updates the case count; valid upload, replacement, auth rejection, malformed and
+oversized archives, rollback-on-DB-error and upload → AC judging are covered.
 The Docker E2E includes a real split API process and independent Worker process:
 OJ submission and Bot match both settle across the shared Redis/DB boundary.
 Frontend probes and 27 Chrome fixture tests pass. A local production-image
@@ -195,9 +198,10 @@ isolated test-data/media volumes. Docker stats reports
 sampled container memory, and CPU is quota-limited; cumulative CPU time remains
 unavailable rather than inferred from wall time.
 
-Next: check auth-negative and real API/UI contract at the release boundary, and
-agree how a **trusted** production worker accesses Docker and the same
-Redis/DB/testcase volume. Current Compose is
+Next: check auth-negative and real API/UI contract at the release boundary,
+including the production proxy's upload-size limit and the rule against replacing
+test data during active judging. Agree how a **trusted** production worker
+accesses Docker and the same Redis/DB/testcase volume. Current Compose is
 **API-only**, not a complete deployable judge; drain legacy queues and rehearse
 migrations on a restored clone before any upgrade. Do not merge main or deploy.
 

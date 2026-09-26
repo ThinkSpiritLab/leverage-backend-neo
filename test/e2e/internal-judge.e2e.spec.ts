@@ -3,6 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
+import { zipCases } from './zip-cases';
+import { MAX_TESTCASE_ZIP_BYTES } from '../../src/modules/problem/testcase-archive';
 import { createTestApp } from './test-app';
 import { Status } from '../../src/modules/judge-runtime/judge-status';
 import { RedisService } from '../../src/modules/redis/redis.service';
@@ -46,12 +48,30 @@ describe('isolated internal judge HTTP → worker → SQL', () => {
       .send({ title: 'Runtime sum', content: 'a+b', source: 'fixture', timeLimit: 1000, memoryLimit: 64 }).expect(201);
     const id = created.body.id as number;
     const db = app.get(DataSource);
-    await db.query('UPDATE problem SET cases = 1 WHERE id = ?', [id]);
-    const [problem] = await db.query('SELECT prefix, logicId FROM problem WHERE id = ?', [id]);
-    const folder = path.join(testRoot, problem.prefix, String(problem.logicId));
-    await fs.mkdir(folder, { recursive: true });
-    await fs.writeFile(path.join(folder, '1.in'), '2 3\n');
-    await fs.writeFile(path.join(folder, '1.out'), '5\n');
+    const zip = await zipCases({ '1.in': '2 3\n', '1.out': '5\n' });
+    const uploaded = await request(app.getHttpServer()).post(`/problems/${id}/test-data`).set(auth())
+      .attach('file', zip, { filename: 'cases.zip', contentType: 'application/zip' });
+    expect({ status: uploaded.status, message: uploaded.body?.message }).toEqual({ status: 201, message: '测试数据上传成功' });
+    const listed = await request(app.getHttpServer()).get(`/problems/${id}/test-cases`).set(auth()).expect(200);
+    expect(listed.body.sort()).toEqual(['1.in', '1.out']);
+    const [stored] = await db.query('SELECT cases FROM problem WHERE id = ?', [id]);
+    expect(Number(stored.cases)).toBe(1);
+    await request(app.getHttpServer()).post(`/problems/${id}/test-data`)
+      .attach('file', zip, { filename: 'cases.zip', contentType: 'application/zip' }).expect(401);
+    const replacement = await zipCases({ '1.in': '2 3\n', '1.out': '5\n', '2.in': '4 5\n', '2.out': '9\n' });
+    await request(app.getHttpServer()).post(`/problems/${id}/test-data`).set(auth())
+      .attach('file', replacement, { filename: 'cases.zip', contentType: 'application/zip' }).expect(201);
+    await request(app.getHttpServer()).post(`/problems/${id}/test-data`).set(auth())
+      .attach('file', Buffer.from('not a zip'), { filename: 'broken.zip', contentType: 'application/zip' }).expect(400);
+    await request(app.getHttpServer()).post(`/problems/${id}/test-data`).set(auth()).expect(400);
+    const oversized = await request(app.getHttpServer()).post(`/problems/${id}/test-data`).set(auth())
+      .attach('file', Buffer.alloc(MAX_TESTCASE_ZIP_BYTES + 1),
+        { filename: 'oversized.zip', contentType: 'application/zip' });
+    expect([400, 413]).toContain(oversized.status);
+    const current = await request(app.getHttpServer()).get(`/problems/${id}/test-cases`).set(auth()).expect(200);
+    expect(current.body.sort()).toEqual(['1.in', '1.out', '2.in', '2.out']);
+    const [updated] = await db.query('SELECT cases FROM problem WHERE id = ?', [id]);
+    expect(Number(updated.cases)).toBe(2);
     const userId = Number(JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).sub);
     await app.get(RedisService).del(`submit-throttle:${userId}`);
     const response = await request(app.getHttpServer()).post('/submissions').set(auth())
@@ -59,6 +79,9 @@ describe('isolated internal judge HTTP → worker → SQL', () => {
     const result = await until(async () => (await request(app.getHttpServer()).get(`/submissions/${response.body.id}`).expect(200)).body,
       body => body.status === Status.AC || body.status === Status.SE || body.status === Status.CE, 30000);
     expect(result.status).toBe(Status.AC);
+    const [misc] = await db.query('SELECT judgeResult FROM submission_misc WHERE submissionId = ?', [response.body.id]);
+    expect(JSON.parse(misc.judgeResult).testcases.map((item: { id: number; verdict: string }) => [item.id, item.verdict]))
+      .toEqual([[1, 'AC'], [2, 'AC']]);
     const [row] = await db.query('SELECT submits, accepts FROM problem WHERE id = ?', [id]);
     expect(Number(row.accepts)).toBe(1);
     expect(Number(row.submits)).toBe(1);

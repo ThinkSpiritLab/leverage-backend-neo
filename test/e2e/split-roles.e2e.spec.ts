@@ -8,6 +8,7 @@ import { DataSource } from 'typeorm';
 import { InternalJudgeWorker } from '../../src/modules/judge-runtime/internal-judge.worker';
 import { RedisService } from '../../src/modules/redis/redis.service';
 import { Status } from '../../src/modules/judge-runtime/judge-status';
+import { zipCases } from './zip-cases';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function until<T>(get: () => Promise<T>, accept: (value: T) => boolean, ms = 30000): Promise<T> {
@@ -97,12 +98,11 @@ describe('separate API and worker processes', () => {
       .send({ title: 'Split sum', content: 'a+b', timeLimit: 1000, memoryLimit: 64 }).expect(201);
     const id = created.body.id as number;
     const db = app.get(DataSource);
-    await db.query('UPDATE problem SET cases = 1 WHERE id = ?', [id]);
-    const [problem] = await db.query('SELECT prefix, logicId FROM problem WHERE id = ?', [id]);
-    const dir = path.join(root, problem.prefix, String(problem.logicId));
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, '1.in'), '2 3\n');
-    await fs.writeFile(path.join(dir, '1.out'), '5\n');
+    await request(app.getHttpServer()).post(`/problems/${id}/test-data`).set(auth())
+      .attach('file', await zipCases({ '1.in': '2 3\n', '1.out': '5\n' }),
+        { filename: 'cases.zip', contentType: 'application/zip' }).expect(201);
+    const listing = await request(app.getHttpServer()).get(`/problems/${id}/test-cases`).set(auth()).expect(200);
+    expect(listing.body.sort()).toEqual(['1.in', '1.out']);
     await app.get(RedisService).del(`submit-throttle:${Number(JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).sub)}`);
     const submission = await request(app.getHttpServer()).post('/submissions').set(auth())
       .send({ problemId: id, language: 9, code: 'a,b=map(int,input().split());print(a+b)' }).expect(201);

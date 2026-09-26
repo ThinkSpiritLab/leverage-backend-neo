@@ -606,10 +606,9 @@ describe('ProblemService', () => {
 
   // ── uploadTestData ────────────────────────────────────────────────────────
 
-  describe('uploadTestData - zip 文件校验', () => {
-    it('应该接受合法的 .zip 文件（application/zip）', async () => {
-      const { service, problemRepo } = await createModule();
-      problemRepo.findOne.mockResolvedValue(mockProblem);
+  describe('uploadTestData - 文件类型校验（内容由 ZIP 解析器与 HTTP E2E 验证）', () => {
+    it('应该接受 .zip 扩展名与 application/zip MIME', async () => {
+      const { service } = await createModule();
 
       const file = {
         originalname: 'testdata.zip',
@@ -617,12 +616,11 @@ describe('ProblemService', () => {
         buffer: Buffer.from(''),
       } as Express.Multer.File;
 
-      await expect(service.uploadTestData(1, file)).resolves.not.toThrow();
+      expect(() => (service as any).validateZipFile(file)).not.toThrow();
     });
 
     it('应该接受 application/x-zip-compressed', async () => {
-      const { service, problemRepo } = await createModule();
-      problemRepo.findOne.mockResolvedValue(mockProblem);
+      const { service } = await createModule();
 
       const file = {
         originalname: 'testdata.zip',
@@ -630,12 +628,11 @@ describe('ProblemService', () => {
         buffer: Buffer.from(''),
       } as Express.Multer.File;
 
-      await expect(service.uploadTestData(1, file)).resolves.not.toThrow();
+      expect(() => (service as any).validateZipFile(file)).not.toThrow();
     });
 
     it('应该接受 application/octet-stream + .zip 扩展名', async () => {
-      const { service, problemRepo } = await createModule();
-      problemRepo.findOne.mockResolvedValue(mockProblem);
+      const { service } = await createModule();
 
       const file = {
         originalname: 'testdata.zip',
@@ -643,7 +640,7 @@ describe('ProblemService', () => {
         buffer: Buffer.from(''),
       } as Express.Multer.File;
 
-      await expect(service.uploadTestData(1, file)).resolves.not.toThrow();
+      expect(() => (service as any).validateZipFile(file)).not.toThrow();
     });
 
     it('应该拒绝 .txt 文件（抛出 BadRequestException）', async () => {

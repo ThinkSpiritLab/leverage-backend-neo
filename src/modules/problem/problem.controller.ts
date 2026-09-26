@@ -17,6 +17,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -32,6 +33,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/strategies/jwt-access.strategy';
 import { ProblemService } from './problem.service';
+import { MAX_TESTCASE_ZIP_BYTES } from './testcase-archive';
 import { CreateProblemDto } from './dto/create-problem.dto';
 import { UpdateProblemDto } from './dto/update-problem.dto';
 import { ProblemQueryDto } from './dto/problem-query.dto';
@@ -473,7 +475,10 @@ export class ProblemController {
   @Roles('admin')
   @RequireLog('test-cases', 'upload', true)
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    limits: { fileSize: MAX_TESTCASE_ZIP_BYTES, files: 1 },
+  }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: '上传测试数据（需要 admin 权限，必须为 .zip 文件）',

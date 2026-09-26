@@ -88,7 +88,17 @@ The column **Auth** in the tables below uses:
 | POST | `/problems` | admin | Create problem |
 | PATCH | `/problems/:id` | admin | Update problem |
 | DELETE | `/problems/:id` | admin | Delete problem |
-| POST | `/problems/:id/test-data` | admin | Upload test data `.zip` |
+| POST | `/problems/:id/test-data` | admin | Upload and replace the problem's test-data ZIP |
+
+Test-data upload uses a multipart `file` field. The ZIP contains only flat,
+consecutive UTF-8 pairs `1.in`/`1.out` through `N.in`/`N.out` (1–64 pairs).
+Archive size is capped at 16 MiB; each decompressed file at 1 MiB and all
+files together at 64 MiB. Unknown paths, unpaired files and malformed archives
+are rejected. A successful upload stores the files in the backend's trusted
+`TEST_CASES_PATH` volume and updates the problem's case count. Keep API and Worker
+on the same test-data volume; do not replace data while a judge attempt is active.
+The current production proxy retains its earlier body-size limit; raise it above
+16 MiB plus multipart overhead and verify a real proxy upload before release.
 
 ### Submissions — `/submissions`
 

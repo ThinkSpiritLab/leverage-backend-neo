@@ -22,6 +22,10 @@ auto-discover `AGENTS.md` need to be pointed to this file explicitly.
 - `src/modules/auth/` and `src/common/guards/`: JWT, contest JWT, user API keys,
   and role checks. Frontend route guards are not backend authorization.
 - `src/modules/submission/`: submission creation, querying and rejudging.
+- `src/modules/problem/`: problem CRUD and bounded ZIP testcase import into the
+  trusted test-data volume. The module's default Multer storage writes to disk;
+  the ZIP upload route explicitly uses bounded `memoryStorage()` so `file.buffer`
+  exists. Keep ZIP parsing, file swap and `problem.cases` in the same path.
 - `src/modules/judge-runtime/`: in-repository OJ/match worker, Docker sandbox,
   runtime languages and status contract. User programs run only in restricted
   Docker containers, never in the NestJS process.

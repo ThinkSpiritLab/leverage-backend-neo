@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +10,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThan, Repository } from 'typeorm';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as fsAsync from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { ensureDir, writeFile } from 'fs-extra';
 import { Parser as XmlParser } from 'xml2js';
 import TurndownService from 'turndown';
@@ -24,6 +27,7 @@ import { UpdateProblemDto } from './dto/update-problem.dto';
 import { ProblemQueryDto } from './dto/problem-query.dto';
 import { ZipHashDto } from './dto/zip-hash.dto';
 import { DataSource } from 'typeorm';
+import { parseTestCaseZip } from './testcase-archive';
 
 /** FPS XML raw types */
 interface FPSImage {
@@ -54,10 +58,11 @@ interface FPSRawObject {
   };
 }
 
-const TEST_CASES_PATH = process.env.TEST_CASES_PATH ?? '/tmp/testcases';
-
 @Injectable()
 export class ProblemService {
+  private get testCasesPath(): string {
+    return process.env.TEST_CASES_PATH ?? '/tmp/testcases';
+  }
   constructor(
     @InjectRepository(Problem)
     private readonly problemRepo: Repository<Problem>,
@@ -266,11 +271,59 @@ export class ProblemService {
   /**
    * 上传测试数据（校验必须是 zip）
    */
-  async uploadTestData(id: number, file: Express.Multer.File): Promise<void> {
+  async uploadTestData(id: number, file?: Express.Multer.File): Promise<void> {
+    if (!file?.buffer) throw new BadRequestException('请选择测试数据 ZIP 文件');
     this.validateZipFile(file);
     const problem = await this.problemRepo.findOne({ where: { id } });
     if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
-    // TODO: 实际项目中此处调用 OSS/MinIO 上传服务
+    if (!/^[a-z0-9_-]{1,8}$/.test(problem.prefix) || !Number.isSafeInteger(problem.logicId) || problem.logicId < 1)
+      throw new BadRequestException('题目标识无法用于测试数据目录');
+    const { files, caseCount } = await parseTestCaseZip(file.buffer);
+    await fsAsync.mkdir(this.testCasesPath, { recursive: true });
+    const base = await fsAsync.realpath(this.testCasesPath);
+    const parent = path.join(base, problem.prefix);
+    await fsAsync.mkdir(parent, { recursive: true });
+    if (await fsAsync.realpath(parent) !== parent) throw new BadRequestException('测试数据目录无效');
+    const target = path.join(parent, String(problem.logicId));
+    const staged = await fsAsync.mkdtemp(path.join(parent, '.upload-'));
+    let backup: string | undefined;
+    let installed = false;
+    try {
+      for (const [name, bytes] of files) await fsAsync.writeFile(path.join(staged, name), bytes, { flag: 'wx', mode: 0o600 });
+      await this.dataSource.transaction(async manager => {
+        const locked = await manager.findOne(Problem, { where: { id }, lock: { mode: 'pessimistic_write' } });
+        if (!locked || locked.prefix !== problem.prefix || locked.logicId !== problem.logicId)
+          throw new BadRequestException('题目标识已改变，请重新上传');
+        let previous: import('node:fs').Stats | undefined;
+        try { previous = await fsAsync.lstat(target); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+        if (previous) {
+          if (!previous.isDirectory() || previous.isSymbolicLink()) throw new BadRequestException('测试数据目录无效');
+          backup = path.join(parent, `.previous-${randomUUID()}`);
+          await fsAsync.rename(target, backup);
+        }
+        await fsAsync.rename(staged, target);
+        installed = true;
+        await manager.update(Problem, id, { cases: caseCount });
+      });
+    } catch (error) {
+      try {
+        if (installed) await fsAsync.rm(target, { recursive: true, force: true });
+        if (backup) await fsAsync.rename(backup, target);
+      } catch (recoveryError) {
+        Logger.error(recoveryError, 'Problem test data recovery');
+        throw new InternalServerErrorException('测试数据恢复失败，需要人工检查');
+      }
+      throw error;
+    } finally {
+      await fsAsync.rm(staged, { recursive: true, force: true });
+    }
+    if (backup) {
+      try { await fsAsync.rm(backup, { recursive: true, force: true }); }
+      catch (error) { Logger.warn(`旧测试数据清理失败：${String(error)}`, 'Problem test data'); }
+    }
+    try { await this.cacheService.del(`problem:${id}:admin`, `problem:${id}:user`); }
+    catch { Logger.warn('题目测试数据已保存，但详情缓存尚未失效', 'Problem test data'); }
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -540,7 +593,7 @@ export class ProblemService {
     if (!problem) throw new NotFoundException(`题目 #${id} 不存在`);
 
     const dir = path.join(
-      TEST_CASES_PATH,
+      this.testCasesPath,
       problem.prefix,
       problem.logicId.toString(),
     );
@@ -611,7 +664,7 @@ export class ProblemService {
     });
 
     const problemPath = path.join(
-      TEST_CASES_PATH,
+      this.testCasesPath,
       result.prefix,
       result.logicId.toString(),
     );
@@ -903,7 +956,7 @@ export class ProblemService {
       });
 
       const destDir = path.join(
-        TEST_CASES_PATH,
+        this.testCasesPath,
         result.prefix,
         result.logicId.toString(),
       );

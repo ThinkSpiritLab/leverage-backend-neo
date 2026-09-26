@@ -12,7 +12,7 @@ pnpm test:unit --runInBand --runTestsByPath src/modules/judge-runtime/docker-san
 pnpm exec tsc --noEmit --incremental false
 ```
 
-A local macOS Docker Desktop / Linux arm64 build measured **187,111,039 bytes**; this is not a cross-platform image-size cap. Recheck the image ID and size with `docker image inspect` after rebuilding. Keep the image; the adapter uses `docker create --pull=never` and will not pull an unknown tag. Build once per target architecture, pin the resulting digest for deployment rather than relying on the mutable `node:22-bookworm-slim` base tag. The image includes Python 3, GCC/G++, `nlohmann-json3-dev`, Node 22, TypeScript **5.9.3** and `@types/node` **22.18.6**. TypeScript uses actual `tsc` (including `enum`), not Node's strip-types mode. No third-party Node dependency was added to the backend.
+A local macOS Docker Desktop / Linux arm64 build measured **187,111,039 bytes**; this is not a cross-platform image-size cap. Recheck the image ID and size with `docker image inspect` after rebuilding. Keep the image; the adapter uses `docker create --pull=never` and will not pull an unknown tag. Build once per target architecture, pin the resulting digest for deployment rather than relying on the mutable `node:22-bookworm-slim` base tag. The image includes Python 3, GCC/G++, `nlohmann-json3-dev`, Node 22, TypeScript **5.9.3** and `@types/node` **22.18.6**. TypeScript uses actual `tsc` (including `enum`), not Node's strip-types mode. The sandbox adapter itself adds no third-party backend dependency; the separate testcase ZIP upload uses `yauzl`.
 
 ## Contract
 
