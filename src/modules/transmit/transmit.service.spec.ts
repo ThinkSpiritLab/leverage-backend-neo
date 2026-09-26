@@ -82,31 +82,8 @@ describe('TransmitService', () => {
   // ─── listJudgers ─────────────────────────────────────────────────────────────
 
   describe('listJudgers', () => {
-    afterEach(() => {
-      delete process.env.HENG_BASE_URL;
-      delete process.env.BOTZONE_BASE_URL;
-    });
-
-    it('未配置任何 judge URL 时返回空数组', async () => {
-      delete process.env.HENG_BASE_URL;
-      delete process.env.BOTZONE_BASE_URL;
-      const result = await service.listJudgers();
-      expect(result).toHaveLength(0);
-    });
-
-    it('配置 HENG_BASE_URL 时返回 Heng 条目（连接失败时 ttl=0）', async () => {
-      process.env.HENG_BASE_URL = 'http://heng-unreachable:5000';
-      const result = await service.listJudgers();
-      expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ name: 'Heng', ttl: 0 });
-      expect(result[0]).toHaveProperty('version');
-    });
-
-    it('返回数据包含 version 和 ttl 字段', async () => {
-      process.env.HENG_BASE_URL = 'http://heng-unreachable:5000';
-      const result = await service.listJudgers();
-      expect(result[0]).toHaveProperty('version');
-      expect(result[0]).toHaveProperty('ttl');
+    it('does not probe retired external judges; queue status is observed separately', async () => {
+      expect(await service.listJudgers()).toEqual([]);
     });
   });
 

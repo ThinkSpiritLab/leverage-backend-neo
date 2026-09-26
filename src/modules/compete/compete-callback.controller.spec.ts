@@ -17,20 +17,30 @@ import { MatchGamerLink } from '../../database/entities/match-gamer-link.entity'
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
-import { MatchCallbackDto } from './dto/match-callback.dto';
+import { EventEmitter } from 'events';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockConfigService = {
   get: jest.fn((key: string, def?: unknown) => {
-    if (key === 'botzone.callbackToken') return 'secret-token';
     return def;
   }),
 };
 
 const mockCompeteService = {
-  handleMatchCallback: jest.fn(),
   assertMatchGamerOwner: jest.fn(),
+  findGamerByApiKey: jest.fn(),
+  isMatchParticipant: jest.fn(),
+  findOneMatch: jest.fn(),
+};
+const mockHumanTurnService = {
+  notifyGameOver: jest.fn(),
+  waitForResponse: jest.fn().mockResolvedValue('ok'),
+  waitForTurn: jest.fn(),
+  submitResponse: jest.fn(),
+  registerSSEClient: jest.fn(),
+  unregisterSSEClient: jest.fn(),
+  replayPendingTurn: jest.fn(),
 };
 
 // Minimal providers needed to instantiate CompeteService (not actually called)
@@ -39,29 +49,19 @@ const mockQueue = {};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildCallback(overrides: Partial<MatchCallbackDto> = {}): MatchCallbackDto {
-  return {
-    jobId: 'bz-game-42',
-    state: 'finished',
-    type: 'botzone',
-    result: {
-      verdict: 'Accepted',
-      rounds: [],
-      finalResult: { '101': 5, '102': 3 },
-    },
-    ...overrides,
-  };
-}
-
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('CompeteController — match-callback', () => {
+describe('CompeteController — bot authorization', () => {
   let controller: CompeteController;
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockCompeteService.handleMatchCallback.mockResolvedValue({ ok: true });
     mockCompeteService.assertMatchGamerOwner.mockResolvedValue(42);
+    mockCompeteService.isMatchParticipant.mockResolvedValue(true);
+    mockCompeteService.findOneMatch.mockResolvedValue({ status: 1 });
+    mockHumanTurnService.submitResponse.mockResolvedValue(false);
+    mockHumanTurnService.replayPendingTurn.mockResolvedValue(undefined);
+    mockHumanTurnService.registerSSEClient.mockReturnValue('connection');
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CompeteController],
@@ -77,100 +77,83 @@ describe('CompeteController — match-callback', () => {
         { provide: DataSource, useValue: {} },
         { provide: RedisService, useValue: {} },
         { provide: SettingService, useValue: {} },
-        { provide: HumanTurnService, useValue: { notifyGameOver: jest.fn(), waitForResponse: jest.fn().mockResolvedValue('ok'), waitForTurn: jest.fn(), registerSSEClient: jest.fn(), unregisterSSEClient: jest.fn(), replayPendingTurn: jest.fn() } },
-        { provide: JwtAccessStrategy, useValue: { validate: jest.fn(async value => value) } },
-        { provide: JwtService, useValue: { sign: jest.fn(), verify: jest.fn() } },
-        { provide: AutoMatchSchedulerService, useValue: { getStatus: jest.fn(), resetState: jest.fn() } },
+        { provide: HumanTurnService, useValue: mockHumanTurnService },
+        {
+          provide: JwtAccessStrategy,
+          useValue: { validate: jest.fn((value) => Promise.resolve(value)) },
+        },
+        {
+          provide: JwtService,
+          useValue: { sign: jest.fn(), verify: jest.fn() },
+        },
+        {
+          provide: AutoMatchSchedulerService,
+          useValue: { getStatus: jest.fn(), resetState: jest.fn() },
+        },
       ],
     }).compile();
 
     controller = module.get<CompeteController>(CompeteController);
   });
 
-  // ─── 认证 ─────────────────────────────────────────────────────────────
-
-  describe('Bearer token 认证', () => {
-    it('token 正确时：调用 handleMatchCallback 并返回 ok=true', async () => {
-      const body = buildCallback();
-      const result = await controller.receiveMatchCallbackLegacy(
-        'Bearer secret-token',
-        body,
-      );
-
-      expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledWith(
-        body.jobId,
-        body.state,
-        body.result,
-      );
-      expect(result).toEqual({ ok: true });
-    });
-
-    it('token 错误时：抛出 UnauthorizedException', async () => {
+  describe('human response and SSE authorization', () => {
+    it('rejects invalid Bot keys and JWT before forwarding a response', async () => {
+      mockCompeteService.findGamerByApiKey.mockResolvedValue(null);
       await expect(
-        controller.receiveMatchCallbackLegacy('Bearer wrong-token', buildCallback()),
+        controller.botRespond({ turnToken: 't', response: 'x' }, 'bad-key'),
       ).rejects.toBeInstanceOf(UnauthorizedException);
-
-      expect(mockCompeteService.handleMatchCallback).not.toHaveBeenCalled();
-    });
-
-    it('未配置回调 token 时 fail closed', async () => {
-      (controller as any).callbackToken = '';
-      await expect(controller.receiveMatchCallbackLegacy(undefined, buildCallback()))
-        .rejects.toBeInstanceOf(UnauthorizedException);
-      expect(mockCompeteService.handleMatchCallback).not.toHaveBeenCalled();
-    });
-
-    it('无 Authorization 头时：抛出 UnauthorizedException', async () => {
       await expect(
-        controller.receiveMatchCallbackLegacy(undefined, buildCallback()),
+        controller.botRespond(
+          { turnToken: 't', response: 'x' },
+          undefined,
+          'Bearer bad',
+        ),
       ).rejects.toBeInstanceOf(UnauthorizedException);
-    });
-  });
-
-  describe('human-turn-webhook', () => {
-    it('requires the callback token and verifies the match/gamer link before waiting', async () => {
-      await expect(controller.humanTurnWebhook(8, 31, {}, undefined, undefined))
-        .rejects.toBeInstanceOf(UnauthorizedException);
-      expect(mockCompeteService.assertMatchGamerOwner).not.toHaveBeenCalled();
-
-      await expect(controller.humanTurnWebhook(8, 31, {}, undefined, 'secret-token')).resolves.toBe('ok');
-      expect(mockCompeteService.assertMatchGamerOwner).toHaveBeenCalledWith(8, 31);
-    });
-  });
-
-  // ─── 回调处理 ─────────────────────────────────────────────────────────
-
-  describe('回调处理', () => {
-    const authHeader = 'Bearer secret-token';
-
-    it('terminal 状态 finished → 正常处理', async () => {
-      const body = buildCallback({ state: 'finished' });
-      const result = await controller.receiveMatchCallbackLegacy(authHeader, body);
-      expect(result).toEqual({ ok: true });
-      expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledTimes(1);
+      expect(mockHumanTurnService.submitResponse).not.toHaveBeenCalled();
     });
 
-    it('terminal 状态 failed → 正常处理', async () => {
-      const body = buildCallback({ state: 'failed', result: undefined });
-      await controller.receiveMatchCallbackLegacy(authHeader, body);
-      expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledWith(
-        body.jobId,
-        'failed',
+    it('awaits shared authorization and does not claim success on a stale token', async () => {
+      mockCompeteService.findGamerByApiKey.mockResolvedValue({ id: 31 });
+      expect(
+        await controller.botRespond({ turnToken: 't', response: 'x' }, 'key'),
+      ).toEqual({ success: false, message: '找不到对应的 turn，可能已超时' });
+      expect(mockHumanTurnService.submitResponse).toHaveBeenCalledWith(
+        't',
+        'x',
         undefined,
+        31,
       );
     });
 
-    it('中间状态 running → 也会转发给 service（service 内部处理幂等）', async () => {
-      const body = buildCallback({ state: 'running', result: undefined });
-      await controller.receiveMatchCallbackLegacy(authHeader, body);
-      expect(mockCompeteService.handleMatchCallback).toHaveBeenCalledTimes(1);
-    });
+    it('rejects non-participants and replays terminal matches without an SSE timer', async () => {
+      const response = () => {
+        const res = new EventEmitter() as any;
+        res.status = jest.fn(() => res);
+        res.json = jest.fn();
+        res.setHeader = jest.fn();
+        res.flushHeaders = jest.fn();
+        res.write = jest.fn();
+        res.end = jest.fn();
+        return res;
+      };
+      mockCompeteService.isMatchParticipant.mockResolvedValueOnce(false);
+      const denied = response();
+      await controller.humanSse(8, undefined, { sub: 11 } as any, denied);
+      expect(denied.status).toHaveBeenCalledWith(403);
+      expect(mockHumanTurnService.registerSSEClient).not.toHaveBeenCalled();
 
-    it('service 返回 ok=false → controller 透传', async () => {
-      mockCompeteService.handleMatchCallback.mockResolvedValue({ ok: false });
-      const body = buildCallback({ jobId: 'unknown-job' });
-      const result = await controller.receiveMatchCallbackLegacy(authHeader, body);
-      expect(result).toEqual({ ok: false });
+      mockCompeteService.findOneMatch.mockResolvedValue({
+        status: 2,
+        result: JSON.stringify({ finalResult: { '31': 1 } }),
+      });
+      const terminal = response();
+      await controller.humanSse(8, undefined, { sub: 11 } as any, terminal);
+      expect(terminal.write).toHaveBeenCalledWith(
+        'data: {"type":"game-over","finalResult":{"31":1}}\n\n',
+      );
+      expect(terminal.end).toHaveBeenCalled();
+      expect(mockHumanTurnService.registerSSEClient).not.toHaveBeenCalled();
     });
   });
+
 });

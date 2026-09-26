@@ -18,22 +18,19 @@ Backend service for **Leverage OJ** — an Online Judge platform for competitive
 ## Quick Start
 
 ```bash
-# 1. Clone and copy environment config
+# Local development: Node 22, pnpm, and a working Docker daemon are required.
 cp .env.example .env
-# Edit .env — at minimum set DB_PASSWORD, JWT_*_SECRET, HENG_* values, BASE_URL
-
-# 2. Start all services (includes MariaDB + Redis)
-docker compose up -d
-
-# 3. Run database migrations (required on first deploy)
-pnpm migration:run
-
-# 4. API is available at http://localhost:3000
-# Swagger UI:   http://localhost:3000/api/docs
-# Queue board:  http://localhost:3000/admin/queues
-# Metrics:      http://localhost:3000/metrics
-# Health:       http://localhost:3000/health
+# Set the blank database/bootstrap/JWT secrets in .env before starting.
+docker compose up -d --wait db redis  # loopback-only dependencies
+pnpm install --frozen-lockfile
+pnpm migration:run                   # first local database, including ELO SQL tables
+pnpm judge:image                      # user code runs only in restricted containers
+pnpm start:dev                        # all = HTTP + internal worker
 ```
+
+The supplied production Compose is **API-only** and cannot judge jobs until a
+trusted worker and shared test-case storage are provisioned; see
+[the deployment guide](deploy/README.md).
 
 ## Development
 
@@ -58,7 +55,7 @@ pnpm start:prod
 |----------|---------|-------------|
 | `PORT` | `3000` | HTTP listen port |
 | `NODE_ENV` | `development` | Runtime environment |
-| `BASE_URL` | `http://localhost:3000` | Server public URL (used for heng callbacks) |
+| `BASE_URL` | `http://localhost:3000` | Server public URL |
 | `DB_HOST` | `localhost` | MariaDB host |
 | `DB_DATABASE` | — | Database name |
 | `DB_USERNAME` | — | Database user |
@@ -66,12 +63,10 @@ pnpm start:prod
 | `REDIS_HOST` | `localhost` | Redis host |
 | `JWT_ACCESS_SECRET` | — | Access token signing secret |
 | `JWT_REFRESH_SECRET` | — | Refresh token signing secret |
-| `HENG_BASE_URL` | — | heng-controller base URL |
-| `HENG_AK` / `HENG_SK` | — | heng access/secret key |
-| `HENG_CALLBACK_BASE` | — | ⚠️ Deprecated; use `BASE_URL` instead |
+
 | `MAX_SUBMISSION_PER_MINUTE` | `10` | Per-user submission rate limit |
 | `INIT_SA_USERNAME` | `admin` | Default SA account username |
-| `INIT_SA_PASSWORD` | `Admin@123456` | Default SA account password |
+| `INIT_SA_PASSWORD` | — | Explicitly set before first non-test startup; production requires ≥16 characters |
 
 Full variable reference: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
 
@@ -93,7 +88,9 @@ pnpm migration:revert
 pnpm migration:show
 ```
 
-> ⚠️ In production, always run `pnpm migration:run` after deploying a new version.
+> Local setup may run `pnpm migration:run` before starting the app. In production,
+> a single API instance runs reviewed migrations during startup; rehearse upgrades
+> on a restored clone and never race multiple migrating instances.
 
 ## API Documentation
 

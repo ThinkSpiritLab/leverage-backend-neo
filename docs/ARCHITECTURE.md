@@ -9,16 +9,16 @@ graph TD
     DB["MariaDB"]
     RD["Redis"]
     BQ["Bull\njudge-tx queue"]
-    BN["botzone-neo\n(judge engine)"]
-    SB["shimmy sandbox\n(Direct / Sandlock)"]
+    JW["NestJS internal judge worker"]
+    SB["restricted Docker sandbox"]
 
     FE <-->|REST / SSE| BE
     BE <-->|TypeORM| DB
     BE <-->|ioredis| RD
     BE -->|Bull job enqueue| BQ
-    BQ -->|HTTP POST /v1/judge| BN
-    BN -->|POST /compete/match-callback| BE
-    BN --> SB
+    BQ -->|consume| JW
+    JW -->|finalize result| BE
+    JW --> SB
 ```
 
 ### Component Responsibilities
@@ -30,8 +30,8 @@ graph TD
 | **MariaDB** | Persistent storage (users, gamers, matches, ELO history, …) |
 | **Redis** | Queue storage (Bull), session cache, rate-limit counters |
 | **Bull** | Async job queue (`judge-tx`) for match submission |
-| **botzone-neo** | Judge engine — compiles bots, runs multi-round games, callbacks to backend |
-| **shimmy** | Sandbox library — DirectBackend (dev) / SandlockBackend (Linux cgroups) |
+| **Internal judge worker** | Consumes OJ and match jobs; finalizes results in the same NestJS backend |
+| **Docker sandbox** | Restricts compilation and execution of submitted code |
 
 ---
 
@@ -55,9 +55,8 @@ Core module for bot competition:
 - **ELO** — per-game ELO ratings with full history in `gamer_elo_history`
 - **Auto-match scheduler** — adaptive backoff cron, runs matches for enabled games
 
-### `botzone` (client)
-`BotzoneClientService` submits match jobs to botzone-neo via HTTP POST `/v1/judge`.
-Receives callbacks at `POST /compete/match-callback/:matchId?token=<callbackToken>`.
+### `judge-runtime`
+`InternalJudgeService` queues OJ submissions and Botzone matches; the Nest worker executes them in a restricted Docker sandbox and settles results locally. Public webhook bots remain supported as match participants.
 
 ### `mcp`
 13-tool MCP server exposing Leverage as AI-callable tools.
@@ -71,7 +70,7 @@ See [`MCP_SETUP.md`](./MCP_SETUP.md) for setup and [`GAME_DESIGN.md`](./GAME_DES
 Bots are **immutable after creation**. Editing creates a new `Gamer` row — the original keeps its ELO history. This preserves leaderboard integrity.
 
 ### User-Submitted Judges
-Game judges are Python/JS programs uploaded by supervisors. botzone-neo compiles them, runs them in a sandbox, and pipes round data via stdin/stdout.
+Game judges are Python/JS programs uploaded by supervisors. The internal worker compiles them in the sandbox and exchanges round data via stdin/stdout.
 
 ### API Key Authentication
 Users can generate `lev_` prefixed API keys for external bot integration:

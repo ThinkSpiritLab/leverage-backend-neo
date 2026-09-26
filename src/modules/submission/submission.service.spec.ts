@@ -19,7 +19,7 @@ import { RejudgeLog } from '../../database/entities/rejudge-log.entity';
 import { Suspicion } from '../../database/entities/suspicion.entity';
 import { RedisService } from '../redis/redis.service';
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
-import { Status } from '../heng/heng.types';
+import { Status } from '../judge-runtime/judge-status';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -286,11 +286,9 @@ describe('SubmissionService', () => {
     it('应推入 judge-tx 队列', async () => {
       await service.create(1, dto);
       expect(judgeTxQueue.add).toHaveBeenCalledWith(
-        'judge',
-        expect.objectContaining({
-          submissionId: 42,
-          task: expect.objectContaining({ language: 1, code: 'int main(){}' }),
-        }),
+        'internal-submission',
+        expect.objectContaining({ submissionId: 42 }),
+        expect.objectContaining({ jobId: expect.stringContaining('submission-42-') }),
       );
     });
 
@@ -402,8 +400,9 @@ describe('SubmissionService', () => {
     it('应推入队列', async () => {
       await service.rejudge(42);
       expect(judgeTxQueue.add).toHaveBeenCalledWith(
-        'judge',
-        expect.any(Object),
+        'internal-submission',
+        expect.objectContaining({ submissionId: 42, attemptId: expect.any(String) }),
+        expect.objectContaining({ jobId: expect.stringContaining('submission-42-') }),
       );
     });
 

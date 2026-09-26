@@ -1,6 +1,6 @@
 import { SubmissionService } from './submission.service';
 import { Submission } from '../../database/entities/submission.entity';
-import { Status } from '../heng/heng.types';
+import { Status } from '../judge-runtime/judge-status';
 
 function fixture() {
   const submission: any = {
@@ -35,9 +35,6 @@ function fixture() {
     manager: { transaction: (fn: any) => fn(manager) },
   };
   const queue: any = { add: jest.fn() };
-  const botzone: any = {
-    enqueue: jest.fn(async () => ({ externalJobId: 'new-job' })),
-  };
   const service = new SubmissionService(
     repo,
     { findOne: async () => misc, update: jest.fn() } as any,
@@ -48,34 +45,28 @@ function fixture() {
     { get: (_key: string, defaultValue: any) => defaultValue } as any,
     queue,
     {} as any,
-    botzone,
     { finalize: jest.fn() } as any,
   );
-  jest.spyOn(service as any, 'readTestcases').mockResolvedValue([]);
-  jest.spyOn(service as any, 'loadCheckerInfo').mockResolvedValue({});
-  return { service, botzone, queue, manager, repo, submission };
+  return { service, queue, manager, repo, submission };
 }
 
-describe('provider-aware rejudge', () => {
-  it('rejects an unsupported Botzone language before clearing the previous result', async () => {
+describe('internal rejudge identity', () => {
+  it('rejects an unsupported language before clearing the previous result', async () => {
     const f = fixture();
-    f.submission.language = 0;
-    await expect(f.service.rejudge(7)).rejects.toThrow('Botzone');
+    f.submission.language = 8;
+    await expect(f.service.rejudge(7)).rejects.toThrow('Internal');
     expect(f.manager.save).not.toHaveBeenCalled();
     expect(f.manager.update).not.toHaveBeenCalled();
-    expect(f.botzone.enqueue).not.toHaveBeenCalled();
+    expect(f.queue.add).not.toHaveBeenCalled();
     expect(f.submission.status).toBe(Status.AC);
   });
-  it('rejudges through the original provider with a fresh attempt and no previous job', async () => {
+  it('rejudges historical results internally with a fresh attempt and no previous job', async () => {
     const f = fixture();
     await f.service.rejudge(7);
-    expect(f.botzone.enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({
-        submissionId: 7,
-        attemptId: expect.stringMatching(/^[a-f0-9]{32}$/),
-      }),
-    );
-    expect(f.queue.add).not.toHaveBeenCalled();
+    expect(f.queue.add).toHaveBeenCalledWith('internal-submission',
+      expect.objectContaining({ submissionId: 7, attemptId: expect.stringMatching(/^[a-f0-9]{32}$/) }),
+      expect.objectContaining({ attempts: 3 }));
+    expect(f.submission.provider).toBe('internal');
     expect(f.manager.update).toHaveBeenCalledWith(
       Submission,
       7,

@@ -19,7 +19,7 @@ Read both root `agent.md` files. Start from the current
 Keep one current execution pointer here, not separate competing frontend plans.
 Preparation does not activate execution; start when the user sends `/goal`.
 
-## Current baseline
+## Initial baseline (before this roadmap)
 
 - Both branches contain signed, pushed fixes for account authorization, human-turn
   ownership, transactional judge settlement, rejudge attempts, ELO locking, missing
@@ -38,9 +38,10 @@ Preparation does not activate execution; start when the user sends `/goal`.
   Nest validation pipeline rejected the numeric fixture and accepted the string.
 - Corrected hypothesis: Game/Gamer `name` is an entity-generated alias of `title`.
   Initial blank-title mock screenshots were a fixture error, not a product defect.
-- Current game extension uses stored judge code and sandboxed `rendererHtml` with
-  generic routes. Preserve this useful boundary. Human-turn/SSE state remains
-  process-local; do not advertise multi-instance support.
+- Game extension stores judge code and sandboxed `rendererHtml` behind generic
+  routes. Preserve this useful boundary.
+- At this initial baseline, human-turn/SSE state was process-local; Redis sharing
+  and cross-instance replay are tracked by the current execution pointer below.
 
 ## Ordered outcomes
 
@@ -112,10 +113,11 @@ observed bottlenecks with before/after evidence.
 
 Verify migrations on fresh and upgrade databases, normal/contest/auth-negative
 paths, and smoke-test OJ submissions, courses, contests and administration. A real
-judge end-to-end run requires an available authorized judge service; mocked UI or
-judge responses must not be presented as proof that the external sandbox works.
-If that dependency is unavailable, finish independent work and report the remaining
-acceptance gate as blocked rather than marking the entire goal complete.
+judge acceptance run must execute trusted sample programs in the restricted local
+Docker worker against disposable database/Redis state, with persisted results;
+UI mocks and isolated engine unit tests do not establish that boundary.
+If Docker is unavailable, finish independent work and report the runtime gate as
+blocked rather than marking the entire goal complete.
 
 Keep `agent.md`, development instructions, configuration examples and deployment
 notes aligned. Deliver signed commits and pushed branches with honest test state.
@@ -161,29 +163,43 @@ read-only root filesystems, and explicit CPU/memory/PID/output/time bounds. The
 trusted backend worker may orchestrate them. Do not run the unsafe candidate
 upstream deployment merely to obtain a passing real-judge result.
 
-Integrate execution into this repository after that feasibility gate. Preserve
-existing API routes and keep external adapters as explicit migration options
-until internal execution is verified. A worker-mode process must not listen on
+Integrate execution into this repository after that feasibility gate. The user
+explicitly authorized deleting Heng and the external-judge connection code: do
+not keep a permanent second evaluator stack, external callback chain or fallback
+poller after internal execution passes. Preserve business routes, historical
+records and status numbers; stop/drain old workers and queues before an upgrade,
+rather than rewriting production data. A worker-mode process must not listen on
 an HTTP port. Do not deploy or merge main as part of this work.
+
+The backend owns resource enforcement and monitoring. Report the actual source
+and units of execution wall time, CPU and sandbox memory; sampled peaks are not
+exact process RSS. Unknown metrics remain absent/null, never fabricated zeros.
 
 ## Execution pointer
 
-Current: checkpointing the verified UI/DX/security changes, then implementing
-the approved unified-backend roles and internal executor. Existing verification:
-backend TypeScript check and 828 unit tests; SQLite 42 passed with three existing
-skips; ordinary container HTTP suites passed; five additional real-MariaDB Bot
-privacy/owner-versioning cases passed. Frontend production build, 27 browser
-fixture tests, source probes, trusted example programs and real iframe messaging
-passed. Desktop/mobile views were inspected; none of these is a real judge run.
+Current: one backend now owns OJ and code-Bot evaluation. The old Heng and
+external botzone-neo evaluator clients, pollers, callbacks and dedicated workers
+are removed. Real Nest HTTP → Bull → Docker → MariaDB/Redis E2E passes for a
+Python AC submission and a Python-judge/Python+C++ two-Bot match with persisted
+ELO and Redis game-over replay; Redis uses a temporary authenticated instance.
+The current backend gates pass (684 unit, 42 SQLite integration with 3 existing
+skips, 78 Docker HTTP E2E with no skips, and fresh/upgrade MariaDB migrations).
+Frontend probes and 27 Chrome fixture tests pass. A local production-image
+smoke reaches the Nitro SPA, `/compete` and a renderer asset. The backend image
+contains the emitted entrypoint and migrations; its non-root process writes to
+isolated test-data/media volumes. Docker stats reports
+sampled container memory, and CPU is quota-limited; cumulative CPU time remains
+unavailable rather than inferred from wall time.
 
-Next: use the isolated Docker feasibility result to implement execution; add
-`all`/`api`/`worker` entry behavior and singleton-maintenance coordination without
-a global primary backend. Preserve the current API and migration options.
+Next: finalize signed branch commits/pushes, check auth-negative and real API/UI
+contract at the release boundary, and agree how a **trusted** production worker
+accesses Docker and the same Redis/DB/testcase volume. Current Compose is
+**API-only**, not a complete deployable judge; drain legacy queues and rehearse
+migrations on a restored clone before any upgrade. Do not merge main or deploy.
 
-Blocked: no role/UI implementation blocker. Real compilation/match acceptance
-remains open until the internal executor is exercised under actual isolation.
-Do not substitute the unsafe candidate upstream or silently request privileged
-execution. The focused spike lives under `spikes/001-docker-judge/`.
+Blocked for production release: worker provisioning/network/storage and attended
+Linux security/upgrade verification remain open. Local product development is
+not blocked, and the unsafe privileged upstream is not used.
 
 After each coherent verified slice, replace this pointer and update the applicable
 outcome with concise durable evidence. Continue through independent unblocked

@@ -15,7 +15,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { LEVERAGE_LANG_TO_BOTZONE, resolveBotzoneLanguage } from '../modules/botzone/botzone.types';
+import { LEVERAGE_LANG_TO_BOTZONE, resolveBotzoneLanguage } from '../modules/judge-runtime/language';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 

@@ -170,7 +170,7 @@ export class ProblemService {
    * 创建题目
    */
   async create(dto: CreateProblemDto): Promise<Problem> {
-    const { tagIds, prefix = 'p', logicId, ...rest } = dto;
+    const { tagIds, prefix = 'p', logicId, source = 'Leverage', ...rest } = dto;
 
     const actualLogicId = logicId ?? (await this.getNextLogicId(prefix));
 
@@ -180,6 +180,7 @@ export class ProblemService {
 
     const problem = this.problemRepo.create({
       ...rest,
+      source,
       prefix: prefix.toLowerCase(),
       logicId: actualLogicId,
       tags,

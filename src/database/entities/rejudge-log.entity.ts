@@ -28,10 +28,10 @@ export class RejudgeLog {
   judger: string | null;
 
   @Column('int', { nullable: true })
-  time: number;
+  time: number | null;
 
   @Column('int', { nullable: true })
-  memory: number;
+  memory: number | null;
 
   @Column('text', { nullable: true })
   judgeResult?: string;

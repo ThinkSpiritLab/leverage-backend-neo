@@ -3,14 +3,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { ReceiveService } from './receive.service';
 import { RedisService } from '../redis/redis.service';
 import { RankService } from '../rank/rank.service';
-import {
-  JudgeCaseResult,
-  JudgeResult,
-  JudgeResultKind,
-  JudgeState,
-  JudgeStateUpdate,
-  Status,
-} from '../heng/heng.types';
+import { Status } from '../judge-runtime/judge-status';
 import { Submission } from '../../database/entities/submission.entity';
 
 // Mock DataSource
@@ -24,6 +17,7 @@ function createMockManager(
       userId: 10,
       problemId: 20,
       status: Status.PENDING,
+      provider: 'internal',
       contestId: null,
       courseId: null,
     } as Submission),
@@ -86,89 +80,13 @@ describe('ReceiveService', () => {
     service = module.get<ReceiveService>(ReceiveService);
   });
 
-  // ─── calcFinalStatus ──────────────────────────────────────────────────────
+  // ─── finalize 事务流程 ───────────────────────────────────────────────
 
-  describe('calcFinalStatus', () => {
-    it('全部 AC 时返回 Status.AC (0)', () => {
-      const result: JudgeResult = {
-        cases: [
-          { kind: JudgeResultKind.Accepted, time: 100, memory: 1000 },
-          { kind: JudgeResultKind.Accepted, time: 150, memory: 1200 },
-        ],
-      };
-      expect(service.calcFinalStatus(result)).toBe(Status.AC);
-    });
-
-    it('有 WA 时返回 Status.WA (1)', () => {
-      const result: JudgeResult = {
-        cases: [
-          { kind: JudgeResultKind.Accepted, time: 100, memory: 1000 },
-          { kind: JudgeResultKind.WrongAnswer, time: 100, memory: 1000 },
-          { kind: JudgeResultKind.Accepted, time: 100, memory: 1000 },
-        ],
-      };
-      expect(service.calcFinalStatus(result)).toBe(Status.WA);
-    });
-
-    it('混合多种错误时取最差状态', () => {
-      const result: JudgeResult = {
-        cases: [
-          { kind: JudgeResultKind.Accepted, time: 100, memory: 1000 },
-          { kind: JudgeResultKind.TimeLimitExceeded, time: 2000, memory: 1000 },
-          { kind: JudgeResultKind.WrongAnswer, time: 100, memory: 1000 },
-          { kind: JudgeResultKind.RuntimeError, time: 0, memory: 0 },
-        ],
-      };
-      // RE=6, TLE=2, WA=1 => 最差是 RE
-      const finalStatus = service.calcFinalStatus(result);
-      expect(finalStatus).toBe(Status.RE);
-    });
-
-    it('有 CE 时返回 Status.CE (4)', () => {
-      const result: JudgeResult = {
-        cases: [{ kind: JudgeResultKind.CompileError, time: 0, memory: 0 }],
-      };
-      expect(service.calcFinalStatus(result)).toBe(Status.CE);
-    });
-
-    it('cases 为空时返回 Status.SE', () => {
-      const result: JudgeResult = { cases: [] };
-      expect(service.calcFinalStatus(result)).toBe(Status.SE);
-    });
-
-    it('SE 应是最差状态', () => {
-      const result: JudgeResult = {
-        cases: [
-          { kind: JudgeResultKind.SystemError, time: 0, memory: 0 },
-          { kind: JudgeResultKind.WrongAnswer, time: 0, memory: 0 },
-        ],
-      };
-      expect(service.calcFinalStatus(result)).toBe(Status.SE);
-    });
-  });
-
-  // ─── receiveUpdate ────────────────────────────────────────────────────────
-
-  describe('receiveUpdate', () => {
-    it.each([[JudgeState.Judging, Status.JUDGING], [JudgeState.Confirmed, Status.PENDING]])('persists %s in the authoritative row', async (state, status) => {
-      await service.receiveUpdate(1, { state });
-      expect(mockManager.update).toHaveBeenCalledWith(Submission, 1, { status });
-      expect(mockRedisService.set).not.toHaveBeenCalled();
-    });
-  });
-
-  // ─── receiveResult 事务流程 ───────────────────────────────────────────────
-
-  describe('receiveResult', () => {
-    const buildResult = (
-      kind: JudgeResultKind = JudgeResultKind.Accepted,
-    ): JudgeResult => ({
-      cases: [{ kind, time: 100, memory: 1000 }],
-      judger: 'judger-01',
-    });
+  describe('finalize', () => {
+    const buildResult = (status: Status = Status.AC) => ({ done: true, status, time: 100, memory: 1000, judgeResult: '[]' });
 
     it('应调用 manager.update(Submission, ...) 更新状态', async () => {
-      await service.receiveResult(1, buildResult());
+      await service.finalize(1, buildResult(), { provider: 'internal' });
 
       expect(mockManager.update).toHaveBeenCalledWith(
         Submission,
@@ -178,7 +96,7 @@ describe('ReceiveService', () => {
     });
 
     it('应 await manager.update(SubmissionMisc, ...)', async () => {
-      await service.receiveResult(1, buildResult());
+      await service.finalize(1, buildResult(), { provider: 'internal' });
       // update 被调用了至少 2 次（Submission + SubmissionMisc）
       expect(
         (mockManager.update as jest.Mock).mock.calls.length,
@@ -186,7 +104,7 @@ describe('ReceiveService', () => {
     });
 
     it('应 await manager.increment(Problem, ...) 增加 submits', async () => {
-      await service.receiveResult(1, buildResult());
+      await service.finalize(1, buildResult(), { provider: 'internal' });
       expect(mockManager.increment).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ id: 20 }),
@@ -196,7 +114,7 @@ describe('ReceiveService', () => {
     });
 
     it('AC 时应 await manager.increment(Problem, ...) 增加 accepts', async () => {
-      await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
+      await service.finalize(1, buildResult(Status.AC), { provider: 'internal' });
       expect(mockManager.increment).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ id: 20 }),
@@ -206,7 +124,7 @@ describe('ReceiveService', () => {
     });
 
     it('WA 时不应增加 Problem.accepts', async () => {
-      await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer));
+      await service.finalize(1, buildResult(Status.WA), { provider: 'internal' });
 
       const acceptsCalls = (
         mockManager.increment as jest.Mock
@@ -217,7 +135,7 @@ describe('ReceiveService', () => {
     });
 
     it('does not maintain a divergent Redis status cache', async () => {
-      await service.receiveResult(1, buildResult());
+      await service.finalize(1, buildResult(), { provider: 'internal' });
       expect(mockManager.update).toHaveBeenCalledWith(Submission, 1, expect.objectContaining({ status: Status.AC }));
       expect(mockRedisService.set).not.toHaveBeenCalled();
     });
@@ -229,7 +147,7 @@ describe('ReceiveService', () => {
         // findOne 返回 null → 没有之前的 AC
         (mockManager.findOne as jest.Mock).mockResolvedValue(null);
 
-        await service.receiveResult(1, buildResult());
+        await service.finalize(1, buildResult(), { provider: 'internal' });
 
         const acceptsUserCalls = (
           mockManager.increment as jest.Mock
@@ -255,7 +173,7 @@ describe('ReceiveService', () => {
           },
         );
 
-        await service.receiveResult(1, buildResult());
+        await service.finalize(1, buildResult(), { provider: 'internal' });
 
         const acceptsUserCalls = (
           mockManager.increment as jest.Mock
@@ -275,6 +193,7 @@ describe('ReceiveService', () => {
           userId: 10,
           problemId: 20,
           status: Status.PENDING,
+          provider: 'internal',
           contestId: 100,
           courseId: null,
         } as Submission);
@@ -296,7 +215,7 @@ describe('ReceiveService', () => {
       });
 
       it('竞赛 AC 时应调用 rankService.updateContestRank', async () => {
-        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
+        await service.finalize(1, buildResult(Status.AC), { provider: 'internal' });
         expect(mockRankService.updateContestRank).toHaveBeenCalledWith(
           100,
           10,
@@ -315,6 +234,7 @@ describe('ReceiveService', () => {
           userId: 10,
           problemId: 20,
           status: Status.PENDING,
+          provider: 'internal',
           contestId: 100,
           courseId: null,
         });
@@ -335,9 +255,10 @@ describe('ReceiveService', () => {
       });
 
       it('竞赛 WA 时应增加 ContestUser.submits，不增加 accepts', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
 
         const {
@@ -361,9 +282,10 @@ describe('ReceiveService', () => {
       });
 
       it('竞赛 WA 时仍应调用 rankService.updateContestRank', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
         expect(mockRankService.updateContestRank).toHaveBeenCalledWith(
           100,
@@ -374,9 +296,10 @@ describe('ReceiveService', () => {
       });
 
       it('竞赛 CE 时应跳过全部 ContestUser 更新，并重新发布现有排行', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.CompileError),
+          buildResult(Status.CE),
+          { provider: 'internal' },
         );
 
         const {
@@ -390,9 +313,10 @@ describe('ReceiveService', () => {
       });
 
       it('竞赛 SE 时应跳过全部 ContestUser 更新，并重新发布现有排行', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.SystemError),
+          buildResult(Status.SE),
+          { provider: 'internal' },
         );
 
         const {
@@ -407,9 +331,10 @@ describe('ReceiveService', () => {
 
       it('ContestUser 不存在时不调用 rankService.updateContestRank', async () => {
         (mockManager.findOne as jest.Mock).mockResolvedValue(null);
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
         expect(mockRankService.updateContestRank).not.toHaveBeenCalled();
       });
@@ -424,6 +349,7 @@ describe('ReceiveService', () => {
           userId: 10,
           problemId: 20,
           status: Status.PENDING,
+          provider: 'internal',
           contestId: null,
           courseId: 50,
         });
@@ -444,9 +370,10 @@ describe('ReceiveService', () => {
       });
 
       it('课程 WA 时应增加 CourseUser.submits 和 CourseProblem.submits', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
 
         const {
@@ -473,9 +400,10 @@ describe('ReceiveService', () => {
       });
 
       it('课程 WA 时不应增加 CourseUser.accepts', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
 
         const {
@@ -506,7 +434,7 @@ describe('ReceiveService', () => {
           // No prev AC submission
           return Promise.resolve(null);
         });
-        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
+        await service.finalize(1, buildResult(Status.AC), { provider: 'internal' });
 
         const {
           CourseUser,
@@ -552,7 +480,7 @@ describe('ReceiveService', () => {
             return Promise.resolve(null);
           },
         );
-        await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
+        await service.finalize(1, buildResult(Status.AC), { provider: 'internal' });
 
         const {
           CourseUser,
@@ -567,9 +495,10 @@ describe('ReceiveService', () => {
       });
 
       it('课程 CE 时应跳过全部 CourseUser 更新', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.CompileError),
+          buildResult(Status.CE),
+          { provider: 'internal' },
         );
 
         const {
@@ -583,9 +512,10 @@ describe('ReceiveService', () => {
       });
 
       it('课程 WA 时应调用 rankService.updateCourseRank', async () => {
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
         expect(mockRankService.updateCourseRank).toHaveBeenCalledWith(
           50,
@@ -597,17 +527,18 @@ describe('ReceiveService', () => {
 
       it('CourseUser 不存在时不调用 rankService.updateCourseRank', async () => {
         (mockManager.findOne as jest.Mock).mockResolvedValue(null);
-        await service.receiveResult(
+        await service.finalize(
           1,
-          buildResult(JudgeResultKind.WrongAnswer),
+          buildResult(Status.WA),
+          { provider: 'internal' },
         );
         expect(mockRankService.updateCourseRank).not.toHaveBeenCalled();
       });
     });
 
     it('does not write the unused UPS cache after WA or AC', async () => {
-      await service.receiveResult(1, buildResult(JudgeResultKind.WrongAnswer));
-      await service.receiveResult(1, buildResult(JudgeResultKind.Accepted));
+      await service.finalize(1, buildResult(Status.WA), { provider: 'internal' });
+      await service.finalize(1, buildResult(Status.AC), { provider: 'internal' });
       expect(mockRedisService.hset).not.toHaveBeenCalled();
     });
 
@@ -627,7 +558,7 @@ describe('ReceiveService', () => {
           }
           return Promise.resolve(null);
         });
-        await service.receiveResult(1, buildResult());
+        await service.finalize(1, buildResult(), { provider: 'internal' });
 
         const {
           Suspicion: Sus,
@@ -653,14 +584,14 @@ describe('ReceiveService', () => {
         );
         // Persistence errors must not turn a rollback into a terminal result.
         await expect(
-          service.receiveResult(1, buildResult()),
+          service.finalize(1, buildResult(), { provider: 'internal' }),
         ).rejects.toThrow('DB write failed');
       });
     });
 
-    // ─── receiveResult 事务失败回滚 ────────────────────────────────────────
+    // ─── finalize 事务失败回滚 ────────────────────────────────────────
 
-    describe('receiveResult - 事务失败', () => {
+    describe('finalize - 事务失败', () => {
       it('事务失败保留原状态并抛出错误供重试', async () => {
         const transactionError = new Error('transaction failed');
         (mockDataSource.transaction as jest.Mock).mockRejectedValue(
@@ -675,7 +606,7 @@ describe('ReceiveService', () => {
           execute: mockExecute,
         });
 
-        await expect(service.receiveResult(1, buildResult())).rejects.toThrow(
+        await expect(service.finalize(1, buildResult(), { provider: 'internal' })).rejects.toThrow(
           'transaction failed',
         );
         expect(mockExecute).not.toHaveBeenCalled();

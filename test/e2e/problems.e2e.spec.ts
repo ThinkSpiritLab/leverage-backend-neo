@@ -4,10 +4,8 @@
  * E2E tests for Problems endpoints using real MariaDB + Redis (started by globalSetup).
  *
  * NOTE: GET /problems is a public endpoint (no auth required).
- * POST /problems requires admin role. The default InitModule sa user has
- * authority='sa' in DB, but auth.service.ts mapAuthority() only maps
- * 'superadmin'→'sa', not 'sa'→'sa', resulting in JWT role='user'.
- * Therefore POST /problems tests are skipped due to this known discrepancy.
+ * POST /problems requires an admin role. The bootstrap SA maps to `sa`,
+ * which is permitted by the role guard.
  */
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
@@ -20,8 +18,7 @@ describe('Problems E2E', () => {
   beforeAll(async () => {
     app = await createTestApp();
 
-    // Login to get access token for authenticated tests
-    // NOTE: role in JWT will be 'user' due to mapAuthority('sa')→'user' bug
+    // Login to get the bootstrap SA token for authenticated tests.
     const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ username: 'admin', password: 'Admin@123456' });
@@ -64,10 +61,7 @@ describe('Problems E2E', () => {
   });
 
   describe('POST /problems', () => {
-    it.skip('TODO: admin can create — skipped: InitModule creates authority=sa but mapAuthority only handles superadmin→sa, causing JWT role=user which fails @Roles(admin)', async () => {
-      // Fix needed in either:
-      //   a) init.service.ts: change authority to 'superadmin'
-      //   b) auth.service.ts mapAuthority: add case 'sa': return 'sa'
+    it('admin can create', async () => {
       const res = await request(app.getHttpServer())
         .post('/problems')
         .set('Authorization', `Bearer ${accessToken}`)

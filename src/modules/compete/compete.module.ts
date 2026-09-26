@@ -17,7 +17,7 @@ import { CompeteService } from './compete.service';
 import { HumanTurnService } from './human-turn.service';
 import { CompeteCleanupTask } from './compete-cleanup.task';
 import { AutoMatchSchedulerService } from './auto-match-scheduler.service';
-// CompeteTxWorker merged into JudgeTxWorker — do not register here
+
 
 @Module({
   imports: [

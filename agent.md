@@ -22,20 +22,21 @@ auto-discover `AGENTS.md` need to be pointed to this file explicitly.
 - `src/modules/auth/` and `src/common/guards/`: JWT, contest JWT, user API keys,
   and role checks. Frontend route guards are not backend authorization.
 - `src/modules/submission/`: submission creation, querying and rejudging.
-- `src/modules/heng/`: Heng HTTP adapter, callback endpoints, judge TX/RX workers.
-- `src/modules/receive/`: shared transactional finalization for Heng/Botzone,
-  attempt checks, rejudge accounting and post-commit ranking publication.
-- `src/modules/botzone/`: alternate judge adapter, authenticated callbacks and polling.
+- `src/modules/judge-runtime/`: in-repository OJ/match worker, Docker sandbox,
+  runtime languages and status contract. User programs run only in restricted
+  Docker containers, never in the NestJS process.
+- `src/modules/receive/`: transactional finalization, current-attempt checks,
+  rejudge accounting and post-commit ranking publication.
 - `src/modules/compete/`: game/bot CRUD, rooms, matches, ELO, playground, human
-  turns and automatic matching. `HumanTurnService` keeps pending turns and SSE
-  clients in process memory, so do not assume arbitrary multi-instance routing.
-- `src/modules/redis/`, `rank/`, `queue/`: Redis access, ranking and Bull queues.
-  The active queue integration is **Bull** (`@nestjs/bull` / `bull`), despite
-  BullMQ references in comments/docs and the additional `bullmq` dependency.
+  turns and automatic matching. Pending turns and cross-instance SSE events use
+  Redis; only live SSE writers/waits stay in the local process.
+- `src/modules/redis/`, `rank/`, `queue/`: Redis access, ranking and Bull queues
+  (`@nestjs/bull` / `bull`). Role-specific job consumers are registered only in
+  `all` or `worker`; API roles coordinate maintenance via bounded Redis leases.
 - `src/mcp/leverage-mcp.ts`: separate MCP client-facing entry point.
 
-Trace the registered implementation before editing: the active `JudgeTxWorker`
-also handles `compete` jobs; `CompeteTxWorker` is not registered in `CompeteModule`.
+Trace registered providers and the job name before changing queue behavior;
+legacy `judge`/external callback jobs must be drained before upgrading.
 
 ## Development and checks
 
@@ -49,7 +50,9 @@ Use pnpm and retain `pnpm-lock.yaml`. Install explicitly with
   require Docker. Migration data can use `TEST_TMPDIR` on an external disk.
 - `pnpm exec eslint "{src,apps,libs,test}/**/*.ts"`: non-fixing lint check.
   **`pnpm lint` includes `--fix` and modifies files.**
-- `pnpm test:e2e`: MariaDB/Redis Testcontainers suite, requires Docker.
+- `pnpm judge:image`: builds the restricted judge image from an empty context.
+- `pnpm test:e2e`: builds that image, then runs MariaDB/Redis Testcontainers
+  (including the real Docker OJ/match path); requires Docker.
   Do not launch Docker or external services without the operator's approval.
 - `pnpm test:integration`: SQLite integration and the legacy SQLite app suite;
   no Docker. Use Node 22 and a matching `better-sqlite3` native binding. The
@@ -63,8 +66,10 @@ The backend requires MariaDB/MySQL-compatible storage and Redis. Review
 into production. Do not start the app against an unknown database: development
 uses `synchronize`, while production automatically runs migrations at startup.
 Seed/clear scripts mutate data and are not routine verification steps.
-See `docs/HARDENING.md` for deployment ordering, additive rollback boundaries,
-callback configuration, legacy pending submissions and validation limitations.
+See `docs/HARDENING.md` for migration order and rollback boundaries. The
+provided production Compose starts an API but no Docker-capable worker; do not
+accept judge jobs there until worker access to Docker, DB, Redis and testcase
+storage is provisioned and verified.
 
 ## Change boundaries
 
@@ -73,18 +78,17 @@ callback configuration, legacy pending submissions and validation limitations.
    adding more unrelated responsibilities to `CompeteService`.
 2. Check authorization at the server boundary and again where ownership matters.
    Authentication alone does not authorize a match, gamer, submission or course.
-   Callback routes need explicit server-to-server authentication; decorators and
-   comments are not proof that it is enforced.
+   Only documented trusted backend calls may create/delete evaluator jobs.
 3. Treat judge completion as at-least-once delivery. Bind a result to its current
-   attempt/job, make finalization atomic, and test duplicate/concurrent callbacks
+   attempt/job, make finalization atomic, and test duplicate/concurrent deliveries
    and rejudging. Redis writes are not rolled back by a SQL transaction.
 4. Entity changes need forward migrations. Check both a fresh schema and the
    upgrade path on MariaDB; development `synchronize` and SQLite metadata patches
    cannot prove production migration correctness. Do not rewrite applied migrations.
 5. Keep response shapes aligned with the frontend API wrappers and types. Do not
    silently change role aliases, status numbers, pagination or contest-token scope.
-6. Keep untrusted programs inside the external judge boundary. Do not run submitted
-   code in this application's process or weaken renderer/sandbox isolation.
+6. Keep untrusted programs inside restricted Docker containers. Never mount the
+   daemon socket, host paths or backend secrets into student/author code.
 7. Use targeted regression tests for changed behavior. Explicitly distinguish
    source inspection, mocked tests and real database/judge/browser verification.
 8. Do not commit secrets, `.env`, uploads, judge data, dependency trees or generated
@@ -94,6 +98,7 @@ callback configuration, legacy pending submissions and validation limitations.
 ## Documentation
 
 Start with `README.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT.md`,
-`docs/HENG.md`, `docs/API.md` and `docs/MCP_SETUP.md`, but verify their claims
-against the active source. Keep this guide procedural; put dated audit findings
+`docs/BACKEND_ROLES.md`, `docs/JUDGE_SANDBOX.md`, `docs/API.md` and
+`docs/MCP_SETUP.md`, but verify their claims against the active source. Keep this
+guide procedural; put dated audit findings
 and temporary task progress in a separate report, not here.

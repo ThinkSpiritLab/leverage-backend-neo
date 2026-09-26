@@ -10,20 +10,31 @@ import { MariaDbContainer } from '@testcontainers/mariadb';
 import { GenericContainer } from 'testcontainers';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomBytes } from 'node:crypto';
 
 export const CONTAINER_INFO_FILE = path.join(__dirname, '.container-info.json');
 
 export default async function globalSetup() {
   console.log('\n🐳 Starting testcontainers (MariaDB 10.11 + Redis 7)...');
+  const redisPassword = randomBytes(24).toString('hex');
 
-  const [mariadb, redis] = await Promise.all([
-    new MariaDbContainer('mariadb:10.11')
-      .withDatabase('leverage_test')
-      .withUsername('test')
-      .withUserPassword('testpass')
-      .start(),
-    new GenericContainer('redis:7-alpine').withExposedPorts(6379).start(),
-  ]);
+  // Docker Desktop can delay dynamic host-port binding when both containers
+  // start together. Start sequentially and release the first if the second fails.
+  const mariadb = await new MariaDbContainer('mariadb:10.11')
+    .withDatabase('leverage_test')
+    .withUsername('test')
+    .withUserPassword('testpass')
+    .start();
+  let redis;
+  try {
+    redis = await new GenericContainer('redis:7-alpine')
+      .withCommand(['redis-server', '--requirepass', redisPassword])
+      .withExposedPorts(6379)
+      .start();
+  } catch (error) {
+    await mariadb.stop();
+    throw error;
+  }
 
   console.log(
     `✅ MariaDB: ${mariadb.getHost()}:${mariadb.getMappedPort(3306)}`,
@@ -50,16 +61,14 @@ export default async function globalSetup() {
   process.env.DB_PASSWORD = 'testpass';
   process.env.REDIS_HOST = info.redisHost;
   process.env.REDIS_PORT = String(info.redisPort);
+  process.env.REDIS_PASSWORD = redisPassword;
   process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.JWT_REFRESH_SECRET = 'test-refresh-secret';
   process.env.JWT_ACCESS_EXPIRES_IN = '15m';
   process.env.JWT_REFRESH_EXPIRES_IN = '7d';
   process.env.NODE_ENV = 'test';
   process.env.SKIP_INIT = 'false';
-  // Heng: 使用 mock URL，由 nock 拦截，不发送到真实 heng
-  process.env.HENG_BASE_URL = 'http://mock-heng.test';
-  process.env.HENG_AK = 'test-ak';
-  process.env.HENG_SK = 'test-sk';
+  // Submissions and matches run in the internal Docker worker, with no external judge.
   // 限速设置：设为 1，测试速率限制（count > max 才触发，所以第2次提交才429）
   process.env.MAX_SUBMISSION_PER_MINUTE = '1';
 }

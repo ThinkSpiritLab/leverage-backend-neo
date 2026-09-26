@@ -6,7 +6,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
-  Logger,
+
   Param,
   ParseIntPipe,
   Patch,
@@ -27,7 +27,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAccessStrategy } from '../auth/strategies/jwt-access.strategy';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -47,7 +46,6 @@ import { LaunchMatchDto } from './dto/launch-match.dto';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { SubmitGamerDto } from './dto/submit-gamer.dto';
 import { ModifyPlayerDto } from './dto/modify-player.dto';
-import { MatchCallbackDto } from './dto/match-callback.dto';
 import { PlaygroundDto } from './dto/playground.dto';
 import { PlaygroundJudgeDto } from './dto/playground-judge.dto';
 import { GlobalLeaderboardDto } from './dto/global-leaderboard.dto';
@@ -55,22 +53,14 @@ import { GlobalLeaderboardDto } from './dto/global-leaderboard.dto';
 @ApiTags('compete')
 @Controller('compete')
 export class CompeteController {
-  private readonly logger = new Logger(CompeteController.name);
-  private readonly callbackToken: string;
 
   constructor(
     private readonly competeService: CompeteService,
-    private readonly configService: ConfigService,
     private readonly humanTurnService: HumanTurnService,
     private readonly jwtService: JwtService,
     private readonly autoMatchSchedulerService: AutoMatchSchedulerService,
     private readonly accessStrategy: JwtAccessStrategy,
-  ) {
-    this.callbackToken = this.configService.get<string>(
-      'botzone.callbackToken',
-      '',
-    );
-  }
+  ) {}
 
   // ─── Games ──────────────────────────────────────────────────────────────────
 
@@ -344,9 +334,10 @@ export class CompeteController {
    * 对局详情（公开）
    */
   @Get('matches/:id')
-  @ApiOperation({ summary: '对局详情' })
-  findOneMatch(@Param('id', ParseIntPipe) id: number) {
-    return this.competeService.findOneMatch(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: '对局详情（私有测试与编译诊断按所有者过滤）' })
+  findOneMatch(@Param('id', ParseIntPipe) id: number, @CurrentUser() user?: JwtPayload) {
+    return this.competeService.findOneMatch(id, user?.sub);
   }
 
   /**
@@ -365,68 +356,6 @@ export class CompeteController {
     return this.competeService.inspectMatch(id, user.sub);
   }
 
-  // ─── Match Callback ──────────────────────────────────────────────────────────
-
-  /**
-   * POST /compete/match-callback/:matchId
-   * Botzone-neo 对局评测结果回调（仅限 botzone-neo 内部调用）
-   *
-   * Payload from botzone-neo (MatchResult):
-   *   { scores: Record<string,number>, log: unknown[], compiles: CompileSummary[] }
-   */
-  @Post('match-callback/:matchId')
-  @HttpCode(HttpStatus.OK)
-  @SkipThrottle()
-  @ApiOperation({ summary: 'botzone-neo 对局评测结果回调' })
-  async receiveMatchCallback(
-    @Param('matchId', ParseIntPipe) matchId: number,
-    @Headers('authorization') authHeader: string | undefined,
-    @Query('token') tokenParam: string | undefined,
-    @Body() body: Record<string, unknown>,
-  ): Promise<{ ok: boolean }> {
-    this.assertCallbackToken(authHeader, tokenParam);
-
-    const verdict = body.verdict as string | undefined;
-    this.logger.log(`match-callback: matchId=${matchId} verdict=${verdict} scores=${JSON.stringify(body.scores)}`);
-
-    // Forfeit = game void, no ELO update
-    if (verdict === 'forfeit') {
-      return this.competeService.handleMatchForfeit(matchId, body.forfeitedBot as string | undefined);
-    }
-
-    // botzone-neo MatchResult: { scores, log, compiles }
-    const scores = body.scores as Record<string, number> | undefined;
-    const log = body.log as unknown[] | undefined;
-
-    return this.competeService.handleMatchCallbackByMatchId(matchId, scores, log);
-  }
-
-  /**
-   * POST /compete/match-callback (legacy, kept for compatibility)
-   */
-  @Post('match-callback')
-  @HttpCode(HttpStatus.OK)
-  @SkipThrottle()
-  @ApiOperation({ summary: 'botzone-neo 对局评测结果回调（legacy）' })
-  async receiveMatchCallbackLegacy(
-    @Headers('authorization') authHeader: string | undefined,
-    @Body() body: MatchCallbackDto,
-  ): Promise<{ ok: boolean }> {
-    this.assertCallbackToken(authHeader);
-    return this.competeService.handleMatchCallback(body.jobId, body.state, body.result);
-  }
-
-  /** Validate BOTZONE_CALLBACK_TOKEN bearer auth. */
-  private assertCallbackToken(authHeader: string | undefined, queryToken?: string): void {
-    if (!this.callbackToken) {
-      throw new UnauthorizedException('BOTZONE_CALLBACK_TOKEN is not configured');
-    }
-    const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-    const token = headerToken ?? queryToken;
-    if (token !== this.callbackToken) {
-      throw new UnauthorizedException('Invalid callback token');
-    }
-  }
 
   // ─── Rooms ───────────────────────────────────────────────────────────────────
 
@@ -621,29 +550,6 @@ export class CompeteController {
 
   // ─── Human / External Bot Endpoints ──────────────────────────────────────
 
-  /**
-   * POST /compete/human-turn-webhook/:matchId/:gamerId
-   * Called internally by botzone-neo (via WebhookRunner) when it's this gamer's turn.
-   * Blocks until the human/external bot responds or times out (5 min).
-   * Body: BotInput JSON
-   */
-  @Post('human-turn-webhook/:matchId/:gamerId')
-  @SkipThrottle()
-  @ApiOperation({ summary: '内部：botzone-neo 等待人类/外部bot输入（长轮询挂起）' })
-  async humanTurnWebhook(
-    @Param('matchId', ParseIntPipe) matchId: number,
-    @Param('gamerId', ParseIntPipe) gamerId: number,
-    @Body() gameState: unknown,
-    @Headers('authorization') authHeader?: string,
-    @Query('token') tokenParam?: string,
-  ) {
-    this.assertCallbackToken(authHeader, tokenParam);
-    const ownerUserId = await this.competeService.assertMatchGamerOwner(matchId, gamerId);
-    this.logger.log(`human-turn-webhook: matchId=${matchId} gamerId=${gamerId}`);
-    const response = await this.humanTurnService.waitForResponse(matchId, gamerId, gameState, 300_000, ownerUserId);
-    // Return as plain text so botzone-neo's WebhookRunner gets it directly
-    return response;
-  }
 
   /**
    * GET /compete/bot-turn
@@ -718,7 +624,7 @@ export class CompeteController {
       if (!user) throw new UnauthorizedException('需要认证');
       ownerUserId = user.sub;
     }
-    const ok = this.humanTurnService.submitResponse(body.turnToken, body.response, ownerUserId, botGamerId);
+    const ok = await this.humanTurnService.submitResponse(body.turnToken, body.response, ownerUserId, botGamerId);
     if (!ok) return { success: false, message: '找不到对应的 turn，可能已超时' };
     return { success: true };
   }
@@ -756,6 +662,10 @@ export class CompeteController {
       res.status(403).json({ message: '非对局参与者' });
       return;
     }
+    // Redis's terminal replay marker has a bounded TTL; SQL remains authoritative
+    // for clients reconnecting long after the match finished.
+    const match = await this.competeService.findOneMatch(matchId);
+    const terminal = match.status === 2 || match.status === 3;
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -766,22 +676,44 @@ export class CompeteController {
       res.write(chunk);
     };
 
+    // Register close handling before any asynchronous replay; early disconnects
+    // must never leave a heartbeat or SSE writer behind.
+    let closed = false;
+    let ping: NodeJS.Timeout | undefined;
+    let connectionId: string | undefined;
+    res.on('close', () => {
+      closed = true;
+      if (ping) clearInterval(ping);
+      if (connectionId) this.humanTurnService.unregisterSSEClient(connectionId);
+    });
+    if (res.destroyed) return;
+
     // Test: send an immediate 'connected' event so we know the stream works
     writer(JSON.stringify({ type: 'connected', matchId }));
+    if (terminal) {
+      let finalResult: Record<string, number> = {};
+      try { finalResult = JSON.parse(match.result ?? '{}').finalResult ?? {}; } catch { /* old results may not be JSON */ }
+      writer(JSON.stringify({ type: 'game-over', finalResult }));
+      res.end();
+      return;
+    }
 
-    const connectionId = this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
+    connectionId = this.humanTurnService.registerSSEClient(matchId, user.sub, writer);
+    if (closed) { this.humanTurnService.unregisterSSEClient(connectionId); return; }
 
     // Replay only this user's pending turn.
-    this.humanTurnService.replayPendingTurn(matchId, user.sub, writer);
+    try {
+      await this.humanTurnService.replayPendingTurn(matchId, user.sub, writer);
+    } catch (error) {
+      this.humanTurnService.unregisterSSEClient(connectionId);
+      res.destroy(error instanceof Error ? error : new Error('SSE replay unavailable'));
+      return;
+    }
+    if (closed) return;
 
     // Send keep-alive ping every 20s
-    const ping = setInterval(() => {
+    ping = setInterval(() => {
       try { res.write(': ping\n\n'); } catch { clearInterval(ping); }
     }, 20_000);
-
-    res.on('close', () => {
-      clearInterval(ping);
-      this.humanTurnService.unregisterSSEClient(connectionId);
-    });
   }
 }

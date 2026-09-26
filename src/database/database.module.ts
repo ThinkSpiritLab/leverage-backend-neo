@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import mysql2 from 'mysql2';
+import { join } from 'node:path';
+import { BackendRole, getBackendRole } from '../runtime/backend-role';
 
 import { College } from './entities/college.entity';
 import { Contest } from './entities/contest.entity';
@@ -61,48 +63,55 @@ const entities = [
   UserApiKey,
 ];
 
+export function createDatabaseOptions(
+  config: ConfigService,
+  role: BackendRole = getBackendRole(),
+): TypeOrmModuleOptions {
+  const production = process.env.NODE_ENV === 'production';
+  return {
+    type: 'mysql',
+    driver: mysql2,
+    host: config.get<string>('database.host'),
+    port: config.get<number>('database.port'),
+    database: config.get<string>('database.database'),
+    username: config.get<string>('database.username'),
+    password: config.get<string>('database.password'),
+    entities,
+    synchronize: role !== 'worker' && !production,
+    // Only the single-instance HTTP startup path may perform legacy automatic migrations.
+    // Resolve against the emitted module location (dist/src/database in this repository).
+    migrations:
+      role !== 'worker' && production
+        ? [join(__dirname, '../migrations/*.js')]
+        : [],
+    migrationsRun: role !== 'worker' && production,
+    migrationsTableName: 'migrations',
+    // SQL parameters may contain submitted code, webhook secrets and test data.
+    logging: production ? ['error'] : ['error', 'warn'],
+    charset: 'utf8mb4',
+    // 全局查询超时（慢查询记录警告，防止慢查询卡住连接池）
+    maxQueryExecutionTime: parseInt(process.env.DB_QUERY_TIMEOUT || '10000'),
+    // 连接池配置
+    extra: {
+      // 最大连接数（生产 20-50，开发 5-10）
+      connectionLimit: parseInt(process.env.DB_POOL_SIZE || '20'),
+      // Pool acquisition has no mysql2 acquireTimeout option; connectTimeout
+      // only bounds opening a TCP connection, not waiting for a free pool slot.
+      connectTimeout: 10000,
+      // mysql2's pool option is idleTimeout (milliseconds).
+      idleTimeout: 600000,
+      // 心跳查询保持连接
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
+    },
+  };
+}
+
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'mysql',
-        driver: mysql2,
-        host: config.get<string>('database.host'),
-        port: config.get<number>('database.port'),
-        database: config.get<string>('database.database'),
-        username: config.get<string>('database.username'),
-        password: config.get<string>('database.password'),
-        entities,
-        synchronize: process.env.NODE_ENV !== 'production',
-        migrations:
-          process.env.NODE_ENV === 'production' ? ['dist/migrations/*.js'] : [],
-        migrationsRun: process.env.NODE_ENV === 'production',
-        migrationsTableName: 'migrations',
-        logging:
-          process.env.NODE_ENV !== 'production'
-            ? ['error', 'warn', 'query']
-            : ['error'],
-        charset: 'utf8mb4',
-        // 全局查询超时（慢查询记录警告，防止慢查询卡住连接池）
-        maxQueryExecutionTime: parseInt(
-          process.env.DB_QUERY_TIMEOUT || '10000',
-        ),
-        // 连接池配置
-        extra: {
-          // 最大连接数（生产 20-50，开发 5-10）
-          connectionLimit: parseInt(process.env.DB_POOL_SIZE || '20'),
-          // 获取连接超时（ms）
-          acquireTimeout: 30000,
-          // 连接超时（ms）
-          connectTimeout: 10000,
-          // 空闲连接超时（10分钟）
-          idleTimeoutMillis: 600000,
-          // 心跳查询保持连接
-          enableKeepAlive: true,
-          keepAliveInitialDelay: 10000,
-        },
-      }),
+      useFactory: createDatabaseOptions,
     }),
   ],
   exports: [TypeOrmModule],

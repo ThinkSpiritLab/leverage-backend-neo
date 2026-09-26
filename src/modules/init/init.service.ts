@@ -59,6 +59,14 @@ export class InitService implements OnModuleInit {
   }
 
   private async createInitialAdmin(): Promise<void> {
+    const configured = process.env.INIT_SA_PASSWORD;
+    if (
+      process.env.NODE_ENV !== 'test' &&
+      (!configured || configured === 'CHANGE_ME' ||
+        (process.env.NODE_ENV === 'production' && configured.length < 16))
+    ) {
+      throw new Error('Set a unique INIT_SA_PASSWORD before first startup');
+    }
     const username = this.configService.get<string>('init.saUsername', 'admin');
     const password = this.configService.get<string>(
       'init.saPassword',

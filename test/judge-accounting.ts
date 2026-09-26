@@ -19,7 +19,7 @@ import { ContestUserProblem } from '../src/database/entities/contest-user-proble
 import { Course } from '../src/database/entities/course.entity';
 import { CourseUser } from '../src/database/entities/course-user.entity';
 import { CourseProblem } from '../src/database/entities/course-problem.entity';
-import { Status } from '../src/modules/heng/heng.types';
+import { Status } from '../src/modules/judge-runtime/judge-status';
 
 async function main() {
   const container = await new MariaDbContainer('mariadb:10.11')
@@ -80,7 +80,7 @@ async function main() {
       .getRepository(CourseProblem)
       .save({ courseId: course.id, problemId: problem.id });
     const subs = db.getRepository(Submission);
-    const make = async (provider: 'heng' | 'botzone') => {
+    const make = async (provider: 'internal') => {
       const s = await subs.save({
         userId: user.id,
         problemId: problem.id,
@@ -88,7 +88,7 @@ async function main() {
         provider,
         status: Status.PENDING,
         judgeAttempt: 'a'.repeat(32),
-        externalJobId: provider === 'botzone' ? 'job-a' : null,
+        externalJobId: null,
         contestId: contest.id,
         courseId: course.id,
       });
@@ -106,9 +106,8 @@ async function main() {
         s.id,
         { done: true, status, time: 1, memory: 1 },
         {
-          provider: s.provider as 'heng' | 'botzone',
+          provider: 'internal',
           attemptId,
-          jobId: s.provider === 'botzone' ? 'job-a' : undefined,
         },
       );
     const readCounts = async () => {
@@ -133,13 +132,13 @@ async function main() {
         courseUser.accepts,
       ];
     };
-    const first = await make('botzone');
+    const first = await make('internal');
     await Promise.all(Array.from({ length: 8 }, () => finish(first)));
     assert.deepEqual(await readCounts(), [1, 1, 1, 1, 1, 1, 1, 1]);
-    console.log('PASS concurrent duplicate callbacks account exactly once');
+    console.log('PASS concurrent duplicate internal results account exactly once');
 
-    const second = await make('heng');
-    const third = await make('heng');
+    const second = await make('internal');
+    const third = await make('internal');
     await Promise.all([finish(second), finish(third)]);
     assert.deepEqual(await readCounts(), [3, 1, 3, 3, 3, 1, 3, 1]);
     assert.equal(await db.getRepository(ContestUserProblem).count(), 1);
@@ -175,7 +174,7 @@ async function main() {
       'PASS WA→AC rejudge restores solved counts without increasing submission counts',
     );
 
-    const fourth = await make('heng');
+    const fourth = await make('internal');
     const failing = new ReceiveService(
       {
         transaction: (fn: any) =>
@@ -190,7 +189,7 @@ async function main() {
       failing.finalize(
         fourth.id,
         { done: true, status: Status.AC },
-        { provider: 'heng', attemptId: 'a'.repeat(32) },
+        { provider: 'internal', attemptId: 'a'.repeat(32) },
       ),
       /forced rollback/,
     );

@@ -2,14 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { DataSource, EntityManager, Not } from 'typeorm';
 import { RankService } from '../rank/rank.service';
-import {
-  JudgeResult,
-  JudgeResultKindToStatus,
-  JudgeStateToStatus,
-  JudgeStateUpdate,
-  Status,
-} from '../heng/heng.types';
-import { PollResult } from '../judge-provider/judge-provider.interface';
+import { JudgeOutcome, Status } from '../judge-runtime/judge-status';
 import { Submission } from '../../database/entities/submission.entity';
 import { SubmissionMisc } from '../../database/entities/submission-misc.entity';
 import { Suspicion } from '../../database/entities/suspicion.entity';
@@ -22,12 +15,11 @@ import { CourseProblem } from '../../database/entities/course-problem.entity';
 
 const pendingStatuses = [Status.PENDING, Status.JUDGING, Status.COMPILING];
 export interface JudgeIdentity {
-  provider: 'heng' | 'botzone';
+  provider: 'internal';
   attemptId?: string;
-  jobId?: string;
 }
 
-/** Both providers normalize results here. SQL owns status and accounting. */
+/** Internal judge results are finalized here. SQL owns status and accounting. */
 @Injectable()
 export class ReceiveService {
   constructor(
@@ -36,67 +28,9 @@ export class ReceiveService {
     private readonly rankService: RankService,
   ) {}
 
-  async receiveUpdate(
-    submissionId: number,
-    update: JudgeStateUpdate,
-    attemptId?: string,
-  ): Promise<void> {
-    const status = JudgeStateToStatus[update.state];
-    if (status === undefined)
-      throw new BadRequestException('Invalid judge state');
-    // The same locked row governs progress, completion and rejudging. No second
-    // status cache can outlive a rollback or overwrite a newer attempt.
-    await this.dataSource.transaction(async (manager) => {
-      const submission = await manager.findOneOrFail(Submission, {
-        where: { id: submissionId },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (
-        !this.matches(submission, { provider: 'heng', attemptId }) ||
-        !pendingStatuses.includes(submission.status)
-      )
-        return;
-      await manager.update(Submission, submissionId, { status });
-    });
-  }
-
-  async receiveResult(
-    submissionId: number,
-    result: JudgeResult,
-    attemptId?: string,
-  ): Promise<void> {
-    if (!Array.isArray(result.cases))
-      throw new BadRequestException('Invalid judge cases');
-    await this.finalize(
-      submissionId,
-      {
-        done: true,
-        status: this.calcFinalStatus(result),
-        time: result.cases.reduce((sum, c) => sum + (c.time ?? 0), 0),
-        memory: result.cases.reduce(
-          (max, c) => Math.max(max, c.memory ?? 0),
-          0,
-        ),
-        judgeResult: JSON.stringify(result.cases),
-        compileErrorMsg: result.extra?.user?.compileMessage ?? '',
-      },
-      { provider: 'heng', attemptId },
-      result.judger ?? null,
-    );
-  }
-
-  calcFinalStatus(result: JudgeResult): Status {
-    if (!result.cases?.length) return Status.SE;
-    return result.cases.reduce(
-      (worst, c) =>
-        Math.max(worst, JudgeResultKindToStatus[c.kind] ?? Status.SE),
-      Status.AC,
-    );
-  }
-
   async finalize(
     submissionId: number,
-    result: PollResult,
+    result: JudgeOutcome,
     identity: JudgeIdentity,
     judger: string | null = identity.provider,
   ): Promise<void> {
@@ -125,8 +59,8 @@ export class ReceiveService {
       await manager.update(Submission, submissionId, {
         status,
         judgedStatus: status,
-        time: result.time ?? 0,
-        memory: result.memory ?? 0,
+        time: result.time ?? null,
+        memory: result.memory ?? null,
         judger,
         ...(result.providerMeta
           ? { providerMeta: JSON.stringify(result.providerMeta) }
@@ -157,27 +91,13 @@ export class ReceiveService {
   }
 
   private matches(submission: Submission, identity: JudgeIdentity): boolean {
-    if ((submission.provider ?? 'heng') !== identity.provider) return false;
+    if (submission.provider !== identity.provider) return false;
     if (
       submission.judgeAttempt &&
       submission.judgeAttempt !== identity.attemptId
     )
       return false;
-    if (identity.provider === 'botzone') {
-      // New callbacks carry the attempt in their URL, even if they beat the
-      // enqueue HTTP response. Legacy callbacks must match the saved job ID.
-      if (
-        !identity.attemptId &&
-        (!identity.jobId || identity.jobId !== submission.externalJobId)
-      )
-        return false;
-      if (
-        submission.externalJobId &&
-        identity.jobId &&
-        identity.jobId !== submission.externalJobId
-      )
-        return false;
-    }
+
     return true;
   }
 

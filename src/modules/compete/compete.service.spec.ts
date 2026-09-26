@@ -270,7 +270,10 @@ describe('CompeteService', () => {
         { matchId: 55, gamerId: 11, index: 1 },
       ]);
 
-      await expect(service.handleMatchCallbackByMatchId(55, { '0': 1, '1': 0 })).resolves.toEqual({ ok: true });
+      await expect(service.completeInternalMatch(55, {
+        status: 'finished', verdict: 'OK', finalResult: { '10': 1, '11': 0 },
+        rounds: [], compileMessages: {},
+      })).resolves.toEqual({ ok: true });
       expect(lockedMatchRepo.findOne).toHaveBeenCalledWith({ where: { id: 55 }, lock: { mode: 'pessimistic_write' } });
       expect(order.indexOf('history')).toBeLessThan(order.indexOf('status'));
       expect(order.at(-1)).toBe('status');
@@ -793,8 +796,9 @@ describe('CompeteService', () => {
 
       const result = await service.launchMatch(1, [10, 11]);
       expect(mockQueue.add).toHaveBeenCalledWith(
-        'compete',
-        expect.objectContaining({ matchId: 100 }),
+        'internal-match',
+        expect.objectContaining({ matchId: 100, gameId: 1, playerIds: [10, 11] }),
+        expect.objectContaining({ jobId: 'match-100', attempts: 3 }),
       );
       expect(result.id).toBe(100);
     });
@@ -814,7 +818,7 @@ describe('CompeteService', () => {
       );
     });
 
-    it('launchMatch 携带 judgerCode 推入队列', async () => {
+    it('launchMatch carries IDs, not duplicate judge or Bot source', async () => {
       mockGameQb({ judgerCode: 'custom_judge', judgerLanguage: 'cpp17' });
       const gamer1 = { id: 10, code: 'a', language: 'python3', type: 'code' };
       const gamer2 = { id: 11, code: 'b', language: 'cpp', type: 'code' };
@@ -823,15 +827,10 @@ describe('CompeteService', () => {
       mockMatchGamerLinkRepo.find = jest.fn().mockResolvedValue([]);
 
       await service.launchMatch(1, [10, 11]);
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'compete',
-        expect.objectContaining({
-          game: expect.objectContaining({
-            judgerCode: 'custom_judge',
-            judgerLanguage: 'cpp17',
-          }),
-        }),
-      );
+      expect(mockQueue.add).toHaveBeenCalledWith('internal-match',
+        expect.objectContaining({ matchId: 101, gameId: 1, playerIds: [10, 11] }),
+        expect.objectContaining({ jobId: 'match-101' }));
+      expect(mockQueue.add.mock.calls[0][1]).not.toHaveProperty('judge');
     });
   });
 
@@ -1436,8 +1435,9 @@ describe('CompeteService', () => {
       expect(result.matchId).toBe(200);
       expect(result.testGamerIds).toContain(55);
       expect(mockQueue.add).toHaveBeenCalledWith(
-        'compete',
-        expect.objectContaining({ matchId: 200 }),
+        'internal-match',
+        expect.objectContaining({ matchId: 200, gameId: 1, playerIds: [10, 55], requesterId: 42 }),
+        expect.objectContaining({ jobId: 'match-200' }),
       );
     });
 
@@ -1466,15 +1466,9 @@ describe('CompeteService', () => {
 
       await service.runPlaygroundJudge(1, 42, dto as any);
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'compete',
-        expect.objectContaining({
-          game: expect.objectContaining({
-            judgerCode: 'custom_judge_code',
-            judgerLanguage: 'cpp17',
-          }),
-        }),
-      );
+      expect(mockQueue.add).toHaveBeenCalledWith('internal-match',
+        expect.objectContaining({ matchId: 200, judge: { source: 'custom_judge_code', language: 'cpp17' }, requesterId: 42 }),
+        expect.objectContaining({ jobId: 'match-200' }));
     });
 
     it('不提供 judgerCode 时使用游戏自带裁判', async () => {
@@ -1500,15 +1494,9 @@ describe('CompeteService', () => {
 
       await service.runPlaygroundJudge(1, 42, dto as any);
 
-      expect(mockQueue.add).toHaveBeenCalledWith(
-        'compete',
-        expect.objectContaining({
-          game: expect.objectContaining({
-            judgerCode: 'game_judge',
-            judgerLanguage: 'python3',
-          }),
-        }),
-      );
+      expect(mockQueue.add).toHaveBeenCalledWith('internal-match',
+        expect.objectContaining({ matchId: 200, judge: undefined, requesterId: 42 }),
+        expect.objectContaining({ jobId: 'match-200' }));
     });
 
     it('游戏不存在时抛 NotFoundException', async () => {

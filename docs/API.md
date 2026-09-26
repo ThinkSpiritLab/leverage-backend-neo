@@ -159,14 +159,6 @@ The column **Auth** in the tables below uses:
 | GET | `/media/:id` | — | Get file download URL |
 | DELETE | `/media/:id` | admin | Delete file |
 
-### Heng (Judge Callbacks) — `/heng`
-
-> These endpoints are called by `heng-controller`, not by frontend clients.
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/heng/update/:submissionId/:judgeId` | — | Intermediate judge state callback |
-| POST | `/heng/finish/:submissionId/:judgeId` | — | Final judge result callback |
 
 ### Health & Observability
 

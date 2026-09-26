@@ -18,3 +18,4 @@ eslint.config.mjs
 jest*.config*
 tsconfig*.json
 !tsconfig.build.json
+!tsconfig.json

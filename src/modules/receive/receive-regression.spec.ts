@@ -2,11 +2,9 @@ import { ReceiveService } from './receive.service';
 import { Submission } from '../../database/entities/submission.entity';
 import { User } from '../../database/entities/user.entity';
 import { Problem } from '../../database/entities/problem.entity';
-import { JudgeResultKind, Status } from '../heng/heng.types';
+import { Status } from '../judge-runtime/judge-status';
 
-const result = (kind = JudgeResultKind.Accepted) => ({
-  cases: [{ kind, time: 1, memory: 1 }],
-});
+const result = (status = Status.AC) => ({ done: true, status, time: 1, memory: 1, judgeResult: '[]' });
 
 function fixture(overrides: Record<string, unknown> = {}) {
   const submission = {
@@ -15,7 +13,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     problemId: 3,
     contestId: null,
     courseId: null,
-    provider: null,
+    provider: 'internal',
     judgeAttempt: 'current',
     judgedStatus: null,
     status: Status.PENDING,
@@ -46,7 +44,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
   };
   const service = new ReceiveService(source, rank);
   const receive = (r = result(), attempt = 'current') =>
-    (service.receiveResult as any)(1, r, attempt);
+    service.finalize(1, r, { provider: 'internal', attemptId: attempt });
   return { submission, manager, source, redis, service, receive };
 }
 
@@ -69,7 +67,7 @@ describe('result accounting regressions', () => {
   });
   it('rejudging AC as WA removes its contribution without counting a new submission', async () => {
     const f = fixture({ judgedStatus: Status.AC });
-    await f.receive(result(JudgeResultKind.WrongAnswer));
+    await f.receive(result(Status.WA));
     expect(f.manager.increment).toHaveBeenCalledWith(
       Problem,
       { id: 3 },

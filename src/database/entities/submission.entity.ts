@@ -38,10 +38,10 @@ export class Submission {
   language: number;
 
   @Column('int', { nullable: true })
-  time: number;
+  time: number | null;
 
   @Column('int', { nullable: true })
-  memory: number;
+  memory: number | null;
 
   @OneToOne('SubmissionMisc', (s: { submission: Submission }) => s.submission, {
     cascade: true,

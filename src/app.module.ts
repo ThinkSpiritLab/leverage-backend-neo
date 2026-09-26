@@ -23,9 +23,9 @@ import { HealthModule } from './modules/health/health.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { RedisModule } from './modules/redis/redis.module';
-import { HengModule } from './modules/heng/heng.module';
+import { JudgeRuntimeModule } from './modules/judge-runtime/judge-runtime.module';
 import { ReceiveModule } from './modules/receive/receive.module';
-import { BotzoneModule } from './modules/botzone/botzone.module';
+
 import { ProblemModule } from './modules/problem/problem.module';
 import { SubmissionModule } from './modules/submission/submission.module';
 import { TagModule } from './modules/tag/tag.module';
@@ -43,6 +43,7 @@ import { InitModule } from './modules/init/init.module';
 import { CompeteModule } from './modules/compete/compete.module';
 import { TransmitModule } from './modules/transmit/transmit.module';
 import { MessageModule } from './modules/message/message.module';
+import { runsHttp } from './runtime/backend-role';
 
 @Module({
   imports: [
@@ -84,14 +85,12 @@ import { MessageModule } from './modules/message/message.module';
     // Auth
     AuthModule,
 
-    // Heng 通信 + BullMQ 评测链路
-    HengModule,
+    // Untrusted code runs in isolated containers, not the NestJS process.
+    JudgeRuntimeModule,
 
     // 评测结果接收处理
     ReceiveModule,
 
-    // Botzone 外部评测提供商
-    BotzoneModule,
 
     // 题目模块
     ProblemModule,
@@ -132,8 +131,8 @@ import { MessageModule } from './modules/message/message.module';
     // 统计模块
     StatisticsModule,
 
-    // 首次启动初始化
-    InitModule,
+    // Account/settings bootstrap belongs to HTTP startup, never worker startup.
+    ...(runsHttp() ? [InitModule] : []),
 
     // Bot 对战模块
     CompeteModule,

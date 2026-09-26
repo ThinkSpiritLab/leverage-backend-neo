@@ -56,7 +56,7 @@ describe('optional Bot detail authentication', () => {
     const service = { findOneGamer: jest.fn().mockResolvedValue({ id: 10 }) };
     const controller = new CompeteController(
       service as any,
-      { get: () => '' } as any,
+
       {} as any,
       {} as any,
       {} as any,

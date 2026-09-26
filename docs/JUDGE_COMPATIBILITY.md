@@ -1,6 +1,10 @@
 # Judge compatibility and execution boundaries
 
-## Current external Botzone adapter
+> Historical adapter research only. The external Botzone judge connector, callbacks
+> and Heng integration have been removed. The internal Nest worker is the active
+> judge path; see `JUDGE_SANDBOX.md` for its execution boundary.
+
+## Historical external Botzone adapter
 
 The adapter was checked against `bkmashiro/botzone-neo` revision
 `164717ef8cc5de4313d430058047b9140bbeb1e0`. This identifies the inspected source,

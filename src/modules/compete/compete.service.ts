@@ -31,6 +31,8 @@ import { PlaygroundJudgeDto } from './dto/playground-judge.dto';
 import { RedisService } from '../redis/redis.service';
 import { SettingService } from '../setting/setting.service';
 import { HumanTurnService } from './human-turn.service';
+import type { MatchExecution } from '../judge-runtime/judge.contracts';
+import { INTERNAL_MATCH_JOB, runtimeLanguage, type MatchJob } from '../judge-runtime/job.types';
 import { assertAccountActive } from '../auth/account-auth.util';
 
 export enum MatchStatus {
@@ -429,6 +431,18 @@ export class CompeteService {
   /**
    * 发起对局
    */
+  private async enqueueInternalMatch(data: MatchJob): Promise<void> {
+    try {
+      await this.judgeTxQueue.add(INTERNAL_MATCH_JOB, data, {
+        jobId: `match-${data.matchId}`, attempts: 3,
+        backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true,
+      });
+    } catch (error) {
+      await this.matchRepo.update(data.matchId, { status: MatchStatus.ERROR });
+      throw error;
+    }
+  }
+
   async launchMatch(gameId: number, gamerIds: number[]): Promise<Match> {
     const game = await this.gameRepo
       .createQueryBuilder('g')
@@ -445,8 +459,8 @@ export class CompeteService {
     }
 
     const gamers = await this.gamerRepo.find({
-      where: { id: In(gamerIds) },
-      select: ['id', 'code', 'language', 'type', 'webhookUrl', 'webhookSecret'],
+      where: { id: In(gamerIds), gameId, disabled: false },
+      select: ['id', 'gameId', 'language', 'type'],
     });
     if (gamers.length !== gamerIds.length) {
       throw new NotFoundException('部分参赛者不存在');
@@ -463,48 +477,7 @@ export class CompeteService {
       gamerIds.map((gamerId, index) => ({ matchId: match.id, gamerId, index })),
     );
 
-    // 推入评测队列（带 positionMap 用于 ELO 回调映射）
-    const positionToGamerId: Record<number, number> = {};
-    gamerIds.forEach((id, index) => { positionToGamerId[index] = id; });
-
-    await this.judgeTxQueue.add('compete', {
-      matchId: match.id,
-      positionToGamerId,
-      game: {
-        judgerCode: game.judgerCode,
-        judgerLanguage: game.judgerLanguage,
-        timeLimit: game.timeLimit,
-        memoryLimit: game.memoryLimit,
-      },
-      gamers: gamerIds.map((id, index) => {
-        const g = gamers.find(gm => gm.id === id)!;
-        const type = g.type ?? 'code';
-        const baseUrl = this.configService.get<string>('baseUrl', 'http://localhost:3000');
-
-        // human/external gamers use internal long-poll webhook
-        const callbackToken = this.configService.get<string>('botzone.callbackToken', '');
-        const webhookAuth = callbackToken ? `?token=${encodeURIComponent(callbackToken)}` : '';
-        const resolvedWebhookUrl =
-          type === 'human' || type === 'external'
-            ? `${baseUrl}/compete/human-turn-webhook/${match.id}/${g.id}${webhookAuth}`
-            : g.webhookUrl ?? undefined;
-
-        // Human: 3 min to respond; external bot: 30s (they should be polling)
-        const webhookTimeoutMs =
-          type === 'human' ? 180_000 : type === 'external' ? 30_000 : undefined;
-
-        return {
-          id: g.id,
-          code: g.code,
-          language: g.language,
-          position: index,
-          type,
-          webhookUrl: resolvedWebhookUrl,
-          webhookSecret: g.webhookSecret ?? undefined,
-          webhookTimeoutMs,
-        };
-      }),
-    });
+    await this.enqueueInternalMatch({ matchId: match.id, gameId, playerIds: gamerIds });
 
     return match;
   }
@@ -561,17 +534,17 @@ export class CompeteService {
     return { items, total };
   }
 
-  async findOneMatch(id: number): Promise<Match> {
+  async findOneMatch(id: number, viewerId?: number): Promise<Match> {
     const match = await this.matchRepo.findOne({
       where: { id },
       relations: ['game', 'links', 'links.gamer', 'links.gamer.user'],
     });
     if (!match) throw new NotFoundException(`对局 #${id} 不存在`);
-    this.sanitizeMatchGamers(match);
+    this.sanitizeMatchGamers(match, viewerId);
     return match;
   }
 
-  private sanitizeMatchGamers(match: Match): void {
+  private sanitizeMatchGamers(match: Match, viewerId?: number): void {
     for (const link of match.links ?? []) {
       if (!link.gamer) continue;
       delete (link.gamer as Partial<Gamer>).code;
@@ -580,6 +553,28 @@ export class CompeteService {
         link.gamer.user = { id: link.gamer.user.id, username: link.gamer.user.username };
       }
     }
+    if (!match.result) return;
+    try {
+      const result = JSON.parse(match.result) as Record<string, any>;
+      const requester = result.requesterId ?? match.links?.find(link => link.gamer?.isTest)?.gamer?.userId;
+      if (match.isTest && (viewerId === undefined || requester !== viewerId)) {
+        match.result = JSON.stringify({ verdict: result.verdict, finalResult: result.finalResult, roundCount: result.roundCount, private: true });
+        return;
+      }
+      const visible = new Set((match.links ?? []).filter(link => link.gamer && (link.gamer.opensource || (viewerId !== undefined && link.gamer.userId === viewerId))).map(link => String(link.index)));
+      for (const field of ['compileMessages', 'compiles']) {
+        if (!result[field] || typeof result[field] !== 'object') continue;
+        for (const position of Object.keys(result[field])) if (/^\d+$/.test(position) && !visible.has(position)) delete result[field][position];
+        if (viewerId === undefined || result.diagnosticOwners?.judge !== viewerId) { delete result[field].judge; delete result[field].judger; }
+      }
+      for (const round of Array.isArray(result.rounds) ? result.rounds : []) {
+        if (!round.debug || typeof round.debug !== 'object') continue;
+        for (const key of Object.keys(round.debug)) { const match = /^bot_(\d+)(?:_stderr)?$/.exec(key); if (match && !visible.has(match[1])) delete round.debug[key]; }
+      }
+      delete result.diagnosticOwners;
+      match.result = JSON.stringify(result);
+    } catch { /* Keep legacy non-JSON metadata readable. */ }
+
   }
 
   /**
@@ -627,35 +622,6 @@ export class CompeteService {
 
   // ─── Match Callback ──────────────────────────────────────────────────────────
 
-  /**
-   * 处理 botzone-neo 对局评测回调
-   *
-   * - 幂等：已 FINISHED/ERROR 的对局直接返回 ok
-   * - 仅 terminal 状态（finished/failed）落库
-   * - 落库后更新各参赛 Gamer 的 ELO 分
-   */
-  async handleMatchCallback(
-    jobId: string,
-    state: string,
-    result?: {
-      verdict?: string;
-      rounds?: Record<string, unknown>[];
-      finalResult?: Record<string, number>;
-    },
-  ): Promise<{ ok: boolean }> {
-    const match = await this.matchRepo.findOne({ where: { externalJobId: jobId } });
-    if (!match) {
-      this.logger.warn(`match-callback: unknown jobId=${jobId}`);
-      return { ok: false };
-    }
-    if (state !== 'finished' && state !== 'failed') return { ok: true };
-    const finalResult = state === 'finished' ? result?.finalResult : undefined;
-    return this.finalizeMatch(match.id, state === 'finished' ? MatchStatus.FINISHED : MatchStatus.ERROR, {
-      verdict: result?.verdict ?? null,
-      roundCount: result?.rounds?.length ?? 0,
-      finalResult: finalResult ?? {},
-    }, finalResult);
-  }
 
   /** Forfeit: mark match as ERROR, no ELO change */
   async handleMatchForfeit(matchId: number, forfeitedBotId?: string): Promise<{ ok: boolean }> {
@@ -664,25 +630,12 @@ export class CompeteService {
     });
   }
 
-  async handleMatchCallbackByMatchId(
-    matchId: number,
-    scores?: Record<string, number>,
-    log?: unknown[],
-  ): Promise<{ ok: boolean }> {
-    if (!scores || Object.keys(scores).length === 0) return { ok: true };
-    const links = await this.matchGamerLinkRepo.find({ where: { matchId } });
-    const positionToGamerId: Record<string, number> = {};
-    links.forEach((link) => { positionToGamerId[String(link.index)] = link.gamerId; });
-    const gamerIdScores: Record<string, number> = {};
-    for (const [positionOrId, score] of Object.entries(scores)) {
-      gamerIdScores[String(positionToGamerId[positionOrId] ?? positionOrId)] = score;
-    }
-    return this.finalizeMatch(matchId, MatchStatus.FINISHED, {
-      verdict: 'OK',
-      finalResult: gamerIdScores,
-      roundCount: Array.isArray(log) ? log.length : 0,
-      rounds: log ?? [],
-    }, gamerIdScores);
+
+  async completeInternalMatch(matchId: number, execution: MatchExecution, requesterId?: number, diagnosticOwners: Record<string, number> = {}): Promise<{ ok: boolean }> {
+    const status = execution.status === 'finished' ? MatchStatus.FINISHED : MatchStatus.ERROR;
+    return this.finalizeMatch(matchId, status, {
+      ...execution, roundCount: execution.rounds.length, requesterId, diagnosticOwners,
+    }, status === MatchStatus.FINISHED ? execution.finalResult : undefined);
   }
 
   private async finalizeMatch(
@@ -697,8 +650,12 @@ export class CompeteService {
         where: { id: matchId },
         lock: { mode: 'pessimistic_write' },
       });
-      if (!match) return { ok: false };
-      if ([MatchStatus.FINISHED, MatchStatus.ERROR].includes(match.status)) return { ok: true };
+      if (!match) return { ok: false, scores: {} as Record<string, number> };
+      if ([MatchStatus.FINISHED, MatchStatus.ERROR].includes(match.status)) {
+        let scores: Record<string, number> = {};
+        try { scores = JSON.parse(match.result || '{}').finalResult ?? {}; } catch { /* historical malformed result */ }
+        return { ok: true, scores };
+      }
 
       if (finalResult && Object.keys(finalResult).length) {
         const links = manager.getRepository(MatchGamerLink);
@@ -718,12 +675,12 @@ export class CompeteService {
       }
 
       await matches.update(matchId, { status, result: JSON.stringify(result) });
-      return { ok: true };
+      return { ok: true, scores: finalResult ?? {} };
     });
-    if (outcome.ok && status === MatchStatus.FINISHED && finalResult) {
-      this.humanTurnService.notifyGameOver(matchId, finalResult);
+    if (outcome.ok && [MatchStatus.FINISHED, MatchStatus.ERROR].includes(status)) {
+      await this.humanTurnService.notifyGameOver(matchId, outcome.scores);
     }
-    return outcome;
+    return { ok: outcome.ok };
   }
 
   /**
@@ -1384,6 +1341,7 @@ export class CompeteService {
       gameId,
       status: MatchStatus.PENDING,
       isTest: true,
+      result: JSON.stringify({ requesterId: userId }),
     });
 
     // 5. 创建 MatchGamerLink（test gamer = position 0，对手 = position 1）
@@ -1392,42 +1350,7 @@ export class CompeteService {
       { matchId: match.id, gamerId: opponent.id, index: 1 },
     ]);
 
-    // 6. 加载 game 的 judger 信息并推入评测队列
-    const game = await this.gameRepo
-      .createQueryBuilder('g')
-      .addSelect('g.judgerCode')
-      .addSelect('g.judgerLanguage')
-      .where('g.id = :id', { id: gameId })
-      .getOne();
-
-    await this.judgeTxQueue.add('compete', {
-      matchId: match.id,
-      positionToGamerId: { 0: savedTestGamer.id, 1: opponent.id },
-      game: {
-        judgerCode: game!.judgerCode,
-        judgerLanguage: game!.judgerLanguage,
-        timeLimit: game!.timeLimit,
-        memoryLimit: game!.memoryLimit,
-      },
-      gamers: [
-        {
-          id: savedTestGamer.id,
-          code: dto.code,
-          language: dto.language,
-          position: 0,
-          type: 'code',
-        },
-        {
-          id: opponent.id,
-          code: opponent.code,
-          language: opponent.language,
-          position: 1,
-          type: opponent.type,
-          webhookUrl: opponent.webhookUrl ?? undefined,
-          webhookSecret: opponent.webhookSecret ?? undefined,
-        },
-      ],
-    });
+    await this.enqueueInternalMatch({ matchId: match.id, gameId, playerIds: [savedTestGamer.id, opponent.id], requesterId: userId });
 
     // 7. 返回 matchId 和 testGamerId
     return { matchId: match.id, testGamerId: savedTestGamer.id };
@@ -1504,6 +1427,7 @@ export class CompeteService {
       gameId,
       status: MatchStatus.PENDING,
       isTest: true,
+      result: JSON.stringify({ requesterId: userId }),
     });
 
     // 4. 创建 MatchGamerLink
@@ -1512,43 +1436,9 @@ export class CompeteService {
       { matchId: match.id, gamerId: gamer1.id, index: 1 },
     ]);
 
-    // 5. 决定 judger 规格：dto.judgerCode 优先，否则用游戏自带
-    const effectiveJudgerCode = dto.judgerCode ?? game.judgerCode ?? '';
-    const effectiveJudgerLanguage =
-      dto.judgerCode !== undefined
-        ? (dto.judgerLanguage ?? 'python')
-        : (game.judgerLanguage ?? '');
-
-    // 6. 推入评测队列
-    await this.judgeTxQueue.add('compete', {
-      matchId: match.id,
-      positionToGamerId: { 0: gamer0.id, 1: gamer1.id },
-      game: {
-        judgerCode: effectiveJudgerCode,
-        judgerLanguage: effectiveJudgerLanguage,
-        timeLimit: game.timeLimit,
-        memoryLimit: game.memoryLimit,
-      },
-      gamers: [
-        {
-          id: gamer0.id,
-          code: (gamer0 as any).code ?? dto.bot0.code ?? '',
-          language: gamer0.language,
-          position: 0,
-          type: gamer0.type ?? 'code',
-          webhookUrl: gamer0.webhookUrl ?? undefined,
-          webhookSecret: gamer0.webhookSecret ?? undefined,
-        },
-        {
-          id: gamer1.id,
-          code: (gamer1 as any).code ?? dto.bot1.code ?? '',
-          language: gamer1.language,
-          position: 1,
-          type: gamer1.type ?? 'code',
-          webhookUrl: gamer1.webhookUrl ?? undefined,
-          webhookSecret: gamer1.webhookSecret ?? undefined,
-        },
-      ],
+    await this.enqueueInternalMatch({
+      matchId: match.id, gameId, playerIds: [gamer0.id, gamer1.id], requesterId: userId,
+      judge: dto.judgerCode === undefined ? undefined : { source: dto.judgerCode, language: dto.judgerLanguage ?? 'python' },
     });
 
     return { matchId: match.id, testGamerIds };

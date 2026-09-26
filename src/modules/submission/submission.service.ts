@@ -6,7 +6,6 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  Optional,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -25,7 +24,7 @@ import { RejudgeLog } from '../../database/entities/rejudge-log.entity';
 import { Suspicion } from '../../database/entities/suspicion.entity';
 import { RedisService } from '../redis/redis.service';
 import { JUDGE_TX_QUEUE } from '../queue/queue.constants';
-import { Status } from '../heng/heng.types';
+import { Status } from '../judge-runtime/judge-status';
 import {
   LANGUAGE_BONUS,
   MAX_MEMORY_LIMIT,
@@ -37,13 +36,8 @@ import { RejudgeDto } from './dto/rejudge.dto';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
-import { BotzoneClientService } from '../botzone/botzone-client.service';
-import { LEVERAGE_LANG_TO_BOTZONE } from '../botzone/botzone.types';
+import { INTERNAL_SUBMISSION_JOB, submissionLanguage, type SubmissionJob } from '../judge-runtime/job.types';
 import { ReceiveService } from '../receive/receive.service';
-import {
-  InlineTestcase,
-  JudgeProviderName,
-} from '../judge-provider/judge-provider.interface';
 
 const TEST_CASES_PATH = process.env.TEST_CASES_PATH ?? '/tmp/testcases';
 
@@ -99,8 +93,6 @@ export class SubmissionService {
     private readonly judgeTxQueue: Queue,
     @InjectMetric(SUBMISSION_TOTAL_COUNTER)
     private readonly submissionCounter: Counter<string>,
-    @Optional()
-    private readonly botzoneClient: BotzoneClientService | null,
     private readonly receiveService: ReceiveService,
   ) {}
 
@@ -112,15 +104,7 @@ export class SubmissionService {
     });
     if (!problem) throw new NotFoundException(`题目 #${dto.problemId} 不存在`);
 
-    // Determine which judge provider to use
-    const botzoneEnabled = this.configService.get<boolean>(
-      'botzone.enabled',
-      false,
-    );
-    const usesBotzone =
-      botzoneEnabled &&
-      this.botzoneClient !== null;
-    if (usesBotzone) this.assertBotzoneLanguage(dto.language);
+    this.assertInternalLanguage(dto.language);
 
     const submission = await this.submissionRepo.save({
       userId,
@@ -129,12 +113,12 @@ export class SubmissionService {
       status: Status.PENDING,
       contestId: dto.contestId ?? null,
       courseId: dto.courseId ?? null,
-      provider: usesBotzone ? JudgeProviderName.Botzone : null,
+      provider: 'internal',
       judgeAttempt: randomBytes(16).toString('hex'),
     });
     await this.miscRepo.save({ submissionId: submission.id, code: dto.code });
 
-    await this.dispatch(submission, problem, dto.code);
+    await this.dispatch(submission);
 
     // Increment business metric counter
     const langName = LANGUAGE_EXT_MAP[dto.language] ?? String(dto.language);
@@ -143,85 +127,20 @@ export class SubmissionService {
       .inc();
 
     this.logger.log(
-      `Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}, provider=${usesBotzone ? 'botzone' : 'heng'}`,
+      `Submission created: id=${submission.id}, userId=${userId}, problemId=${dto.problemId}, provider=internal`,
     );
     return submission;
   }
 
-  /**
-   * 从磁盘读取题目的内联测试用例（botzone-neo OJ 模式所需）
-   */
-  private async readTestcases(problem: Problem): Promise<InlineTestcase[]> {
-    const dir = path.join(
-      TEST_CASES_PATH,
-      problem.prefix,
-      problem.logicId.toString(),
-    );
-    const testcases: InlineTestcase[] = [];
-    for (let i = 1; i <= (problem.cases ?? 0); i++) {
-      try {
-        const input = await fs.readFile(path.join(dir, `${i}.in`), 'utf-8');
-        const expectedOutput = await fs.readFile(
-          path.join(dir, `${i}.out`),
-          'utf-8',
-        );
-        testcases.push({ id: i, input, expectedOutput });
-      } catch {
-        this.logger.warn(
-          `测试用例文件缺失: problem=${problem.id} case=${i}`,
-        );
-      }
-    }
-    return testcases;
-  }
-
-  /**
-   * 加载题目的 checker 信息（checkerCode 有 select:false，需要单独查询）
-   */
-  private async loadCheckerInfo(
-    problemId: number,
-  ): Promise<{ checkerCode?: string; checkerLanguage?: string }> {
-    const row = await this.problemRepo
-      .createQueryBuilder('p')
-      .select(['p.checkerLanguage', 'p.checkerCode'])
-      .addSelect('p.checkerCode') // 强制加载 select:false 列
-      .where('p.id = :id', { id: problemId })
-      .getRawOne<{ p_checkerCode?: string; p_checkerLanguage?: string }>();
-    return {
-      checkerCode: row?.p_checkerCode ?? undefined,
-      checkerLanguage: row?.p_checkerLanguage ?? undefined,
-    };
-  }
-
-  /** Shared first-submit/rejudge path. A late response cannot change a newer attempt. */
-  private async dispatch(submission: Submission, problem: Problem, code: string): Promise<void> {
-    const { timeLimit, memoryLimit } = this.applyLanguageBonus(problem, submission.language);
-    const current = { id: submission.id, judgeAttempt: submission.judgeAttempt!, status: In([Status.PENDING, Status.JUDGING, Status.COMPILING]) };
+  private async dispatch(submission: Submission): Promise<void> {
+    const data: SubmissionJob = { submissionId: submission.id, attemptId: submission.judgeAttempt! };
     try {
-      if (submission.provider === JudgeProviderName.Botzone) {
-        if (!this.botzoneClient) throw new Error('Botzone provider is unavailable');
-        const testcases = await this.readTestcases(problem);
-        const checker = await this.loadCheckerInfo(problem.id);
-        const result = await this.botzoneClient.enqueue({
-          submissionId: submission.id, attemptId: submission.judgeAttempt!,
-          language: submission.language, code, timeLimit, memoryLimit,
-          testDataUrl: this.buildTestDataUrl(problem), testcases, ...checker,
-        });
-        await this.submissionRepo.update(current, {
-          externalJobId: result.externalJobId,
-          providerMeta: result.providerMeta ? JSON.stringify(result.providerMeta) : null,
-        });
-      } else {
-        await this.judgeTxQueue.add('judge', {
-          submissionId: submission.id, attemptId: submission.judgeAttempt,
-          task: { language: submission.language, code, timeLimit, memoryLimit, testDataUrl: this.buildTestDataUrl(problem) },
-        });
-      }
-    } catch (error) {
-      await this.receiveService.finalize(submission.id, { done: true, status: Status.SE }, {
-        provider: submission.provider === JudgeProviderName.Botzone ? 'botzone' : 'heng',
-        attemptId: submission.judgeAttempt ?? undefined,
+      await this.judgeTxQueue.add(INTERNAL_SUBMISSION_JOB, data, {
+        jobId: `submission-${data.submissionId}-${data.attemptId}`,
+        attempts: 3, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true,
       });
+    } catch (error) {
+      await this.receiveService.finalize(submission.id, { done: true, status: Status.SE }, { provider: 'internal', attemptId: submission.judgeAttempt ?? undefined });
       throw error;
     }
   }
@@ -267,12 +186,12 @@ export class SubmissionService {
   }
 
   async rejudge(id: number): Promise<void> {
-    const { submission, code } = await this.submissionRepo.manager.transaction(async manager => {
+    const { submission } = await this.submissionRepo.manager.transaction(async manager => {
       const submission = await manager.findOne(Submission, {
         where: { id }, relations: ['problem'], lock: { mode: 'pessimistic_write' },
       });
       if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
-      if (submission.provider === JudgeProviderName.Botzone) this.assertBotzoneLanguage(submission.language);
+      this.assertInternalLanguage(submission.language);
       const misc = await manager.findOne(SubmissionMisc, { where: { submissionId: id } });
       if (!misc) throw new NotFoundException(`提交 #${id} 的代码不存在`);
       await manager.save(RejudgeLog, {
@@ -280,19 +199,19 @@ export class SubmissionService {
         memory: submission.memory, judger: submission.judger, judgeResult: misc.judgeResult,
         compileErrorMsg: misc.compileErrorMsg, submittedAt: submission.updatedAt,
       });
-      const reset = { status: Status.PENDING, judger: null, externalJobId: null,
+      const reset = { provider: 'internal', status: Status.PENDING, judger: null, externalJobId: null,
         providerMeta: null, judgeAttempt: randomBytes(16).toString('hex') };
       await manager.update(Submission, id, reset);
       await manager.update(SubmissionMisc, { submissionId: id }, { judgeResult: '', compileErrorMsg: '' });
       return { submission: Object.assign(submission, reset), code: misc.code };
     });
-    await this.dispatch(submission, submission.problem, code);
+    await this.dispatch(submission);
     this.logger.log(`Rejudge queued: submissionId=${id}`);
   }
 
-  private assertBotzoneLanguage(language: number): void {
-    if (!Object.prototype.hasOwnProperty.call(LEVERAGE_LANG_TO_BOTZONE, language)) {
-      throw new BadRequestException('Botzone supports C++17 (3), Python3 (9), JavaScript (10) and TypeScript (11)');
+  private assertInternalLanguage(language: number): void {
+    if (!Object.prototype.hasOwnProperty.call(submissionLanguage, language)) {
+      throw new BadRequestException('Internal judge does not support this language');
     }
   }
 

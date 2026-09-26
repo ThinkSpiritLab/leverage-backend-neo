@@ -4,10 +4,10 @@ services:
   db:
     image: mariadb:10.11
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Provide DB_ROOT_PASSWORD via --env-file .env.prod}
+      MYSQL_DATABASE: ${DB_DATABASE:?Provide DB_DATABASE via --env-file .env.prod}
+      MYSQL_USER: ${DB_USERNAME:?Provide DB_USERNAME via --env-file .env.prod}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Provide DB_PASSWORD via --env-file .env.prod}
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
@@ -19,16 +19,22 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?Provide REDIS_PASSWORD via --env-file .env.prod}"]
     volumes:
       - redis_data:/data
     restart: unless-stopped
 
   backend:
     build: .
+    # This container has no Docker daemon/socket; execution belongs to the worker.
+    environment:
+      BACKEND_ROLE: api
     ports:
       - "${BACKEND_PORT:-3000}:3000"
     env_file: .env.prod
+    volumes:
+      - testcases_data:/tmp/testcases
+      - uploads_data:/tmp/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -41,20 +47,9 @@ services:
       context: ../leverage-frontend-neo
       dockerfile: Dockerfile
     ports:
-      - "${FRONTEND_PORT:-3001}:80"
+      - "${FRONTEND_PORT:-3001}:3000"
     restart: unless-stopped
 
-  botzone:
-    build:
-      # Adjust this path to match your server layout
-      context: /Users/yuzhe/projects/botzone-neo
-      dockerfile: Dockerfile
-    ports:
-      - "${BOTZONE_PORT:-3002}:3002"
-    env_file: /Users/yuzhe/projects/botzone-neo/.env.prod
-    depends_on:
-      - redis
-    restart: unless-stopped
 
   nginx:
     image: nginx:alpine
@@ -67,9 +62,11 @@ services:
     depends_on:
       - backend
       - frontend
-      - botzone
+
     restart: unless-stopped
 
 volumes:
   db_data:
   redis_data:
+  testcases_data:
+  uploads_data:

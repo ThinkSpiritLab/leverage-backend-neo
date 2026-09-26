@@ -1,3 +1,5 @@
+// Load .env before importing AppModule: decorators register providers at import time.
+import 'dotenv/config';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -11,8 +13,28 @@ const jwt = require('jsonwebtoken');
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { getBackendRole, runsHttp } from './runtime/backend-role';
 
-async function bootstrap() {
+function registerShutdownFallback(): void {
+  // NestJS shutdown hooks own normal termination; do not leave hung teardown indefinitely.
+  process.on('SIGTERM', () => {
+    setTimeout(() => {
+      console.error('Forced exit after graceful shutdown timeout');
+      process.exit(1);
+    }, 15000).unref();
+  });
+}
+
+export async function bootstrap() {
+  const role = getBackendRole();
+  if (!runsHttp(role)) {
+    const worker = await NestFactory.createApplicationContext(AppModule, { bufferLogs: true });
+    worker.useLogger(worker.get(Logger));
+    worker.enableShutdownHooks();
+    registerShutdownFallback();
+    worker.get(Logger).log('Worker application context started (no HTTP listener)');
+    return;
+  }
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
     bodyParser: false,  // disable default, we set our own limit below
@@ -114,14 +136,7 @@ async function bootstrap() {
   // Enable shutdown hooks — NestJS will call onApplicationShutdown() on SIGTERM/SIGINT
   app.enableShutdownHooks();
 
-  // Fallback forced exit after 15s if graceful shutdown stalls
-  const SHUTDOWN_TIMEOUT = 15000;
-  process.on('SIGTERM', () => {
-    setTimeout(() => {
-      console.error('Forced exit after graceful shutdown timeout');
-      process.exit(1);
-    }, SHUTDOWN_TIMEOUT).unref();
-  });
+  registerShutdownFallback();
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('port', 3000);
@@ -129,4 +144,6 @@ async function bootstrap() {
   app.get(Logger).log(`Application listening on port ${port}`);
 }
 
-bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

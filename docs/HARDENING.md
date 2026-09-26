@@ -4,15 +4,14 @@
 
 1. Back up the database and rehearse migrations on a restored copy. Production
    must retain `synchronize: false`.
-2. Pause new submissions/matches, drain judge queues and let active matches finish
-   before replacing API and worker processes together. Old in-flight callbacks
-   do not have the new attempt identity and callback authentication contract.
-3. Configure a nonempty `BOTZONE_CALLBACK_TOKEN`. Missing callback credentials
-   now fail closed. OJ callback URLs carry an attempt-scoped HMAC; game/human
-   callbacks use the existing shared callback credential. Do not log query tokens
-   at the reverse proxy or forward callback URLs to clients.
-4. Run `pnpm migration:run` against the intended database, then start the new
-   backend/workers and deploy the frontend with the supplied Nginx SSE location.
+2. Pause new submissions/matches, drain old judge queues and let active matches finish
+   before replacing API and worker processes together. Old external callbacks are
+   no longer accepted; reconcile unfinished historical attempts explicitly.
+3. Build and pin the internal `JUDGE_IMAGE` on the worker host; review Docker daemon
+   permissions and sandbox limits as described in `JUDGE_SANDBOX.md`.
+4. In single-API production mode, reviewed migrations run during API startup.
+   Never run the CLI migration command concurrently with an active API fleet;
+   if an attended pre-start run is chosen, verify the target and backup first.
 
 The additive migration supplies missing entity columns and runtime tables. It
 preserves existing objects created by development `synchronize`; its `down`
@@ -28,18 +27,19 @@ judge logs/backups separately if those bugs affected an existing deployment.
 
 ## Implementation boundaries
 
-- Heng and Botzone normalize into `ReceiveService.finalize`. SQL row locks own
+- Internal OJ results enter `ReceiveService.finalize`. SQL row locks own
   deduplication, attempt checks, result writes and statistics. Ranking cache
   publication happens after SQL commit, and retries can republish without
   counting a result twice. Redis is not a transaction coordinator.
-- Creation and rejudge share provider dispatch. Rejudge retains the previous
-  counted result until a new attempt settles, clears the old external job and
-  refuses stale callbacks. Status polling reads the persisted submission state.
+- Creation and rejudge use internal worker dispatch. Rejudge retains the previous
+  counted result until a new attempt settles and refuses stale attempts. Status
+  polling reads the persisted submission state.
 - Authentication reads current account status/role, including manual JWT entry
   points for human turns. Renderer messages and moves are restricted to their
   owning iframe/player.
-- Human-turn waiters and SSE remain process-local. Operate a single backend
-  instance for this feature until cross-instance routing is explicitly designed.
+- Pending human turns, responses and game-over replay are in shared Redis;
+  API instances route SSE events there. Local waiters and open SSE writers remain
+  process-local. Automatic matching uses per-game leases, not exactly-once writes.
 - Existing contest scoring is preserved; these changes fix distinct solved
   counts and result replay rather than introducing a different scoring system.
 
@@ -60,10 +60,12 @@ MariaDB data. It checks fresh and legacy-upgrade paths, all entity columns and
 selected ORM/raw-SQL business operations; it is not a production restored-clone
 or full index/default/foreign-key zero-drift certification.
 
-`pnpm test:e2e` includes both real MariaDB/Redis tests and an older SQLite test
-suite. The latter requires the native `better-sqlite3` build, which pnpm may block
-until explicitly approved. Do not report a partial run or skipped suite as green.
+`pnpm test:e2e` builds the judge image and runs MariaDB/Redis HTTP suites with
+real Docker OJ/match cases; it does not include SQLite. Run
+`pnpm test:integration` separately for SQLite; on this repository's supported
+Node 22, its native `better-sqlite3` binding must be available. Report skipped
+cases separately from passed cases.
 
-Frontend checks: `pnpm build` and `pnpm test:regression`. The regression script
-executes refresh/401 and polling behavior, and checks SSE/iframe source contracts;
-it does not replace real-browser and deployed-proxy acceptance.
+Frontend checks: `pnpm test:regression`, `pnpm test:botzone` (build and real
+Chrome renderer probe), and the Playwright suite. Those browser fixtures mock
+API/SSE and do not replace the backend's real Docker E2E or production-proxy QA.

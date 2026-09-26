@@ -8,7 +8,7 @@ import { Suspicion } from '../../database/entities/suspicion.entity';
 import { AuthModule } from '../auth/auth.module';
 import { MetricsModule } from '../metrics/metrics.module';
 import { QueueModule } from '../queue/queue.module';
-import { BotzoneModule } from '../botzone/botzone.module';
+
 import { ReceiveModule } from '../receive/receive.module';
 import { SubmissionController } from './submission.controller';
 import { SubmissionService } from './submission.service';
@@ -25,7 +25,7 @@ import { SubmissionService } from './submission.service';
     AuthModule,
     MetricsModule,
     QueueModule,
-    BotzoneModule,
+
     ReceiveModule,
   ],
   controllers: [SubmissionController],

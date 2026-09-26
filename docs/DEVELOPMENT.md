@@ -4,13 +4,12 @@
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填入配置
-
-# 用 docker-compose 启动（推荐）
-docker-compose up -d
-
-# 或本地开发
-pnpm install
+# 填写 .env 中空白的 DB、JWT 密钥及首次 SA 密码；不要提交 .env
+# 只启动 MariaDB 和 Redis，均仅绑定宿主回环地址
+docker compose up -d db redis
+# backend 在宿主机运行，使用 Node 22、pnpm 与 Docker CLI
+pnpm install --frozen-lockfile
+pnpm judge:image
 pnpm start:dev
 ```
 
@@ -26,20 +25,17 @@ pnpm start:dev
 | `DB_DATABASE` | — | 数据库名（必填） |
 | `DB_USERNAME` | — | 数据库用户名（必填） |
 | `DB_PASSWORD` | — | 数据库密码（必填） |
-| `DB_ROOT_PASSWORD` | `rootpass` | docker-compose 中 MariaDB root 密码 |
+| `DB_ROOT_PASSWORD` | — | 本地 Compose MariaDB root 密钥，需显式配置 |
 | `REDIS_HOST` | `localhost` | Redis 主机 |
 | `REDIS_PORT` | `6379` | Redis 端口 |
 | `JWT_ACCESS_SECRET` | — | JWT access token 签名密钥（生产必填）|
 | `JWT_REFRESH_SECRET` | — | JWT refresh token 签名密钥（生产必填）|
 | `JWT_ACCESS_EXPIRES_IN` | `15m` | access token 过期时间 |
 | `JWT_REFRESH_EXPIRES_IN` | `7d` | refresh token 过期时间 |
-| `HENG_BASE_URL` | — | heng-controller 地址 |
-| `HENG_AK` | — | heng access key |
-| `HENG_SK` | — | heng secret key |
-| `HENG_ALLOW_INSECURE_TLS` | `false` | 是否允许不安全 TLS（开发用） |
+
 | `MAX_SUBMISSION_PER_MINUTE` | `10` | 每分钟最大提交次数 |
 | `INIT_SA_USERNAME` | `admin` | 首次启动创建的 sa 账号用户名 |
-| `INIT_SA_PASSWORD` | `Admin@123456` | 首次启动创建的 sa 账号密码 |
+| `INIT_SA_PASSWORD` | — | 首次启动必须显式设置；生产环境至少 16 字符 |
 
 ## API 文档
 
@@ -49,7 +45,7 @@ pnpm start:dev
 
 访问 http://localhost:3000/admin/queues
 
-（Bull Board 已集成，展示 judge-tx / judge-rx 队列状态）
+（Bull Board 已集成，展示内部评测队列状态）
 
 ## 指标监控
 
@@ -76,7 +72,7 @@ src/
     ├── user/              # 用户管理
     ├── problem/           # 题目
     ├── submission/        # 提交
-    ├── heng/              # 评测通信
+    ├── judge-runtime/     # 内部 Docker 沙箱与 OJ/Bot 对局 worker
     ├── receive/           # 评测结果接收
     ├── contest/           # 竞赛
     ├── course/            # 课程
@@ -92,7 +88,7 @@ src/
     ├── compete/           # Bot 对战
     ├── init/              # 首次初始化
     ├── redis/             # Redis 服务
-    ├── queue/             # BullMQ 队列
+    ├── queue/             # Bull 队列
     ├── health/            # 健康检查
     └── metrics/           # Prometheus 指标
 ```
@@ -114,11 +110,9 @@ src/
 
 ```
 POST /submissions
-  → 写 DB (status: PENDING)
-  → BullMQ judge-tx 队列
-    → Worker: HMAC 签名 → HTTP POST heng-controller
-      → 回调 POST /heng/update/:submissionId/:judgeId（中间状态）
-      → 回调 POST /heng/finish/:submissionId/:judgeId（最终结果）
-        → 更新 DB
-        → Redis Sorted Set 实时更新排行榜
+  → DB 记录 PENDING 状态与 judgeAttempt
+  → Bull judge-tx 队列中的 internal-submission 任务
+  → 同仓库 BACKEND_ROLE=all/worker 读取可信测试数据
+  → Docker 独立容器内执行用户代码（禁网、只读根文件系统、资源限额）
+  → ReceiveService 在数据库事务内结算；Redis 排行榜由结算后更新
 ```
