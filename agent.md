@@ -51,9 +51,9 @@ Use pnpm and retain `pnpm-lock.yaml`. Install explicitly with
   **`pnpm lint` includes `--fix` and modifies files.**
 - `pnpm test:e2e`: MariaDB/Redis Testcontainers suite, requires Docker.
   Do not launch Docker or external services without the operator's approval.
-- `pnpm test:integration` currently matches both integration and `test/e2e`
-  files without the dedicated E2E global setup. Inspect the selected suite
-  before treating this command as a standalone SQLite-only test.
+- `pnpm test:integration`: SQLite integration and the legacy SQLite app suite;
+  no Docker. Use Node 22 and a matching `better-sqlite3` native binding. The
+  container HTTP suites belong to `pnpm test:e2e`, which owns their global setup.
 - `pnpm migration:show`, `pnpm migration:run`, `pnpm migration:revert`: operate
   on the configured database. Confirm the target before any write.
 - `pnpm mcp`: run the MCP entry point.

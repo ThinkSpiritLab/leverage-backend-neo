@@ -4,11 +4,11 @@
 
 ```mermaid
 graph TD
-    FE["Nuxt 4 SPA\n(52 pages)"]
+    FE["Nuxt 3 (compatibilityVersion: 4) SPA\n(52 pages)"]
     BE["NestJS Backend\n(742 tests)"]
     DB["MariaDB"]
     RD["Redis"]
-    BQ["BullMQ\njudge-tx queue"]
+    BQ["Bull\njudge-tx queue"]
     BN["botzone-neo\n(judge engine)"]
     SB["shimmy sandbox\n(Direct / Sandlock)"]
 
@@ -25,11 +25,11 @@ graph TD
 
 | Component | Role |
 |-----------|------|
-| **Nuxt 4 SPA** | Frontend — 52 pages, Naive UI, SPA mode (SSR disabled) |
+| **Nuxt 3 (compatibilityVersion: 4) SPA** | Frontend — 52 pages, Naive UI, SPA mode (SSR disabled) |
 | **NestJS Backend** | REST API, business logic, Bull queue producer/consumer |
 | **MariaDB** | Persistent storage (users, gamers, matches, ELO history, …) |
-| **Redis** | Queue storage (BullMQ), session cache, rate-limit counters |
-| **BullMQ** | Async job queue (`judge-tx`) for match submission |
+| **Redis** | Queue storage (Bull), session cache, rate-limit counters |
+| **Bull** | Async job queue (`judge-tx`) for match submission |
 | **botzone-neo** | Judge engine — compiles bots, runs multi-round games, callbacks to backend |
 | **shimmy** | Sandbox library — DirectBackend (dev) / SandlockBackend (Linux cgroups) |
 

@@ -2,6 +2,7 @@ module.exports = {
   displayName: 'e2e',
   // Only match our new E2E specs (excludes the legacy app.e2e.spec.ts which uses SQLite)
   testMatch: ['**/test/e2e/**/*.e2e.spec.ts'],
+  testPathIgnorePatterns: ['/node_modules/', '/test/e2e/app.e2e.spec.ts$'],
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   transform: { '^.+\\.(t|j)s$': 'ts-jest' },

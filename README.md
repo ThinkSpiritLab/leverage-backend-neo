@@ -10,7 +10,7 @@ Backend service for **Leverage OJ** — an Online Judge platform for competitive
 | ORM | [TypeORM](https://typeorm.io/) |
 | Database | MariaDB 10.11 |
 | Cache / Queues | Redis 7 |
-| Job Queue | [BullMQ](https://docs.bullmq.io/) |
+| Job Queue | [Bull](https://github.com/OptimalBits/bull) |
 | Logging | [nestjs-pino](https://github.com/iamolegga/nestjs-pino) |
 | Metrics | [Prometheus](https://prometheus.io/) |
 | API Docs | Swagger / OpenAPI |
@@ -141,7 +141,7 @@ src/
     ├── user/            # User CRUD, bcrypt passwords, bulk import
     ├── problem/         # Problem CRUD, tag filtering, test data upload
     ├── submission/      # Code submissions, rate limiting, rejudge
-    ├── heng/            # Judge service communication (BullMQ workers)
+    ├── heng/            # Judge service communication (Bull workers)
     ├── receive/         # Judge result processing, stats, leaderboard update
     ├── rank/            # Global Redis Sorted Set leaderboard
     ├── contest/         # Contests, real-time ranking, balloon tracking
@@ -156,7 +156,7 @@ src/
     ├── suspicion/       # Anti-cheat / suspicious submission detection
     ├── health/          # Health check endpoint
     ├── metrics/         # Prometheus metrics endpoint
-    ├── queue/           # BullMQ queue definitions
+    ├── queue/           # Bull queue definitions
     ├── redis/           # Redis client service
     └── init/            # First-run initialization (SA account seeding)
 ```

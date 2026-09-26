@@ -62,6 +62,7 @@ export const ALL_ENTITIES = [
  */
 const MYSQL_TO_SQLITE_TYPE: Record<string, string> = {
   bool: 'integer', // MySQL bool alias → integer (0/1)
+  enum: 'text', // Preserve enum string values without MySQL's column type
   char: 'text', // Fixed-length char → text
   mediumtext: 'text', // MySQL mediumtext → text
   tinytext: 'text', // MySQL tinytext → text

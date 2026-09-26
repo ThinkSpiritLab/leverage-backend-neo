@@ -171,10 +171,10 @@ describe('AuthService (integration)', () => {
       expect(result.accessToken.length).toBeGreaterThan(0);
     });
 
-    it('should throw UnauthorizedException for invalid refresh token', () => {
-      expect(() => authService.refreshToken('invalid.jwt.token')).toThrow(
-        'Refresh token 无效或已过期',
-      );
+    it('should throw UnauthorizedException for invalid refresh token', async () => {
+      await expect(
+        authService.refreshToken('invalid.jwt.token'),
+      ).rejects.toThrow('Refresh token 无效或已过期');
     });
 
     it('should throw UnauthorizedException for access token used as refresh token', async () => {
@@ -191,7 +191,7 @@ describe('AuthService (integration)', () => {
 
       // Access token is signed with ACCESS_SECRET, refresh token verification uses REFRESH_SECRET
       // So using access token as refresh token should fail
-      expect(() => authService.refreshToken(accessToken)).toThrow(
+      await expect(authService.refreshToken(accessToken)).rejects.toThrow(
         'Refresh token 无效或已过期',
       );
     });

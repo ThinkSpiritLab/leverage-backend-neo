@@ -145,17 +145,45 @@ Do not silently merge or deploy.
   DTOs/entities. Label mock, real database, browser and real judge evidence.
 - No cron, watchdog or unattended deployment setup is needed for this goal.
 
+## Approved execution architecture
+
+The user approved one backend application with `all` (default), `api` and
+`worker` roles. Keep one business API, data model and queue lifecycle; do not add
+another public judge backend or a global primary/replica framework. Workers claim
+jobs through the existing Bull queue. Only singleton maintenance/scheduling needs
+a bounded Redis lease, with idempotent database writes rather than a promise of
+exactly-once execution.
+
+Untrusted code must remain outside the NestJS process. First verify ordinary,
+non-privileged Docker isolation using trusted small programs. Task containers
+must have no network, no host bind mounts or Docker socket, no business secrets,
+read-only root filesystems, and explicit CPU/memory/PID/output/time bounds. The
+trusted backend worker may orchestrate them. Do not run the unsafe candidate
+upstream deployment merely to obtain a passing real-judge result.
+
+Integrate execution into this repository after that feasibility gate. Preserve
+existing API routes and keep external adapters as explicit migration options
+until internal execution is verified. A worker-mode process must not listen on
+an HTTP port. Do not deploy or merge main as part of this work.
+
 ## Execution pointer
 
-Current: active integration. Botzone language payloads now use runtime strings;
-real DTO checks and the browser creation flow pass. Bot drafts recover after
-reload and reach a contextual test without copying code. Browser checks cover
-transient polling failure and a 390px editor layout.
-Next: integrate responsive/renderer/test-environment slices, cover remaining
-advanced-workspace drafts and permission states, then run combined acceptance.
-Blocked: none for UI work. Candidate upstream `bkmashiro/botzone-neo` is under
-read-only compatibility review before an isolated real judge run; do not request
-secrets in chat or invent credentials.
+Current: checkpointing the verified UI/DX/security changes, then implementing
+the approved unified-backend roles and internal executor. Existing verification:
+backend TypeScript check and 828 unit tests; SQLite 42 passed with three existing
+skips; ordinary container HTTP suites passed; five additional real-MariaDB Bot
+privacy/owner-versioning cases passed. Frontend production build, 27 browser
+fixture tests, source probes, trusted example programs and real iframe messaging
+passed. Desktop/mobile views were inspected; none of these is a real judge run.
+
+Next: use the isolated Docker feasibility result to implement execution; add
+`all`/`api`/`worker` entry behavior and singleton-maintenance coordination without
+a global primary backend. Preserve the current API and migration options.
+
+Blocked: no role/UI implementation blocker. Real compilation/match acceptance
+remains open until the internal executor is exercised under actual isolation.
+Do not substitute the unsafe candidate upstream or silently request privileged
+execution. The focused spike lives under `spikes/001-docker-judge/`.
 
 After each coherent verified slice, replace this pointer and update the applicable
 outcome with concise durable evidence. Continue through independent unblocked

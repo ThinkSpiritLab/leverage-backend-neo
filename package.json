@@ -149,7 +149,7 @@
         "displayName": "integration",
         "testMatch": [
           "<rootDir>/test/integration/**/*.spec.ts",
-          "<rootDir>/test/e2e/**/*.spec.ts"
+          "<rootDir>/test/e2e/app.e2e.spec.ts"
         ],
         "moduleFileExtensions": [
           "js",
