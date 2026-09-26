@@ -30,7 +30,8 @@ export class LogInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap(() => {
         const payload = settings.requirePayload
-          ? JSON.stringify({ body: req.body, params: req.params, query: req.query })
+          ? JSON.stringify({ body: req.body, params: req.params, query: req.query }, (key, value: unknown) =>
+              /password|passwd|secret|token|authorization|cookie|api[-_]?key/i.test(key) ? '[REDACTED]' : value)
           : '';
         // fire-and-forget: don't block response
         this.logService

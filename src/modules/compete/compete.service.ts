@@ -244,7 +244,8 @@ export class CompeteService {
 
     const qb = this.gamerRepo
       .createQueryBuilder('gamer')
-      .leftJoinAndSelect('gamer.user', 'user')
+      .leftJoin('gamer.user', 'user')
+      .addSelect(['user.id', 'user.username'])
       .leftJoinAndSelect('gamer.game', 'game')
       .orderBy('gamer.createdAt', 'DESC')
       .skip((page - 1) * perPage)
@@ -261,6 +262,11 @@ export class CompeteService {
     qb.andWhere('gamer.isTest = :isTest', { isTest: false });
 
     const [items, total] = await qb.getManyAndCount();
+    for (const item of items) {
+      delete (item as Partial<Gamer>).code;
+      delete (item as Partial<Gamer>).webhookSecret;
+      if (item.user) item.user = { id: item.user.id, username: item.user.username };
+    }
     return { items, total };
   }
 
@@ -279,16 +285,30 @@ export class CompeteService {
     return gamers.some((gamer) => gamer.userId === userId);
   }
 
-  async findOneGamer(id: number): Promise<Gamer> {
+  async findOneGamer(id: number, viewerId?: number): Promise<Gamer> {
     // Use QueryBuilder to force-load code (select:false column) alongside relations
     const gamer = await this.gamerRepo
       .createQueryBuilder('g')
       .addSelect('g.code') // force include select:false column
-      .leftJoinAndSelect('g.user', 'user')
+      .leftJoin('g.user', 'user')
+      .addSelect(['user.id', 'user.username'])
       .leftJoinAndSelect('g.game', 'game')
       .where('g.id = :id', { id })
       .getOne();
     if (!gamer) throw new NotFoundException(`Bot 选手 #${id} 不存在`);
+    const isOwner = viewerId !== undefined && viewerId === gamer.userId;
+    if (!isOwner && !gamer.opensource) delete (gamer as Partial<Gamer>).code;
+    if (isOwner) {
+      // The select:false secret is fetched only after verifying ownership.
+      const ownerSecret = await this.gamerRepo.findOne({
+        where: { id, userId: viewerId },
+        select: ['id', 'webhookSecret'],
+      });
+      gamer.webhookSecret = ownerSecret?.webhookSecret ?? null;
+    } else {
+      delete (gamer as Partial<Gamer>).webhookSecret;
+    }
+    if (gamer.user) gamer.user = { id: gamer.user.id, username: gamer.user.username };
     return gamer;
   }
 
@@ -384,7 +404,7 @@ export class CompeteService {
     dto: UpdateGamerDto,
     userId: number,
   ): Promise<Gamer> {
-    const original = await this.findOneGamer(id);
+    const original = await this.findOneGamer(id, userId);
     if (original.userId !== userId) {
       throw new BadRequestException('只能修改自己的 Bot');
     }
@@ -537,6 +557,7 @@ export class CompeteService {
     }
 
     const [items, total] = await qb.getManyAndCount();
+    for (const match of items) this.sanitizeMatchGamers(match);
     return { items, total };
   }
 
@@ -546,7 +567,19 @@ export class CompeteService {
       relations: ['game', 'links', 'links.gamer', 'links.gamer.user'],
     });
     if (!match) throw new NotFoundException(`对局 #${id} 不存在`);
+    this.sanitizeMatchGamers(match);
     return match;
+  }
+
+  private sanitizeMatchGamers(match: Match): void {
+    for (const link of match.links ?? []) {
+      if (!link.gamer) continue;
+      delete (link.gamer as Partial<Gamer>).code;
+      delete (link.gamer as Partial<Gamer>).webhookSecret;
+      if (link.gamer.user) {
+        link.gamer.user = { id: link.gamer.user.id, username: link.gamer.user.username };
+      }
+    }
   }
 
   /**
@@ -570,13 +603,17 @@ export class CompeteService {
         'gamer.language',
         'gamer.code',
         'gamer.userId',
+        'gamer.opensource',
       ])
       .where('gamer.id IN (:...ids)', {
         ids: gamerIds.length > 0 ? gamerIds : [0],
       })
       .getMany();
 
-    const gamerMap = new Map(gamers.map((g) => [g.id, g]));
+    const gamerMap = new Map(gamers.map((g) => {
+      if (g.userId !== _userId && !g.opensource) delete (g as Partial<Gamer>).code;
+      return [g.id, g] as const;
+    }));
 
     return {
       match,
@@ -1428,6 +1465,7 @@ export class CompeteService {
         const gamer = await this.gamerRepo
           .createQueryBuilder('g')
           .addSelect('g.code')
+          .addSelect('g.webhookSecret')
           .where('g.id = :id', { id: spec.gamerId })
           .getOne();
         if (!gamer) throw new NotFoundException(`Gamer #${spec.gamerId} 不存在`);

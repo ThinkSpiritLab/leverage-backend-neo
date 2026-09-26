@@ -515,6 +515,53 @@ describe('CompeteService', () => {
 
   // ─── Gamer CRUD ─────────────────────────────────────────────────────────────
 
+  describe('public Bot read contract', () => {
+    it.each([[undefined, false], [99, false], [42, true]])(
+      'private detail viewer %s may see code: %s', async (viewerId, visible) => {
+        const qb = makeQb({ getOne: jest.fn().mockResolvedValue({
+          ...gamerFixture, opensource: false, code: 'private source', webhookSecret: 'secret',
+          user: { id: 42, username: 'author', email: 'private@example.com' },
+        }) });
+        mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+        mockGamerRepo.findOne.mockResolvedValue({ webhookSecret: 'secret' });
+        const result = await service.findOneGamer(10, viewerId as number | undefined);
+        expect(result.code).toBe(visible ? 'private source' : undefined);
+        expect(result.webhookSecret).toBe(visible ? 'secret' : undefined);
+        expect(result.user).toEqual({ id: 42, username: 'author' });
+        if (visible) {
+          expect(mockGamerRepo.findOne).toHaveBeenCalledWith({
+            where: { id: 10, userId: 42 }, select: ['id', 'webhookSecret'],
+          });
+        } else {
+          expect(mockGamerRepo.findOne).not.toHaveBeenCalled();
+        }
+      },
+    );
+
+    it('anonymous sees open source but never its secret', async () => {
+      const qb = makeQb({ getOne: jest.fn().mockResolvedValue({
+        ...gamerFixture, code: 'public source', webhookSecret: 'secret',
+      }) });
+      mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+      const result = await service.findOneGamer(10);
+      expect(result.code).toBe('public source');
+      expect(result.webhookSecret).toBeUndefined();
+      expect(mockGamerRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('lists omit private code, secrets and private user fields', async () => {
+      const qb = makeQb({ getManyAndCount: jest.fn().mockResolvedValue([[
+        { ...gamerFixture, opensource: false, code: 'private source', webhookSecret: 'secret',
+          user: { id: 42, username: 'author', email: 'private@example.com' } },
+      ], 1]) });
+      mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+      const { items } = await service.findAllGamers({});
+      expect(items[0].code).toBeUndefined();
+      expect(items[0].webhookSecret).toBeUndefined();
+      expect(items[0].user).toEqual({ id: 42, username: 'author' });
+    });
+  });
+
   describe('findAllGamers', () => {
     it('应返回 gamer 列表', async () => {
       const qb = makeQb({
@@ -594,6 +641,20 @@ describe('CompeteService', () => {
       expect(result.title).toBe('Updated');
     });
 
+    it('owner fork inherits private code and secret when omitted', async () => {
+      const qb = makeQb({ getOne: jest.fn().mockResolvedValue({
+        ...gamerFixture, opensource: false, code: 'private source', webhookSecret: 'secret',
+      }) });
+      mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+      mockGamerRepo.findOne.mockResolvedValue({ webhookSecret: 'secret' });
+      mockGamerRepo.create.mockImplementation((value: unknown) => value);
+      mockGamerRepo.save.mockImplementation(async (value: unknown) => value);
+      const result = await service.updateGamer(10, { title: 'v2' } as any, 42);
+      expect(result.code).toBe('private source');
+      expect(result.webhookSecret).toBe('secret');
+      expect(qb.addSelect).toHaveBeenCalledWith('g.code');
+    });
+
     it('非本人修改时抛 BadRequestException', async () => {
       mockGamerQb({ userId: 99 }); // 返回不同 userId
       await expect(service.updateGamer(10, {} as any, 42)).rejects.toThrow(
@@ -615,6 +676,18 @@ describe('CompeteService', () => {
       expect(result.items).toHaveLength(1);
       expect(result.total).toBe(1);
     });
+    it('nested match rows never expose code, secrets or private user fields', async () => {
+      const nested = { ...matchFixture, links: [{ gamer: {
+        ...gamerFixture, opensource: false, code: 'private', webhookSecret: 'secret',
+        user: { id: 42, username: 'author', email: 'private@example.com' },
+      } }] } as Match;
+      const qb = makeQb({ getManyAndCount: jest.fn().mockResolvedValue([[nested], 1]) });
+      mockMatchRepo.createQueryBuilder.mockReturnValue(qb);
+      const { items } = await service.findAllMatches({});
+      expect(items[0].links[0].gamer.code).toBeUndefined();
+      expect(items[0].links[0].gamer.webhookSecret).toBeUndefined();
+      expect(items[0].links[0].gamer.user).toEqual({ id: 42, username: 'author' });
+    });
   });
 
   describe('findOneMatch', () => {
@@ -624,6 +697,16 @@ describe('CompeteService', () => {
       expect(result.id).toBe(100);
     });
 
+    it('scrubs nested gamer and user on detail', async () => {
+      mockMatchRepo.findOne.mockResolvedValue({ ...matchFixture, links: [{ gamer: {
+        ...gamerFixture, code: 'private', webhookSecret: 'secret',
+        user: { id: 42, username: 'author', email: 'private@example.com' },
+      } }] });
+      const result = await service.findOneMatch(100);
+      expect(result.links[0].gamer.code).toBeUndefined();
+      expect(result.links[0].gamer.webhookSecret).toBeUndefined();
+      expect(result.links[0].gamer.user).toEqual({ id: 42, username: 'author' });
+    });
     it('不存在时抛 NotFoundException', async () => {
       mockMatchRepo.findOne.mockResolvedValue(null);
       await expect(service.findOneMatch(999)).rejects.toThrow(
@@ -668,6 +751,21 @@ describe('CompeteService', () => {
 
       const result = await service.inspectMatch(100, 42);
       expect(result.participants).toHaveLength(0);
+    });
+    it('never exposes another participant private source', async () => {
+      mockMatchRepo.findOne.mockResolvedValue(matchFixture);
+      mockMatchGamerLinkRepo.find.mockResolvedValue([
+        { gamerId: 10, index: 0 }, { gamerId: 11, index: 1 },
+      ]);
+      const qb = makeQb({ getMany: jest.fn().mockResolvedValue([
+        { id: 10, userId: 42, opensource: false, code: 'own' },
+        { id: 11, userId: 43, opensource: false, code: 'other' },
+      ]) });
+      mockGamerRepo.createQueryBuilder.mockReturnValue(qb);
+      const result = await service.inspectMatch(100, 42);
+      expect(result.participants[0].gamer.code).toBe('own');
+      expect(result.participants[1].gamer.code).toBeUndefined();
+      expect(qb.select).toHaveBeenCalledWith(expect.arrayContaining(['gamer.opensource']));
     });
   });
 

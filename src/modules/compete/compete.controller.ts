@@ -31,6 +31,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAccessStrategy } from '../auth/strategies/jwt-access.strategy';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from './optional-jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -239,14 +240,15 @@ export class CompeteController {
     return this.competeService.createGamer(dto, user.sub);
   }
 
-  /**
-   * PATCH /compete/gamers/:id
-   * 更新 Bot（本人）
-   */
+  /** Public metadata and open-source code; private code/secret only for owner. */
   @Get('gamers/:id')
-  @ApiOperation({ summary: 'Bot 详情（含代码）' })
-  findOneGamer(@Param('id', ParseIntPipe) id: number) {
-    return this.competeService.findOneGamer(id);
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Bot 详情（私有代码与 webhook secret 仅本人可见）' })
+  findOneGamer(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    return this.competeService.findOneGamer(id, user?.sub);
   }
 
   @Get('gamers/:id/elo-history')

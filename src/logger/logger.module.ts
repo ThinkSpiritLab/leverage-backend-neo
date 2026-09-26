@@ -34,7 +34,8 @@ import { LoggerModule as PinoLoggerModule } from 'nestjs-pino';
               }) {
                 return {
                   method: req.method,
-                  url: req.url,
+                  // EventSource and judge callbacks carry capabilities in queries.
+                  url: req.url?.split('?')[0],
                   remoteAddress: req.remoteAddress,
                 };
               },

@@ -72,7 +72,7 @@ export class Gamer {
   @Column({ type: 'varchar', length: 512, nullable: true })
   webhookUrl: string | null;
 
-  @Column({ type: 'varchar', length: 128, nullable: true })
+  @Column({ type: 'varchar', length: 128, nullable: true, select: false })
   webhookSecret: string | null;
 
   @Column({ type: 'boolean', default: false, comment: '是否为测试临时 gamer（不计入排行榜）' })
