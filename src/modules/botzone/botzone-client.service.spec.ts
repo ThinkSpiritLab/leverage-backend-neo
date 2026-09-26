@@ -99,7 +99,7 @@ describe('BotzoneClientService', () => {
     it('includes providerMeta with language and judgeMode', async () => {
       const result = await service.enqueue(baseParams);
       expect(result.providerMeta).toMatchObject({
-        language: 'cpp17',
+        language: 'cpp',
         judgeMode: 'standard',
       });
     });
@@ -127,16 +127,14 @@ describe('BotzoneClientService', () => {
       expect(body.callback.finish).not.toContain('test-callback-secret');
     });
 
-    it('maps language 6 (Java) to "java"', async () => {
-      await service.enqueue({ ...baseParams, language: 6 });
-      const body = mockAxiosInstance.post.mock.calls[0][1];
-      expect(body.language).toBe('java');
+    it.each([0, 1, 2, 4, 5, 6, 7, 8, 999])('rejects unsupported numeric language %i before POST', async (language) => {
+      await expect(service.enqueue({ ...baseParams, language })).rejects.toThrow(/Unsupported Botzone OJ language/);
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
     });
 
-    it('falls back to "cpp17" for unknown language codes', async () => {
-      await service.enqueue({ ...baseParams, language: 999 });
-      const body = mockAxiosInstance.post.mock.calls[0][1];
-      expect(body.language).toBe('cpp17');
+    it.each([[3, 'cpp'], [9, 'python'], [10, 'javascript'], [11, 'typescript']])('maps numeric %i to %s', async (language, expected) => {
+      await service.enqueue({ ...baseParams, language });
+      expect(mockAxiosInstance.post.mock.calls[0][1].language).toBe(expected);
     });
 
     it('uses judgeMode=standard when no checker provided', async () => {
@@ -155,7 +153,12 @@ describe('BotzoneClientService', () => {
       const body = mockAxiosInstance.post.mock.calls[0][1];
       expect(body.judgeMode).toBe('checker');
       expect(body.checkerSource).toBe('#include <cstdio>');
-      expect(body.checkerLanguage).toBe('cpp17');
+      expect(body.checkerLanguage).toBe('cpp');
+    });
+
+    it('rejects unsupported checker runtime rather than silently changing judge mode', async () => {
+      await expect(service.enqueue({ ...baseParams, checkerCode: 'x', checkerLanguage: 'java' })).rejects.toThrow(/Unsupported Botzone checker language/);
+      expect(mockAxiosInstance.post).not.toHaveBeenCalled();
     });
 
     it('sends timeLimitMs and memoryLimitMb', async () => {
@@ -281,20 +284,47 @@ describe('BotzoneClientService', () => {
       expect(result.status).toBe(Status.SE);
     });
 
-    it('calls GET /api/judger/submission/:jobId', async () => {
+    it('calls GET /v1/judge/:jobId/status', async () => {
       mockAxiosInstance.get.mockResolvedValue({
         data: { jobId: 'bz-x', state: 'running', type: 'oj' },
       });
       await service.poll(99, 'bz-x');
       expect(mockAxiosInstance.get).toHaveBeenCalledWith(
-        '/api/judger/submission/bz-x',
+        '/v1/judge/bz-x/status',
       );
+    });
+    it('completes Bull completed OJ result in milliseconds and kilobytes', async () => {
+      mockAxiosInstance.get.mockResolvedValue({ data: {
+        jobId: 'bz-5', state: 'completed', type: 'oj', finishedOn: '2026-01-01T00:00:00.000Z',
+        result: { verdict: 'WA', compile: { verdict: 'OK' }, testcases: [
+          { id: 1, verdict: 'AC', timeMs: 17, memoryKb: 1024 },
+          { id: 2, verdict: 'WA', timeMs: 29, memoryKb: 2048 },
+        ] },
+      } });
+      const result = await service.poll(5, 'bz-5');
+      expect(result).toMatchObject({ done: true, status: Status.WA, time: 29, memory: 2048 });
+      expect(JSON.parse(result.judgeResult!).testcases[1]).toMatchObject({ verdict: 'WA', time: 29, memory: 2048 });
+    });
+    it.each(['waiting', 'active', 'delayed', 'paused'])('does not finalize %s', async (state) => {
+      mockAxiosInstance.get.mockResolvedValue({ data: { jobId: 'bz-5', state, type: 'oj' } });
+      expect((await service.poll(5, 'bz-5')).done).toBe(false);
+    });
+    it('unknown completed verdict cannot become AC', async () => {
+      mockAxiosInstance.get.mockResolvedValue({ data: { jobId: 'bz-5', state: 'completed', type: 'oj', result: { verdict: 'NEW', testcases: [] } } });
+      expect((await service.poll(5, 'bz-5')).status).toBe(Status.SE);
     });
   });
 
   // ─── mapCallback ──────────────────────────────────────────────────────────
 
   describe('mapCallback', () => {
+    it('maps actual raw OJ callback AC, CE and unknown verdict without envelope', () => {
+      const ac = service.mapCallback({ verdict: 'AC', testcases: [{ id: 1, verdict: 'AC', timeMs: 13, memoryKb: 1024 }], compile: { verdict: 'OK' } });
+      expect(ac).toMatchObject({ done: true, status: Status.AC, time: 13, memory: 1024 });
+      const ce = service.mapCallback({ verdict: 'CE', testcases: [], compile: { verdict: 'CE', message: 'syntax error' } });
+      expect(ce).toMatchObject({ done: true, status: Status.CE, compileErrorMsg: 'syntax error' });
+      expect(service.mapCallback({ verdict: 'UNKNOWN' as any, testcases: [], compile: { verdict: 'OK' } }).status).toBe(Status.SE);
+    });
     // ─── OJ callbacks ──────────────────────────────────────────────────────
 
     describe('OJ type', () => {

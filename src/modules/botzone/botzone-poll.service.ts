@@ -100,7 +100,7 @@ export class BotzonePollService implements OnModuleInit, OnApplicationShutdown {
         's.updatedAt < :cutoff',
         { cutoff: new Date(Date.now() - 10_000) },
       )
-      .select(['s.id', 's.externalJobId', 's.status'])
+      .select(['s.id', 's.externalJobId', 's.status', 's.judgeAttempt'])
       .limit(50)
       .getMany();
 

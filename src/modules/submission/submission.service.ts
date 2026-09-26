@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -37,6 +38,7 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { SUBMISSION_TOTAL_COUNTER } from '../metrics/metrics.module';
 import { BotzoneClientService } from '../botzone/botzone-client.service';
+import { LEVERAGE_LANG_TO_BOTZONE } from '../botzone/botzone.types';
 import { ReceiveService } from '../receive/receive.service';
 import {
   InlineTestcase,
@@ -118,6 +120,7 @@ export class SubmissionService {
     const usesBotzone =
       botzoneEnabled &&
       this.botzoneClient !== null;
+    if (usesBotzone) this.assertBotzoneLanguage(dto.language);
 
     const submission = await this.submissionRepo.save({
       userId,
@@ -269,6 +272,7 @@ export class SubmissionService {
         where: { id }, relations: ['problem'], lock: { mode: 'pessimistic_write' },
       });
       if (!submission) throw new NotFoundException(`提交 #${id} 不存在`);
+      if (submission.provider === JudgeProviderName.Botzone) this.assertBotzoneLanguage(submission.language);
       const misc = await manager.findOne(SubmissionMisc, { where: { submissionId: id } });
       if (!misc) throw new NotFoundException(`提交 #${id} 的代码不存在`);
       await manager.save(RejudgeLog, {
@@ -284,6 +288,12 @@ export class SubmissionService {
     });
     await this.dispatch(submission, submission.problem, code);
     this.logger.log(`Rejudge queued: submissionId=${id}`);
+  }
+
+  private assertBotzoneLanguage(language: number): void {
+    if (!Object.prototype.hasOwnProperty.call(LEVERAGE_LANG_TO_BOTZONE, language)) {
+      throw new BadRequestException('Botzone supports C++17 (3), Python3 (9), JavaScript (10) and TypeScript (11)');
+    }
   }
 
   async getStatus(id: number): Promise<{ status: number }> {

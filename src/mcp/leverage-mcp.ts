@@ -15,6 +15,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { LEVERAGE_LANG_TO_BOTZONE, resolveBotzoneLanguage } from '../modules/botzone/botzone.types';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -81,15 +82,14 @@ async function pollMatch(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const result = (await apiGet(`/compete/matches/${matchId}`)) as Record<string, unknown>;
-    // The match result has a verdict field; if it's finish/error/forfeit we're done
-    const verdict = result.verdict as string | undefined;
-    if (verdict && verdict !== 'continue' && verdict !== 'running' && verdict !== 'pending') {
-      return result;
-    }
-    // Also check if status indicates completion
-    const status = result.status as string | undefined;
-    if (status && status !== 'running' && status !== 'pending') {
-      return result;
+    const status = result.status;
+    if (typeof status === 'number') {
+      if (status === 2 || status === 3) return result;
+    } else {
+      // Compatibility for older text-status responses.
+      const verdict = result.verdict as string | undefined;
+      if (status === 'finished' || status === 'failed' ||
+          (verdict && !['continue', 'running', 'pending'].includes(verdict))) return result;
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
@@ -346,26 +346,28 @@ server.tool(
 
 server.tool(
   'submit_judge',
-  'Upload a custom judge program to a game (requires admin/supervisor token). ' +
-  'After uploading, the judge runs in a sandbox for every match of this game. ' +
+  'Upload a custom judge program to a game (requires admin or sa token). ' +
+  'Execution isolation is owned by the external judge; verify it before using untrusted code. ' +
   'Use test_judge first to validate your code before submitting.',
   {
     gameId: z.number().int().describe('Game ID to update'),
     judgerCode: z.string().describe('Judge source code (Python, C++, etc.)'),
-    judgerLanguage: z.number().int().optional().default(9)
-      .describe('Language ID: 9=Python3, 2=C++17, 6=Java, 7=JavaScript. Default: 9 (Python3)'),
+    judgerLanguage: z.union([z.string(), z.number().int()]).optional().default('python')
+      .describe('Runtime: python, cpp (C++17), javascript or typescript. Legacy numeric IDs 3/9/10/11 are accepted.'),
   },
   async ({ gameId, judgerCode, judgerLanguage }) => {
+    const runtime = typeof judgerLanguage === 'number' ? LEVERAGE_LANG_TO_BOTZONE[judgerLanguage] : resolveBotzoneLanguage(judgerLanguage);
+    if (!runtime) throw new Error('Unsupported Botzone judge language');
     const result = (await apiPatch(`/compete/games/${gameId}`, {
       judgerCode,
-      judgerLanguage,
+      judgerLanguage: runtime,
     })) as Record<string, unknown>;
     return {
       content: [
         {
           type: 'text',
           text: JSON.stringify(
-            { ok: true, gameId, judgerLanguage, message: '裁判程序已更新' },
+            { ok: true, gameId, judgerLanguage: runtime, message: '裁判程序已更新' },
             null,
             2,
           ),
@@ -379,7 +381,7 @@ server.tool(
 
 server.tool(
   'submit_renderer',
-  'Upload an HTML renderer for a game (requires admin/supervisor token). ' +
+  'Upload an HTML renderer for a game (requires admin or sa token). ' +
   'The renderer is sandboxed in an iframe and receives game state via postMessage. ' +
   'Expected message types: gameLog ({type:"gameLog", gameLog, round}) and gameState ({type:"gameState", gameState, playerIndex}). ' +
   'Use the renderer tab in Playground to test before submitting.',

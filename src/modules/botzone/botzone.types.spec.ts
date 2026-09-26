@@ -6,6 +6,7 @@ import {
   BotzoneJobState,
   LEVERAGE_LANG_TO_BOTZONE,
   botzoneStateToStatus,
+  resolveBotzoneLanguage,
 } from './botzone.types';
 import { Status } from '../heng/heng.types';
 
@@ -106,8 +107,8 @@ describe('botzone.types', () => {
       }
     });
 
-    it('terminal set has exactly 2 entries', () => {
-      expect(BOTZONE_TERMINAL_STATES.size).toBe(2);
+    it('terminal set includes Bull completed and the two legacy terminals', () => {
+      expect([...BOTZONE_TERMINAL_STATES].sort()).toEqual(['completed', 'failed', 'finished']);
     });
   });
 
@@ -157,24 +158,40 @@ describe('botzone.types', () => {
   // ─── Language mapping ──────────────────────────────────────────────────────
 
   describe('LEVERAGE_LANG_TO_BOTZONE', () => {
-    it('maps language 0 (C) to "c"', () => {
-      expect(LEVERAGE_LANG_TO_BOTZONE[0]).toBe('c');
+    it('rejects language 0 (C)', () => {
+      expect(LEVERAGE_LANG_TO_BOTZONE[0]).toBeUndefined();
     });
 
-    it('maps language 1 (C++) to "cpp11"', () => {
-      expect(LEVERAGE_LANG_TO_BOTZONE[1]).toBe('cpp11');
+    it('rejects language 1 (C++11)', () => {
+      expect(LEVERAGE_LANG_TO_BOTZONE[1]).toBeUndefined();
     });
 
-    it('maps language 6 (Java) to "java"', () => {
-      expect(LEVERAGE_LANG_TO_BOTZONE[6]).toBe('java');
+    it('rejects language 6 (Java)', () => {
+      expect(LEVERAGE_LANG_TO_BOTZONE[6]).toBeUndefined();
     });
 
-    it('maps language 9 (Python3) to "python3"', () => {
-      expect(LEVERAGE_LANG_TO_BOTZONE[9]).toBe('python3');
+    it('maps language 9 (Python3) to python', () => {
+      expect(LEVERAGE_LANG_TO_BOTZONE[9]).toBe('python');
     });
 
     it('maps language 10 (JS) to "javascript"', () => {
       expect(LEVERAGE_LANG_TO_BOTZONE[10]).toBe('javascript');
     });
+  });
+  it('only maps supported numeric OJ runtimes', () => {
+    expect(LEVERAGE_LANG_TO_BOTZONE).toEqual({
+      3: 'cpp', 9: 'python',
+      10: 'javascript', 11: 'typescript',
+    });
+  });
+  it('resolves canonical runtimes and only known legacy aliases', () => {
+    for (const runtime of ['cpp', 'python', 'javascript', 'typescript'] as const) {
+      expect(resolveBotzoneLanguage(runtime)).toBe(runtime);
+    }
+    expect(resolveBotzoneLanguage('cpp17')).toBe('cpp');
+    expect(resolveBotzoneLanguage('python3')).toBe('python');
+    for (const runtime of ['java', 'go', 'c', 'python2', 'cpp11', '']) {
+      expect(resolveBotzoneLanguage(runtime)).toBeUndefined();
+    }
   });
 });

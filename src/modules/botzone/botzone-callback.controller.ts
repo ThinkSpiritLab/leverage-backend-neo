@@ -23,11 +23,10 @@ import type { BotzoneCallbackBody } from './botzone.types';
  * Receives the result callback from botzone-neo.
  *
  * POST /botzone/callback
- *   - Authenticated via Bearer token: Authorization: Bearer <BOTZONE_CALLBACK_TOKEN>
- *   - Idempotent: re-delivery of the same jobId is a no-op once terminal
- *
- * The correlationId field in the callback body maps 1-to-1 with the
- * leverage submissionId, as set during submission enqueue.
+ *   - Raw OJ callback: signed query submissionId + attemptId + token
+ *   - Legacy envelope: Bearer token or signed query token
+ *   - Shared ReceiveService checks current attempt / legacy job identity
+ *     and handles repeated terminal delivery idempotently.
  */
 @ApiTags('botzone')
 @SkipThrottle()
@@ -50,7 +49,7 @@ export class BotzoneCallbackController {
   /**
    * Botzone-neo result callback
    *
-   * @param token   Bearer token from Authorization header
+   * @param authHeader   Legacy Bearer token from Authorization header
    * @param body    Callback payload from botzone-neo
    */
   @Post('callback')
@@ -65,10 +64,21 @@ export class BotzoneCallbackController {
   ): Promise<{ ok: boolean }> {
     this.assertToken(authHeader, queryToken, querySubmissionId, attemptId);
 
-    const { correlationId, jobId, state } = body;
+    const legacy = 'state' in body;
+    // Raw upstream results contain no job or submission identity. A signed
+    // attempt URL is mandatory; Bearer auth alone cannot bind this result.
+    if (!legacy) {
+      if (!querySubmissionId || !attemptId) return { ok: false };
+      this.assertToken(undefined, queryToken, querySubmissionId, attemptId);
+    }
+    const correlationId = legacy ? body.correlationId : undefined;
+    const jobId = legacy ? body.jobId : undefined;
+    const state = legacy ? body.state : 'completed';
     const submissionId = Number(querySubmissionId ?? correlationId);
 
-    if (!Number.isSafeInteger(submissionId) || submissionId <= 0 || (attemptId !== undefined && !/^[a-f0-9]{32}$/.test(attemptId))) {
+    if (!Number.isSafeInteger(submissionId) || submissionId <= 0 ||
+        (attemptId !== undefined && !/^[a-f0-9]{32}$/.test(attemptId)) ||
+        (legacy && querySubmissionId !== undefined && correlationId !== undefined && String(submissionId) !== correlationId)) {
       this.logger.warn(
         `Botzone callback: invalid correlationId="${correlationId}"`,
       );
@@ -80,7 +90,7 @@ export class BotzoneCallbackController {
     );
 
     // Only finalize on terminal state; intermediate states are update-only
-    const isTerminal = BOTZONE_TERMINAL_STATES.has(state);
+    const isTerminal = !legacy || BOTZONE_TERMINAL_STATES.has(state);
 
     if (isTerminal) {
       const pollResult = this.botzoneClient.mapCallback(body);

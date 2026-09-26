@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
+import { createHmac } from 'crypto';
 import { BotzoneCallbackController } from './botzone-callback.controller';
 import { BotzoneClientService } from './botzone-client.service';
 import { BotzoneResultService } from './botzone-result.service';
@@ -89,6 +90,34 @@ describe('BotzoneCallbackController', () => {
   // ─── Auth ────────────────────────────────────────────────────────────────
 
   describe('token authentication', () => {
+    const attempt = 'a'.repeat(32);
+    const signature = (id: string, aid: string) => createHmac('sha256', 'secret-callback-token').update(`${id}:${aid}`).digest('hex');
+
+    it('accepts signed raw upstream OJ callback and forwards attempt identity', async () => {
+      const raw: BotzoneCallbackBody = { verdict: 'AC', testcases: [{ id: 1, verdict: 'AC', timeMs: 12, memoryKb: 512 }], compile: { verdict: 'OK' } };
+      await expect(controller.receiveCallback(undefined, raw, '42', attempt, signature('42', attempt))).resolves.toEqual({ ok: true });
+      expect(mockBotzoneClient.mapCallback).toHaveBeenCalledWith(raw);
+      expect(mockBotzoneResultService.finalize).toHaveBeenCalledWith(42, expect.any(Object), undefined, attempt);
+    });
+
+    it('rejects wrong attempt signature before mapping or settlement', async () => {
+      const raw: BotzoneCallbackBody = { verdict: 'AC', testcases: [], compile: { verdict: 'OK' } };
+      await expect(controller.receiveCallback(undefined, raw, '42', 'b'.repeat(32), signature('42', attempt))).rejects.toThrow(UnauthorizedException);
+      expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsigned raw callbacks even with a Bearer token and no attempt', async () => {
+      await expect(controller.receiveCallback('Bearer secret-callback-token', { verdict: 'AC', testcases: [] }, '42')).resolves.toEqual({ ok: false });
+      expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
+    });
+    it('rejects raw Bearer callback with an attempt but no HMAC query token', async () => {
+      await expect(controller.receiveCallback('Bearer secret-callback-token', { verdict: 'AC', testcases: [] }, '42', attempt)).rejects.toThrow(UnauthorizedException);
+      expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
+    });
+    it('rejects a legacy envelope whose query submission differs from correlationId', async () => {
+      expect(await controller.receiveCallback(undefined, buildOJBody(), '41', attempt, signature('41', attempt))).toEqual({ ok: false });
+      expect(mockBotzoneResultService.finalize).not.toHaveBeenCalled();
+    });
     it('accepts correct Bearer token', async () => {
       const body = buildOJBody();
       await expect(

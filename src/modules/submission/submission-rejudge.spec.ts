@@ -10,8 +10,8 @@ function fixture() {
     judgeAttempt: 'old',
     externalJobId: 'old-job',
     status: Status.AC,
-    language: 0,
-    problem: { id: 3, timeLimit: 1000, memoryLimit: 65536 },
+    language: 3,
+    problem: { id: 3, timeLimit: 1000, memoryLimit: 64 },
     problemId: 3,
   };
   const misc = {
@@ -57,6 +57,15 @@ function fixture() {
 }
 
 describe('provider-aware rejudge', () => {
+  it('rejects an unsupported Botzone language before clearing the previous result', async () => {
+    const f = fixture();
+    f.submission.language = 0;
+    await expect(f.service.rejudge(7)).rejects.toThrow('Botzone');
+    expect(f.manager.save).not.toHaveBeenCalled();
+    expect(f.manager.update).not.toHaveBeenCalled();
+    expect(f.botzone.enqueue).not.toHaveBeenCalled();
+    expect(f.submission.status).toBe(Status.AC);
+  });
   it('rejudges through the original provider with a fresh attempt and no previous job', async () => {
     const f = fixture();
     await f.service.rejudge(7);

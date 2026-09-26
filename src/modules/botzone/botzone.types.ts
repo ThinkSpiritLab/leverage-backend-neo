@@ -19,6 +19,11 @@ import { Status } from '../heng/heng.types';
 // ─── Job state (lifecycle phase) ──────────────────────────────────────────────
 
 export type BotzoneJobState =
+  | 'waiting'
+  | 'active'
+  | 'delayed'
+  | 'paused'
+  | 'completed'
   | 'pending'
   | 'queued'
   | 'compiling'
@@ -29,6 +34,7 @@ export type BotzoneJobState =
 // ─── Verdict (outcome when state = 'finished') ────────────────────────────────
 
 export type BotzoneVerdict =
+  | 'OK' | 'AC' | 'WA' | 'TLE' | 'MLE' | 'RE' | 'CE' | 'SE' | 'NR' | 'NJ' | 'PE'
   | 'Accepted'
   | 'WrongAnswer'
   | 'TimeLimitExceeded'
@@ -53,7 +59,7 @@ export interface BotzoneOJTestcase {
 }
 
 export interface BotzoneOJCompile {
-  verdict: 'Ok' | 'Error';
+  verdict: 'OK' | 'CE' | 'Ok' | 'Error';
   message?: string;
 }
 
@@ -79,20 +85,16 @@ export interface BotzoneGameResult {
 // ─── Submit request/response ──────────────────────────────────────────────────
 
 export interface BotzoneSubmitRequest {
-  /** Source code (base64 encoded) */
-  sourceCode: string;
-  /** Language identifier used by botzone-neo */
+  type: 'oj';
   language: string;
-  /** Botzone-neo problem identifier */
-  problemId: string;
-  /** Time limit in milliseconds */
-  timeLimit: number;
-  /** Memory limit in megabytes */
-  memoryLimitMB: number;
-  /** Callback URL to receive the result */
-  callbackUrl: string;
-  /** Opaque string echoed back in callback for correlation */
-  correlationId: string;
+  source: string;
+  testcases: Array<{ id: number; input: string; expectedOutput: string }>;
+  timeLimitMs: number;
+  memoryLimitMb: number;
+  callback: { finish: string };
+  judgeMode: 'standard' | 'checker';
+  checkerSource?: string;
+  checkerLanguage?: string;
 }
 
 export interface BotzoneSubmitResponse {
@@ -107,14 +109,14 @@ export interface BotzonePollResponse {
   jobId: string;
   state: BotzoneJobState;
   type: 'oj' | 'botzone';
-  finishedOn?: number;
+  finishedOn?: string | number;
   failedReason?: string;
   result?: BotzoneOJResult | BotzoneGameResult;
 }
 
 // ─── Callback body (POST /botzone/callback) ───────────────────────────────────
 
-export interface BotzoneCallbackBody {
+export interface BotzoneCallbackEnvelope {
   jobId: string;
   correlationId: string;
   state: BotzoneJobState;
@@ -122,9 +124,23 @@ export interface BotzoneCallbackBody {
   result?: BotzoneOJResult | BotzoneGameResult;
 }
 
+/** Upstream posts the raw OJResult to callback.finish, not the Bull envelope. */
+export type BotzoneCallbackBody = BotzoneCallbackEnvelope | BotzoneOJResult;
+
 // ─── Verdict → Leverage Status mapping ───────────────────────────────────────
 
 export const BOTZONE_VERDICT_TO_LEVERAGE: Record<BotzoneVerdict, Status> = {
+  OK: Status.SE, // compile success is not an accepted OJ answer
+  AC: Status.AC,
+  WA: Status.WA,
+  TLE: Status.TLE,
+  MLE: Status.MLE,
+  RE: Status.RE,
+  CE: Status.CE,
+  SE: Status.SE,
+  NR: Status.SE,
+  NJ: Status.SE,
+  PE: Status.PE,
   Accepted: Status.AC,
   WrongAnswer: Status.WA,
   TimeLimitExceeded: Status.TLE,
@@ -139,6 +155,11 @@ export const BOTZONE_VERDICT_TO_LEVERAGE: Record<BotzoneVerdict, Status> = {
 // ─── State → Leverage Status mapping (for in-progress states) ────────────────
 
 export const BOTZONE_STATE_TO_LEVERAGE: Record<BotzoneJobState, Status> = {
+  waiting: Status.PENDING,
+  active: Status.JUDGING,
+  delayed: Status.PENDING,
+  paused: Status.PENDING,
+  completed: Status.SE, // terminal; use result verdict instead
   pending: Status.PENDING,
   queued: Status.PENDING,
   compiling: Status.COMPILING,
@@ -151,6 +172,7 @@ export const BOTZONE_STATE_TO_LEVERAGE: Record<BotzoneJobState, Status> = {
 
 /** A job in one of these states has a final outcome and needs no further polling. */
 export const BOTZONE_TERMINAL_STATES = new Set<BotzoneJobState>([
+  'completed',
   'finished',
   'failed',
 ]);
@@ -159,19 +181,23 @@ export const BOTZONE_TERMINAL_STATES = new Set<BotzoneJobState>([
 
 /** Botzone language codes (leverage language int → botzone language string) */
 export const LEVERAGE_LANG_TO_BOTZONE: Record<number, string> = {
-  0: 'c',
-  1: 'cpp11',
-  2: 'cpp14',
-  3: 'cpp17',
-  4: 'pascal',
-  5: 'c',
-  6: 'java',
-  7: 'kotlin',
-  8: 'python2',
-  9: 'python3',
+  // Upstream compiles with -std=c++17; do not silently upgrade C++11/14.
+  3: 'cpp',
+  9: 'python',
   10: 'javascript',
   11: 'typescript',
 };
+
+/** Four canonical Botzone runtimes; only two established aliases are accepted. */
+export function resolveBotzoneLanguage(value: string): 'cpp' | 'python' | 'javascript' | 'typescript' | undefined {
+  switch (value) {
+    case 'cpp': case 'cpp17': return 'cpp';
+    case 'python': case 'python3': return 'python';
+    case 'javascript': return 'javascript';
+    case 'typescript': return 'typescript';
+    default: return undefined;
+  }
+}
 
 // ─── Helper: map job state + optional result to leverage Status ───────────────
 
@@ -180,10 +206,13 @@ export function botzoneStateToStatus(
   result?: BotzoneOJResult | BotzoneGameResult,
 ): Status {
   if (state === 'failed') return Status.SE;
-  if (state === 'finished') {
+  if (state === 'finished' || state === 'completed') {
     if (!result) return Status.SE;
     const verdict = (result as { verdict: string }).verdict as BotzoneVerdict;
-    return BOTZONE_VERDICT_TO_LEVERAGE[verdict] ?? Status.SE;
+    if ('compile' in result && result.compile?.verdict === 'CE') return Status.CE;
+    return Object.prototype.hasOwnProperty.call(BOTZONE_VERDICT_TO_LEVERAGE, verdict)
+      ? BOTZONE_VERDICT_TO_LEVERAGE[verdict]
+      : Status.SE;
   }
   return BOTZONE_STATE_TO_LEVERAGE[state] ?? Status.PENDING;
 }

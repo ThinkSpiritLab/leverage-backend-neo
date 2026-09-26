@@ -13,12 +13,14 @@ import { Status } from '../heng/heng.types';
 import {
   BOTZONE_TERMINAL_STATES,
   BotzoneCallbackBody,
+  BotzoneSubmitRequest,
   BotzoneGameResult,
   BotzoneJobState,
   BotzoneOJResult,
   BotzonePollResponse,
   LEVERAGE_LANG_TO_BOTZONE,
   botzoneStateToStatus,
+  resolveBotzoneLanguage,
 } from './botzone.types';
 
 /**
@@ -83,7 +85,13 @@ export class BotzoneClientService implements IJudgeProvider {
       checkerLanguage,
     } = params;
 
-    const botzoneLanguage = LEVERAGE_LANG_TO_BOTZONE[language] ?? 'cpp17';
+    const botzoneLanguage = LEVERAGE_LANG_TO_BOTZONE[language];
+    if (!botzoneLanguage) throw new Error(`Unsupported Botzone OJ language: ${language}`);
+    const normalizedCheckerLanguage = checkerLanguage === undefined
+      ? undefined : resolveBotzoneLanguage(checkerLanguage);
+    if (checkerLanguage && !normalizedCheckerLanguage) {
+      throw new Error(`Unsupported Botzone checker language: ${checkerLanguage}`);
+    }
     const callback = new URL(`${this.callbackBase}/botzone/callback`);
     callback.searchParams.set('submissionId', String(submissionId));
     if (params.attemptId) callback.searchParams.set('attemptId', params.attemptId);
@@ -94,7 +102,7 @@ export class BotzoneClientService implements IJudgeProvider {
 
     const useChecker = !!(checkerCode && checkerLanguage);
 
-    const body: Record<string, unknown> = {
+    const body: BotzoneSubmitRequest = {
       type: 'oj',
       language: botzoneLanguage,
       source: code,
@@ -111,11 +119,11 @@ export class BotzoneClientService implements IJudgeProvider {
 
     if (useChecker) {
       body.checkerSource = checkerCode;
-      body.checkerLanguage = checkerLanguage;
+      body.checkerLanguage = normalizedCheckerLanguage;
     }
 
     this.logger.log(
-      `Submitting OJ task to botzone: submissionId=${submissionId}, language=${botzoneLanguage}, judgeMode=${body.judgeMode}, testcases=${testcases.length}`,
+      `Submitting OJ task to botzone: submissionId=${submissionId}, language=${botzoneLanguage}, judgeMode=${useChecker ? 'checker' : 'standard'}, testcases=${testcases.length}`,
     );
 
     const res = await this.httpClient.post<{ jobId: string }>(
@@ -147,10 +155,13 @@ export class BotzoneClientService implements IJudgeProvider {
     );
 
     const res = await this.httpClient.get<BotzonePollResponse>(
-      `/api/judger/submission/${externalJobId}`,
+      `/v1/judge/${encodeURIComponent(externalJobId)}/status`,
     );
 
     const data = res.data;
+    if (data.jobId && data.jobId !== externalJobId) {
+      throw new Error('Botzone poll jobId mismatch');
+    }
     return this.buildPollResult(data.state, data.type, data.result);
   }
 
@@ -159,7 +170,8 @@ export class BotzoneClientService implements IJudgeProvider {
    * Used by the callback controller to avoid duplication.
    */
   mapCallback(body: BotzoneCallbackBody): PollResult {
-    return this.buildPollResult(body.state, body.type, body.result);
+    if ('state' in body) return this.buildPollResult(body.state, body.type, body.result);
+    return this.buildOJPollResult(body, botzoneStateToStatus('completed', body));
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────
@@ -184,7 +196,7 @@ export class BotzoneClientService implements IJudgeProvider {
       return { done: true, status: Status.SE };
     }
 
-    // state === 'finished'
+    // completed (Bull) or finished (legacy envelope)
     if (!result) {
       return { done: true, status: Status.SE };
     }
@@ -201,7 +213,8 @@ export class BotzoneClientService implements IJudgeProvider {
    * judgeResult shape: { testcases: [{id, verdict, time, memory, actualOutput, message}] }
    */
   private buildOJPollResult(result: BotzoneOJResult, status: number): PollResult {
-    const testcases = result.testcases.map((tc) => ({
+    const cases = Array.isArray(result.testcases) ? result.testcases : [];
+    const testcases = cases.map((tc) => ({
       id: tc.id,
       verdict: tc.verdict,
       time: tc.timeMs,
@@ -214,12 +227,12 @@ export class BotzoneClientService implements IJudgeProvider {
 
     // Aggregate time/memory from test cases (max over all cases)
     const time =
-      result.testcases.length > 0
-        ? Math.max(...result.testcases.map((tc) => tc.timeMs ?? 0))
+      cases.length > 0
+        ? Math.max(...cases.map((tc) => tc.timeMs ?? 0))
         : undefined;
     const memory =
-      result.testcases.length > 0
-        ? Math.max(...result.testcases.map((tc) => tc.memoryKb ?? 0))
+      cases.length > 0
+        ? Math.max(...cases.map((tc) => tc.memoryKb ?? 0))
         : undefined;
 
     const pollResult: PollResult = {
@@ -231,7 +244,7 @@ export class BotzoneClientService implements IJudgeProvider {
     };
 
     // Store compile error message when verdict is CE
-    if (result.verdict === 'CompileError' && result.compile?.message) {
+    if ((result.verdict === 'CompileError' || result.verdict === 'CE' || result.compile?.verdict === 'CE') && result.compile?.message) {
       pollResult.compileErrorMsg = result.compile.message;
     }
 

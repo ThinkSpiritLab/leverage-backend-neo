@@ -18,6 +18,7 @@ import {
 } from '../../metrics/metrics.module';
 import { Match } from '../../../database/entities/match.entity';
 import { MatchStatus } from '../../compete/compete.service';
+import { resolveBotzoneLanguage } from '../../botzone/botzone.types';
 import type { CompeteTxPayload } from '../../compete/compete-tx.worker';
 
 /**
@@ -119,13 +120,21 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     const callbackToken = this.configService.get<string>('botzone.callbackToken', '');
     const tokenParam = callbackToken ? `?token=${encodeURIComponent(callbackToken)}` : '';
     const callbackUrl = `${callbackBase}/compete/match-callback/${matchId}${tokenParam}`;
+    const judgeLanguage = resolveBotzoneLanguage(game.judgerLanguage || 'python');
+    const invalidRuntime = (game.judgerCode && !judgeLanguage) || gamers.some(gamer =>
+      (!gamer.type || gamer.type === 'code') && !resolveBotzoneLanguage(gamer.language || 'python'));
+    if (invalidRuntime) {
+      this.logger.warn(`Unsupported Botzone runtime for match ${matchId}`);
+      await this.matchRepo.update(matchId, { status: MatchStatus.ERROR });
+      return;
+    }
 
     // botzone-neo BotzoneTaskDto format:
     // game: { judger: {language, source, limit}, "0": {...}, "1": {...} }
     // callback: { update, finish }
     const gameField: Record<string, { language: string; source: string; limit: { time: number; memory: number } }> = {
       judger: {
-        language: game.judgerLanguage ?? '',
+        language: judgeLanguage ?? 'python',
         source: game.judgerCode ?? '',
         limit: { time: game.timeLimit, memory: game.memoryLimit },
       },
@@ -133,7 +142,7 @@ export class JudgeTxWorker implements OnApplicationShutdown {
     gamers.forEach((gamer, index) => {
       const isExternal = (gamer.type === 'webhook' || gamer.type === 'human' || gamer.type === 'external') && gamer.webhookUrl;
       (gameField as Record<string, unknown>)[String(index)] = {
-        language: isExternal ? 'webhook' : (gamer.language ?? 'python'),
+        language: isExternal ? 'webhook' : resolveBotzoneLanguage(gamer.language || 'python')!,
         source: isExternal ? '' : (gamer.code ?? ''),
         limit: { time: game.timeLimit, memory: game.memoryLimit },
         runnerType: isExternal ? 'webhook' : 'code',

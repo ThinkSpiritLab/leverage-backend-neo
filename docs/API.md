@@ -1,5 +1,8 @@
 # API Reference
 
+For current Botzone wire formats, runtime language IDs, callback identity and
+private Bot read boundaries, see [Judge compatibility](JUDGE_COMPATIBILITY.md).
+
 Interactive documentation is available at `/api/docs` (Swagger UI) when the server is running. This document provides a structured overview of all routes, auth requirements, and conventions.
 
 ## Authentication
