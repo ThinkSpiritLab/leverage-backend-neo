@@ -183,7 +183,9 @@ are removed. Real Nest HTTP → Bull → Docker → MariaDB/Redis E2E passes for
 Python AC submission and a Python-judge/Python+C++ two-Bot match with persisted
 ELO and Redis game-over replay; Redis uses a temporary authenticated instance.
 The current backend gates pass (684 unit, 42 SQLite integration with 3 existing
-skips, 78 Docker HTTP E2E with no skips, and fresh/upgrade MariaDB migrations).
+skips, 80 Docker HTTP E2E with no skips, and fresh/upgrade MariaDB migrations).
+The Docker E2E includes a real split API process and independent Worker process:
+OJ submission and Bot match both settle across the shared Redis/DB boundary.
 Frontend probes and 27 Chrome fixture tests pass. A local production-image
 smoke reaches the Nitro SPA, `/compete` and a renderer asset. The backend image
 contains the emitted entrypoint and migrations; its non-root process writes to

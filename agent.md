@@ -51,8 +51,9 @@ Use pnpm and retain `pnpm-lock.yaml`. Install explicitly with
 - `pnpm exec eslint "{src,apps,libs,test}/**/*.ts"`: non-fixing lint check.
   **`pnpm lint` includes `--fix` and modifies files.**
 - `pnpm judge:image`: builds the restricted judge image from an empty context.
-- `pnpm test:e2e`: builds that image, then runs MariaDB/Redis Testcontainers
-  (including the real Docker OJ/match path); requires Docker.
+- `pnpm test:e2e`: builds the current backend and judge image, then runs
+  MariaDB/Redis Testcontainers with real Docker OJ/match and split API/worker
+  process coverage; requires Docker.
   Do not launch Docker or external services without the operator's approval.
 - `pnpm test:integration`: SQLite integration and the legacy SQLite app suite;
   no Docker. Use Node 22 and a matching `better-sqlite3` native binding. The

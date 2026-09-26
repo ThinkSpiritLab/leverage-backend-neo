@@ -60,8 +60,9 @@ MariaDB data. It checks fresh and legacy-upgrade paths, all entity columns and
 selected ORM/raw-SQL business operations; it is not a production restored-clone
 or full index/default/foreign-key zero-drift certification.
 
-`pnpm test:e2e` builds the judge image and runs MariaDB/Redis HTTP suites with
-real Docker OJ/match cases; it does not include SQLite. Run
+`pnpm test:e2e` compiles the current backend, builds the judge image, then runs
+MariaDB/Redis HTTP suites including a real split API/worker process pair and
+Docker OJ/match execution. It does not include SQLite. Run
 `pnpm test:integration` separately for SQLite; on this repository's supported
 Node 22, its native `better-sqlite3` binding must be available. Report skipped
 cases separately from passed cases.
